@@ -224,6 +224,11 @@ adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd60
 The source is MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors;
 the repository LICENSE retains its license text.
 
+The explicit panorama cube vertex buffer and preservation of GUI sprites while
+fitting a small atlas are adapted from the same revision's `gfx/panorama.rs`,
+`gfx/panorama.wgsl` and `hud.rs`. Starling's lazy panorama loading is retained;
+panorama texels are not reduced by this adaptation.
+
 The adaptation preserves Starling's RGSS tiled-face argument, HDR scene varying
 and all 128 emissive entries. The emissive search uses flat early returns to keep
 shader parser/validator stack depth bounded. Vulkan retains its original WGSL.

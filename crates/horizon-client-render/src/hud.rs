@@ -1216,6 +1216,14 @@ impl HudAtlas {
     ) -> Result<(u32, Vec<(u32, u32)>, u32)> {
         let shrinks = |name: &str| {
             !name.starts_with("horizon/")
+                && !name
+                    .split_once(':')
+                    .map_or(name, |(_, path)| path)
+                    .starts_with("gui/")
+                && !name
+                    .split_once(':')
+                    .map_or(name, |(_, path)| path)
+                    .starts_with("ui/")
                 && !name.contains("font/")
                 && name != MISSING_SPRITE
                 && !bordered.contains(name)
@@ -4432,5 +4440,31 @@ texture=wide",
                 );
             }
         }
+    }
+    #[test]
+    fn small_atlas_preserves_gui_before_reducing_other_sprites() {
+        let mut images = vec![
+            (
+                "entity/large".to_string(),
+                1024,
+                1024,
+                vec![255; 1024 * 1024 * 4],
+            ),
+            ("gui/panel".to_string(), 512, 256, vec![255; 512 * 256 * 4]),
+        ];
+        let mut full_sizes = HashMap::new();
+        HudAtlas::layout_within(
+            &mut images,
+            &mut Vec::new(),
+            &HashSet::new(),
+            &HashSet::new(),
+            1024,
+            &mut full_sizes,
+        )
+        .unwrap();
+        let gui = images.iter().find(|i| i.0 == "gui/panel").unwrap();
+        assert_eq!((gui.1, gui.2), (512, 256));
+        assert!(!full_sizes.contains_key("gui/panel"));
+        assert!(full_sizes.contains_key("entity/large"));
     }
 }
