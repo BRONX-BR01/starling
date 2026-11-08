@@ -813,18 +813,28 @@ impl<G: ChunkGenerator> Source for Jobs<G> {
             Job::Mesh(..) => "stream.mesh",
             _ => "stream.other",
         });
-        let done = self.locals.with(
-            worker,
-            || {
-                let _tag = horizon_threads::heap_tag("stream.worker_state");
-                WorkerLocal {
-                    worker: self.generator.worker(),
-                    faces: None,
-                    mesh_scratch: MeshScratch::default(),
-                }
-            },
-            |local| self.run_job(job.job, local),
-        );
+        let stage = match &job.job {
+            Job::Generate(..) => "generate",
+            Job::Decorate(..) => "decorate",
+            Job::Finish(..) => "finish",
+            Job::Light(..) => "light",
+            Job::Mesh(..) => "mesh",
+            _ => "other",
+        };
+        let done = crate::spans::job(stage, || {
+            self.locals.with(
+                worker,
+                || {
+                    let _tag = horizon_threads::heap_tag("stream.worker_state");
+                    WorkerLocal {
+                        worker: self.generator.worker(),
+                        faces: None,
+                        mesh_scratch: MeshScratch::default(),
+                    }
+                },
+                |local| self.run_job(job.job, local),
+            )
+        });
         if let Some((kind, started)) = started {
             // A generation job that found the column saved loaded it.
             let kind = if kind == 1 && matches!(done, Some(Done::Generated(_))) {

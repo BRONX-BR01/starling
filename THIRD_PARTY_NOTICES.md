@@ -209,3 +209,14 @@ revision and each file's git blob SHA-1 in `crates/horizon-client/assets/bedrock
 them. They are © Mojang AB, under the Minecraft End User License Agreement the download is subject
 to; Starling carries none of them. Where they are missing, Starling's own buttons
 (`crates/horizon-client/assets/touch`, drawn by `packaging/touch/make.py`) are MIT.
+
+## Horizon Android diagnostics
+
+The diagnostic session/export, Android exit history, native tombstone summary and
+performance recording code is adapted from [Vasysik/horizon-android at
+fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606/crates/horizon-client/src/android),
+under the MIT license (the same [LICENSE](LICENSE) as this repository).
+Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+The port uses Starling's existing logger, crash hook and GPU timers and exposes
+reports through the game's Diagnostics settings and an Android launcher shortcut,
+with a renderer-independent recovery window for interrupted startup.

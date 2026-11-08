@@ -257,6 +257,24 @@ impl PassTiming {
         }
     }
 
+    /// Bounded distributions of the same completed queries used by the overlay.
+    /// Reuses the existing 15-sample window; adds no GPU queries or waits.
+    pub fn distributions(&self) -> serde_json::Value {
+        self.samples
+            .iter()
+            .take(CAPACITY as usize)
+            .filter(|(_, v)| !v.is_empty())
+            .map(|(name, values)| {
+                let mut values: Vec<_> = values.iter().copied().collect();
+                values.sort_by(f32::total_cmp);
+                let at =
+                    |p: usize| values[(values.len() * p).div_ceil(100).clamp(1, values.len()) - 1];
+                serde_json::json!({"stage":name, "p50_ms":at(50), "p95_ms":at(95), "p99_ms":at(99),
+                "max_ms":values.last(), "samples":values.len(), "window_samples":WINDOW})
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
     /// Each pass's median time in milliseconds over its last timed frames, in the order the
     /// passes first ran.
     pub fn medians(&self) -> Vec<(String, f32)> {

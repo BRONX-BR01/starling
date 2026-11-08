@@ -116,6 +116,7 @@ mod debug_stick;
 mod decorated_pot;
 mod dedicated;
 mod deflect;
+mod diagnostics;
 mod dialogs;
 mod discord;
 mod dispense_fixture;
@@ -16199,7 +16200,9 @@ impl Game<'_> {
         };
         let result = match self.renderer.as_mut() {
             Some(renderer) => {
-                renderer.set_pass_timing(self.debug || self.gpu_passes);
+                renderer.set_pass_timing(
+                    self.debug || self.gpu_passes || crate::performance::gpu_profile(),
+                );
                 horizon_client::spans::time("renderer", || renderer.render(&frame))
             }
             None => Err("renderer".into()),
@@ -17133,6 +17136,11 @@ impl ApplicationHandler for Game<'_> {
     /// already, since the system may end the process at any time from here on. Android's UI
     /// thread waits for this to return, so nothing here waits for the world's writes.
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "android")]
+        {
+            crate::diagnostics::heartbeat("suspended", || serde_json::json!({}));
+            crate::diagnostics::request_flush();
+        }
         if let Some(r) = &mut self.renderer {
             r.suspend();
         }
@@ -18526,6 +18534,7 @@ impl Game<'_> {
                             );
                         }
                     }
+                    let mut diagnostic_sample = None;
                     if let Some(r) = self.renderer.as_mut() {
                         let cpu = now.elapsed().saturating_sub(r.last_wait);
                         if rendered {
@@ -18551,12 +18560,38 @@ impl Game<'_> {
                                 .record_block_entities(r.static_block_entity_frame_stats());
                         }
                         self.frame_stats.record_gpu(&r.gpu_times);
+                        if rendered && crate::performance::active() {
+                            let ms = |d: Duration| d.as_secs_f32() * 1000.0;
+                            crate::performance::slow_frame(ms(cpu), &frame_spans);
+                            diagnostic_sample = crate::performance::record(
+                                ms(elapsed),
+                                ms(cpu),
+                                &r.gpu_times,
+                                [
+                                    ms(updated - now),
+                                    ms(ticked - updated),
+                                    ms(ticked
+                                        .elapsed()
+                                        .saturating_sub(r.last_wait + r.last_encode)),
+                                    ms(r.last_encode),
+                                ],
+                            );
+                            if let Some(row) = diagnostic_sample.as_mut() {
+                                row["gpu_passes"] = r.diagnostic_pass_times();
+                            }
+                        }
                         r.gpu_times.clear();
                         #[cfg(target_os = "android")]
                         if rendered {
                             crate::android::frame_hint(cpu, self.framerate_limit());
                         }
                     }
+                    if let Some(sample) = diagnostic_sample {
+                        let context = self.diagnostic_context();
+                        crate::performance::submit(sample, context);
+                    }
+                    #[cfg(target_os = "android")]
+                    self.diagnostic_heartbeat();
                     horizon_client::ram_limit::frame();
                     self.limit_frame();
                     self.pause = self.pauses_game();
@@ -20670,6 +20705,11 @@ fn build_renderer(
     // Made here when the worker did not: the renderer's own fallback has no LabPBR maps.
     let prepared = Some(prepared.unwrap_or_else(|| prepare_renderer_textures(pack)));
     let atlas_pixels = atlas.pixels();
+    #[cfg(target_os = "android")]
+    crate::diagnostics::checkpoint(
+        "renderer_init",
+        || serde_json::json!({"api":format!("{:?}",api)}),
+    );
     let mut renderer = pollster::block_on(Renderer::new(
         window,
         offscreen,
@@ -20739,6 +20779,11 @@ fn loading_renderer(
     if let Some(atlas) = atlas {
         atlas.font.reset_cache();
     }
+    #[cfg(target_os = "android")]
+    crate::diagnostics::checkpoint(
+        "renderer_init",
+        || serde_json::json!({"api":format!("{:?}",api)}),
+    );
     let mut renderer = pollster::block_on(Renderer::new(
         window,
         offscreen,
@@ -21253,6 +21298,11 @@ impl Loading {
     /// The window is going away (Android): its surface goes with it, and the log is flushed
     /// before the system may end the process.
     fn suspended(&mut self) {
+        #[cfg(target_os = "android")]
+        {
+            crate::diagnostics::heartbeat("suspended", || serde_json::json!({}));
+            crate::diagnostics::request_flush();
+        }
         self.suspended = true;
         if let Some(r) = &mut self.renderer {
             r.suspend();
@@ -21409,6 +21459,12 @@ impl Loading {
         event_loop.set_control_flow(ControlFlow::Poll);
     }
     fn draw(&mut self) {
+        let diagnostic_started = Instant::now();
+        let diagnostic_elapsed = self
+            .menu
+            .diagnostic_frame
+            .replace(diagnostic_started)
+            .map(|at| diagnostic_started.duration_since(at).as_secs_f32() * 1000.0);
         let Some(size) = self
             .renderer
             .as_ref()
@@ -21439,6 +21495,7 @@ impl Loading {
             self.started.elapsed().as_secs_f32(),
             self.settings.file.double("panoramaScrollSpeed") as f32,
         );
+        let diagnostic_prepared = diagnostic_started.elapsed();
         if let Some(renderer) = &mut self.renderer {
             match renderer.render(&frame) {
                 Ok(true) if self.gui.is_some() && self.menu.pending.is_none() => {
@@ -21447,6 +21504,48 @@ impl Loading {
                 }
                 Ok(_) => {}
                 Err(e) => log::warn!("Horizon: loading screen frame failed: {e}"),
+            }
+        }
+        let diagnostic_spans = if horizon_client::spans::recording_here() {
+            horizon_client::spans::take_raw()
+        } else {
+            Vec::new()
+        };
+        #[cfg(target_os = "android")]
+        crate::diagnostics::heartbeat(
+            if self.failure.is_some() {
+                "setup_failure"
+            } else {
+                "startup_menu"
+            },
+            || serde_json::json!({"gpu":self.renderer.as_ref().map(|r| &r.info.name), "backend":self.renderer.as_ref().map(|r|format!("{:?}",r.info.backend))}),
+        );
+        if let Some(renderer) = &mut self.renderer {
+            renderer.set_pass_timing(crate::performance::gpu_profile());
+            if crate::performance::active() {
+                if let Some(elapsed) = diagnostic_elapsed {
+                    let cpu = diagnostic_started
+                        .elapsed()
+                        .saturating_sub(renderer.last_wait)
+                        .as_secs_f32()
+                        * 1000.0;
+                    let prepared = diagnostic_prepared.as_secs_f32() * 1000.0;
+                    crate::performance::slow_frame(cpu, &diagnostic_spans);
+                    if let Some(mut row) = crate::performance::record(
+                        elapsed,
+                        cpu,
+                        &renderer.gpu_times,
+                        [0.0, 0.0, prepared, (cpu - prepared).max(0.0)],
+                    ) {
+                        row["gpu_passes"] = renderer.diagnostic_pass_times();
+                        crate::performance::submit(
+                            row,
+                            serde_json::json!({"phase":"startup_menu", "gpu":renderer.info.name,
+                            "backend":format!("{:?}",renderer.info.backend), "resolution":size}),
+                        );
+                    }
+                }
+                renderer.gpu_times.clear();
             }
         }
         if !self.shown {
@@ -21489,8 +21588,7 @@ impl Loading {
             self.started,
             &self.progress,
         )?;
-        // The failed generation's Done was delivered: without following the new loader the setup
-        // stayed on Starting Starling until the app was opened again.
+        // Follow the new generation after the failed startup's result was delivered.
         self.follow_loader(receiver, handle);
         self.failure = None;
         log::info!("Horizon: resources imported, loading again");

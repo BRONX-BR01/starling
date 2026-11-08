@@ -21,6 +21,7 @@ apksigner). Without HORIZON_ANDROID_KEYSTORE it signs with a debug key kept in t
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,7 +78,8 @@ def sdk_dir():
 
 def tool(directory, name):
     """An SDK tool, with Windows' .exe or .bat suffix."""
-    for suffix in ("", ".exe", ".bat", ".cmd"):
+    suffixes = (".exe", ".bat", ".cmd", "") if os.name == "nt" else ("", ".exe", ".bat", ".cmd")
+    for suffix in suffixes:
         path = directory / (name + suffix)
         if path.is_file():
             return path
@@ -96,6 +98,14 @@ def ndk_tool(ndk, name):
 
 def build_library(profile, ndk, sdk):
     env = dict(os.environ, ANDROID_NDK_HOME=str(ndk), ANDROID_HOME=str(sdk))
+    # Preserve source identity in local diagnostic reports, including source builds.
+    try:
+        env["HORIZON_ANDROID_BUILD_COMMIT"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL).strip()
+        env["HORIZON_ANDROID_BUILD_DIRTY"] = str(bool(subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=ROOT, text=True))).lower()
+    except (OSError, subprocess.CalledProcessError):
+        pass  # An exported source archive may not have Git metadata.
     env["RUSTFLAGS"] = (env.get("RUSTFLAGS", "") + " " + PAGE_FLAGS).strip()
     run(
         "cargo", "ndk", "-t", ABI, "--platform", MIN_SDK,
@@ -141,6 +151,10 @@ def assets(out):
     folder = out / "assets"
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir()
+    fonts = folder / "diagnostic-fonts"
+    fonts.mkdir()
+    for name in ("Geist-Regular.ttf", "Geist-SemiBold.ttf"):
+        shutil.copyfile(ROOT / "crates/horizon-theme/fonts" / name, fonts / name)
     with zipfile.ZipFile(folder / "prepare-kit.zip", "w", zipfile.ZIP_DEFLATED) as kit:
         for entry in PREPARE_KIT:
             path = ROOT / entry
@@ -159,11 +173,16 @@ def compile_java(build_tools, android_jar, out):
     for folder in (classes, dex):
         shutil.rmtree(folder, ignore_errors=True)
         folder.mkdir()
-    sources = sorted((HERE / "java").rglob("*.java"))
+    sources = sorted((HERE / "java").rglob("*.java")) + [out / "generated" / "io/github/juanluci/starling/R.java"]
     run("javac", "--release", "8", "-nowarn", "-classpath", android_jar, "-d", classes, *sources)
+    # A single archive also avoids cmd.exe's command-line limit on Windows.
+    archive = out / "classes.jar"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as jar:
+        for path in sorted(classes.rglob("*.class")):
+            jar.write(path, path.relative_to(classes).as_posix())
     run(
         tool(build_tools, "d8"), "--release", "--min-api", MIN_SDK, "--lib", android_jar,
-        "--output", dex, *sorted(classes.rglob("*.class")),
+        "--output", dex, archive,
     )
     return dex / "classes.dex"
 
@@ -188,15 +207,28 @@ def link_resources(aapt2, android_jar, out, assets, variant):
         )
     # The window themes (res/: the starting window's icon and background).
     shutil.copytree(HERE / "res", res, dirs_exist_ok=True)
+    shortcuts = res / "xml" / "shortcuts.xml"
+    shortcuts.write_text(shortcuts.read_text(encoding="utf-8").replace("@APPLICATION_ID@", application_id), encoding="utf-8")
+    # Match the setup dialogs without loading Rust or the game's renderer.
+    theme = (ROOT / "crates/horizon-theme/src/lib.rs").read_text(encoding="utf-8")
+    dark = theme.split("pub const DARK: Palette = Palette {", 1)[1].split("};", 1)[0]
+    colors = dict(re.findall(r"(\w+): 0x([0-9a-fA-F]{6})", dark))
+    entries = "\n".join(
+        f'<color name="starling_{name}">#{colors[name]}</color>'
+        for name in ("page", "rule", "ink", "ink_soft", "accent", "on_accent")
+    )
+    (res / "values/starling-colors.xml").write_text(f"<resources>\n{entries}\n</resources>\n", encoding="utf-8")
     compiled = out / "compiled"
     shutil.rmtree(compiled, ignore_errors=True)
     compiled.mkdir()
     run(aapt2, "compile", "--dir", res, "-o", compiled)
+    (out / "generated").mkdir(exist_ok=True)
     # Debuggable (adb's run-as reaches the app's own files) except when signed for a release.
     debug = [] if os.environ.get("HORIZON_ANDROID_KEYSTORE") else ["--debug-mode"]
     run(
         aapt2, "link", "-o", out / "base.apk",
         "--manifest", out / "AndroidManifest.xml",
+        "--java", out / "generated", "--custom-package", "io.github.juanluci.starling",
         "-I", android_jar,
         "--min-sdk-version", MIN_SDK, "--target-sdk-version", TARGET_SDK,
         "--version-code", VERSION_CODE, "--version-name", VERSION_NAME,

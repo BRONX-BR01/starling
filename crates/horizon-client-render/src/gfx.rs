@@ -5837,6 +5837,16 @@ impl Renderer {
             .map(pack_timing::PassTiming::medians)
             .unwrap_or_default()
     }
+    /// Diagnostic distributions from the existing pass timers, without another profiler.
+    pub fn diagnostic_pass_times(&self) -> serde_json::Value {
+        let shader = match (&self.pack_post, &self.native) {
+            (Some((_, Some(post))), _) => post.timing.as_ref(),
+            (_, Some(native)) => native.timing.as_ref(),
+            _ => None,
+        };
+        serde_json::json!({"world":self.own_timing.as_ref().map(pack_timing::PassTiming::distributions),
+            "shader":shader.map(pack_timing::PassTiming::distributions)})
+    }
     /// The macros this renderer gives shader packs: the GL extensions this device has
     /// (subgroups, when it has them), and the vendor, renderer and mipmap levels
     /// (`Macros::define_renderer`).

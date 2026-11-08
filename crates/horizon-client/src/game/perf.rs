@@ -24,7 +24,7 @@ pub(super) struct Perf {
 }
 
 impl Game<'_> {
-    fn stats_view(&mut self) -> StatsView {
+    pub(super) fn stats_view(&mut self) -> StatsView {
         let now = Instant::now();
         if let Some(r) = &self.renderer
             && self

@@ -1464,6 +1464,7 @@ impl Painter {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
+    Diagnostics,
     Main,
     Video,
     Sound,
@@ -1524,6 +1525,10 @@ pub enum Page {
 }
 #[derive(Clone, Debug, PartialEq)]
 enum Act {
+    DiagnosticsExport,
+    DiagnosticsOpen,
+    DiagnosticsRecord,
+    DiagnosticsGpu,
     None,
     Push(Page),
     Done,
@@ -1693,6 +1698,10 @@ fn matches_focus(id: &FocusId, i: usize, wd: &Widget) -> bool {
 /// What the game must do after an interaction.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
+    DiagnosticsExport,
+    DiagnosticsOpen,
+    DiagnosticsRecord,
+    DiagnosticsGpu,
     /// An accepted button press or the release of a slider.
     ButtonClick,
     /// Close the options screens (back to the pause menu or title).
@@ -1875,6 +1884,7 @@ pub struct OptionsUi {
     pub split_setup: crate::split_ui::SplitUi,
     /// The AI Agent page's status lines (set by the game while it shows).
     pub agent_status: Vec<String>,
+    pub diagnostics_status: Vec<String>,
     /// A repro recording is running: the AI Agent page's button says stop.
     pub agent_recording: bool,
     /// The Music page's groups (set by the game when it opens the page).
@@ -1985,6 +1995,7 @@ impl Default for OptionsUi {
             calibration_fullscreen: None,
             split_setup: Default::default(),
             agent_status: Vec::new(),
+            diagnostics_status: Vec::new(),
             agent_recording: false,
             music_groups: Vec::new(),
             focus: None,
@@ -2691,6 +2702,7 @@ impl OptionsUi {
     }
     fn title(page: Page) -> &'static str {
         match page {
+            Page::Diagnostics => "starling.diagnostics.title",
             Page::Main => "options.title",
             Page::Video => "options.videoTitle",
             Page::Sound => "options.sounds.title",
@@ -2813,6 +2825,54 @@ impl OptionsUi {
 
     fn list_rows(&self, s: &Settings) -> Vec<Row> {
         match self.page() {
+            Page::Diagnostics => {
+                let mut rows = vec![
+                    Row::Note(lang::get("starling.diagnostics.notice")),
+                    Row::Note(lang::get("starling.diagnostics.overhead")),
+                    Row::Buttons(
+                        button(
+                            0.0,
+                            0.0,
+                            310.0,
+                            tr("starling.diagnostics.export"),
+                            Act::DiagnosticsExport,
+                        ),
+                        None,
+                    ),
+                    Row::Buttons(
+                        button(
+                            0.0,
+                            0.0,
+                            310.0,
+                            tr("starling.diagnostics.record"),
+                            Act::DiagnosticsRecord,
+                        ),
+                        None,
+                    ),
+                    Row::Buttons(
+                        button(
+                            0.0,
+                            0.0,
+                            310.0,
+                            tr("starling.diagnostics.gpu"),
+                            Act::DiagnosticsGpu,
+                        ),
+                        None,
+                    ),
+                    Row::Buttons(
+                        button(
+                            0.0,
+                            0.0,
+                            310.0,
+                            tr("starling.diagnostics.open"),
+                            Act::DiagnosticsOpen,
+                        ),
+                        None,
+                    ),
+                ];
+                rows.extend(self.diagnostics_status.iter().cloned().map(Row::Note));
+                rows
+            }
             Page::SplitSetup => Vec::new(),
             Page::Extras => {
                 // Each section's switches two to a row, as vanilla's
@@ -3821,6 +3881,8 @@ impl OptionsUi {
                     ("horizon.pages.open.horizon_settings", Some(Page::Horizon)),
                     ("horizon.pages.open.mods", Some(Page::Mods)),
                     ("options.credits_and_attribution", Some(Page::Credits)),
+                    #[cfg(target_os = "android")]
+                    ("starling.diagnostics.title", Some(Page::Diagnostics)),
                 ];
                 let rows = entries.len().div_ceil(2) as f32;
                 let gy = (61.0 + 30.0f32).min(h - 33.0 - rows * 24.0);
@@ -5440,6 +5502,10 @@ impl OptionsUi {
                         }
                         Act::OpenSkinFolder => self.skin.actions.push(SkinAction::OpenFolder),
                         Act::ToggleRecording => events.push(Event::ToggleRecording),
+                        Act::DiagnosticsExport => events.push(Event::DiagnosticsExport),
+                        Act::DiagnosticsOpen => events.push(Event::DiagnosticsOpen),
+                        Act::DiagnosticsRecord => events.push(Event::DiagnosticsRecord),
+                        Act::DiagnosticsGpu => events.push(Event::DiagnosticsGpu),
                         Act::ExportRepro => events.push(Event::ExportRepro),
                         Act::None => {}
                     }
@@ -6481,6 +6547,10 @@ impl OptionsUi {
                         Act::Credits => events.push(Event::Credits),
                         Act::CopyAgentDetails => events.push(Event::CopyAgentDetails),
                         Act::ToggleRecording => events.push(Event::ToggleRecording),
+                        Act::DiagnosticsExport => events.push(Event::DiagnosticsExport),
+                        Act::DiagnosticsOpen => events.push(Event::DiagnosticsOpen),
+                        Act::DiagnosticsRecord => events.push(Event::DiagnosticsRecord),
+                        Act::DiagnosticsGpu => events.push(Event::DiagnosticsGpu),
                         Act::ExportRepro => events.push(Event::ExportRepro),
                         // Starling's pages answer taps only.
                         Act::PackProfile

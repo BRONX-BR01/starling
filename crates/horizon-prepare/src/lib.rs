@@ -174,18 +174,59 @@ pub(crate) fn hold_lock(dir: &Path, log: Log) -> Result<fs::File, String> {
         .write(true)
         .open(&path)
         .map_err(error)?;
-    match file.try_lock() {
+    match try_preparation_lock(&file) {
         Ok(()) => {}
         Err(fs::TryLockError::WouldBlock) => {
             log(&format!(
                 "Waiting for another horizon-prepare to finish with {}",
                 dir.display()
             ));
-            file.lock().map_err(error)?;
+            wait_preparation_lock(&file).map_err(error)?;
         }
         Err(fs::TryLockError::Error(e)) => return Err(error(e)),
     }
     Ok(file)
+}
+
+#[cfg(not(target_os = "android"))]
+fn try_preparation_lock(file: &fs::File) -> Result<(), fs::TryLockError> {
+    file.try_lock()
+}
+
+#[cfg(not(target_os = "android"))]
+fn wait_preparation_lock(file: &fs::File) -> std::io::Result<()> {
+    file.lock()
+}
+
+// std's file locks are unsupported on Android in our minimum toolchain.
+// Use the kernel lock instead of silently preparing without mutual exclusion.
+#[cfg(target_os = "android")]
+fn try_preparation_lock(file: &fs::File) -> Result<(), fs::TryLockError> {
+    preparation_flock(file, rustix::fs::FlockOperation::NonBlockingLockExclusive).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            fs::TryLockError::WouldBlock
+        } else {
+            fs::TryLockError::Error(error)
+        }
+    })
+}
+
+#[cfg(target_os = "android")]
+fn wait_preparation_lock(file: &fs::File) -> std::io::Result<()> {
+    preparation_flock(file, rustix::fs::FlockOperation::LockExclusive)
+}
+
+#[cfg(target_os = "android")]
+fn preparation_flock(
+    file: &fs::File,
+    operation: rustix::fs::FlockOperation,
+) -> std::io::Result<()> {
+    loop {
+        match rustix::fs::flock(file, operation) {
+            Err(rustix::io::Errno::INTR) => continue,
+            result => return result.map_err(Into::into),
+        }
+    }
 }
 
 /// Whether two folders are one, through `..`, links and case; a missing folder is created first.
