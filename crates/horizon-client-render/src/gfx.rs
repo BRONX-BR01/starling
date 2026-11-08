@@ -157,12 +157,14 @@ fn translucent_batchable(info: &wgpu::AdapterInfo, multi_draw: bool) -> bool {
 }
 
 /// Two solid passes only where a discard costs the GPU its hidden surface removal: Apple's tiled
-/// GPUs, behind Metal, and phones' (Vasysik's Android fork measured 25-27% less GPU time on an
-/// Adreno 710). Elsewhere the second pass would double the solid draw calls and vertex work for
-/// nothing.
+/// GPUs, behind Metal, and Adreno (Vasysik's Android fork measured 25-27% less GPU time on an
+/// Adreno 710). A Mali-G57 gained no GPU time from it, and PowerVR hasn't been measured. Elsewhere
+/// the second pass would double the solid draw calls and vertex work for nothing.
 fn splits_solid(info: &wgpu::AdapterInfo) -> bool {
     info.backend == wgpu::Backend::Metal
-        || (cfg!(target_os = "android") && info.backend == wgpu::Backend::Vulkan)
+        || (cfg!(target_os = "android")
+            && info.backend == wgpu::Backend::Vulkan
+            && info.name.contains("Adreno"))
 }
 
 /// The vertices flat draws bind for a call's page key: a page of the section arena, or of
