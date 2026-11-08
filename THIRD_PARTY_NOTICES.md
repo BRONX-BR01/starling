@@ -227,11 +227,11 @@ the repository LICENSE retains its license text.
 The explicit panorama cube vertex buffer and preservation of GUI sprites while
 fitting a small atlas are adapted from the same revision's `gfx/panorama.rs`,
 `gfx/panorama.wgsl` and `hud.rs`. Starling's lazy panorama loading is retained;
-panorama texels are not reduced by this adaptation.
+Android OpenGL panoramas use the fork's 256-pixel box-filtered faces. The small-atlas skyline packing and fitting policy are also ported from that revision.
 
 The adaptation preserves Starling's RGSS tiled-face argument, HDR scene varying
 and all 128 emissive entries. The emissive search uses flat early returns to keep
-shader parser/validator stack depth bounded. Vulkan retains its original WGSL.
+shader parser/validator stack depth bounded. Vulkan terrain WGSL remains unchanged.
 
 ## Horizon Android diagnostics
 

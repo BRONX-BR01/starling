@@ -101,11 +101,7 @@ pub struct Sprites {
 pub const SPRITE_SIZE: u32 = 16;
 /// The largest sprite array (all layers of the top mip level) when the settings leave it to
 /// Horizon: resource packs with bigger textures are sampled down to fit.
-pub const DEFAULT_TEXTURE_BUDGET: u64 = if cfg!(target_pointer_width = "32") {
-    64 << 20
-} else {
-    256 << 20
-};
+pub const DEFAULT_TEXTURE_BUDGET: u64 = 256 << 20;
 /// The budget in bytes the next resource load keeps to (`set_texture_budget`).
 static TEXTURE_BUDGET: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(DEFAULT_TEXTURE_BUDGET);
@@ -116,18 +112,7 @@ pub fn set_texture_budget(mib: u32) {
         0 => DEFAULT_TEXTURE_BUDGET,
         mib => u64::from(mib) << 20,
     };
-    let effective = if cfg!(target_pointer_width = "32") {
-        bytes.min(128 << 20)
-    } else {
-        bytes
-    };
-    if effective < bytes {
-        log::info!(
-            "Horizon: limiting block texture budget to {} MiB for the 32-bit address space",
-            effective >> 20
-        );
-    }
-    TEXTURE_BUDGET.store(effective, std::sync::atomic::Ordering::Relaxed);
+    TEXTURE_BUDGET.store(bytes, std::sync::atomic::Ordering::Relaxed);
 }
 /// Whether resource loads read the resource packs' LabPBR maps (`set_labpbr_maps`).
 static LABPBR_MAPS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

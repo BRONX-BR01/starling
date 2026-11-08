@@ -4007,8 +4007,12 @@ impl Renderer {
             (&entity_shader, &entity_layout, &entity_vertex),
             config.format.remove_srgb_suffix(),
         );
-        let panorama =
-            panorama::Panorama::new(&device, config.format.remove_srgb_suffix(), panorama_faces);
+        let panorama = panorama::Panorama::new(
+            &device,
+            config.format.remove_srgb_suffix(),
+            panorama_faces,
+            gl,
+        );
         drop(pipelines_step);
         reuse.finish(generation);
         if previous.is_some() {

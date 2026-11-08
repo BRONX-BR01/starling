@@ -200,9 +200,39 @@ fn cube_vertices() -> [[f32; 3]; 36] {
     .map(|i| corners[i])
 }
 
+fn reduced_texels(size: u32, pixels: Vec<u8>, maximum: u32) -> (u32, Vec<u8>) {
+    let side = size.min(maximum.max(1));
+    if side == size {
+        return (size, pixels);
+    }
+    let face_bytes = (size * size * 4) as usize;
+    let mut smaller = Vec::with_capacity((side * side * 4 * 6) as usize);
+    for face in pixels.chunks_exact(face_bytes) {
+        for y in 0..side {
+            let (y0, y1) = (y * size / side, (y + 1) * size / side);
+            for x in 0..side {
+                let (x0, x1) = (x * size / side, (x + 1) * size / side);
+                let mut sum = [0u64; 4];
+                for sy in y0..y1 {
+                    for sx in x0..x1 {
+                        let at = ((sy * size + sx) * 4) as usize;
+                        for channel in 0..4 {
+                            sum[channel] += u64::from(face[at + channel]);
+                        }
+                    }
+                }
+                let count = u64::from((x1 - x0) * (y1 - y0));
+                smaller.extend(sum.map(|value| ((value + count / 2) / count) as u8));
+            }
+        }
+    }
+    (side, smaller)
+}
+
 pub(super) struct Panorama {
     pipeline: wgpu::RenderPipeline,
     vertices: wgpu::Buffer,
+    maximum_side: u32,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniform: wgpu::Buffer,
@@ -216,6 +246,7 @@ impl Panorama {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         faces: Arc<Faces>,
+        gl: bool,
     ) -> Self {
         // CubeMapTexture's blur=true metadata: linear minification and magnification, no mips.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -315,6 +346,11 @@ impl Panorama {
         });
         Self {
             vertices,
+            maximum_side: if cfg!(target_os = "android") && gl {
+                256
+            } else {
+                u32::MAX
+            },
             pipeline,
             layout,
             sampler,
@@ -351,13 +387,15 @@ impl Panorama {
     }
 
     fn cube(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::BindGroup {
+        let (side, pixels) =
+            reduced_texels(self.faces.size, self.faces.texels(), self.maximum_side);
         let texture = device.create_texture_with_data(
             queue,
             &wgpu::TextureDescriptor {
                 label: Some("Title panorama cube"),
                 size: wgpu::Extent3d {
-                    width: self.faces.size,
-                    height: self.faces.size,
+                    width: side,
+                    height: side,
                     depth_or_array_layers: 6,
                 },
                 mip_level_count: 1,
@@ -368,7 +406,7 @@ impl Panorama {
                 view_formats: &[],
             },
             wgpu::util::TextureDataOrder::LayerMajor,
-            &self.faces.texels(),
+            &pixels,
         );
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::Cube),
@@ -477,6 +515,25 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn panorama_reduction_averages_each_face_without_mixing_faces() {
+        let pixels = (0..6u8)
+            .flat_map(|face| {
+                [0u8, 2, 4, 6]
+                    .into_iter()
+                    .flat_map(move |delta| [face * 10 + delta, 20, 30, 255])
+            })
+            .collect();
+        let (side, pixels) = reduced_texels(2, pixels, 1);
+        assert_eq!(side, 1);
+        assert_eq!(
+            pixels,
+            (0..6u8)
+                .flat_map(|face| [face * 10 + 3, 20, 30, 255])
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

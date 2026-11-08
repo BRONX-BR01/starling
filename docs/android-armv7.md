@@ -57,16 +57,16 @@ Existing terrain texture-array splitting follows the adapter's layer limit,
 with at most eight arrays. A pack that needs more layers than those arrays hold
 is rejected rather than silently losing textures.
 
-In a 32-bit process the shared GUI/entity atlas is bounded by the GPU's 2D side
-limit and a 4096-pixel process limit, whichever is smaller. The latter bounds its
-RGBA pixels to 64 MiB before decoded images, staging and other allocations.
-Existing atlas packing can reduce large textures while preserving logical GUI
-sizes. A pack that still cannot fit can fail to load.
+The shared GUI/entity atlas follows the GPU's 2D texture limit. Android uses
+Horizon Android's skyline packing for small atlases so gaps below shorter
+images remain usable. Its fitting policy preserves GUI, fonts and dynamic
+slots, reducing eligible non-UI sprites only when packing still fails.
+Android OpenGL panoramas use the fork's 256-pixel box-filtered faces and an
+explicit cube vertex buffer. Vulkan retains full-resolution panorama faces.
 
-The block-sprite top-level texture budget defaults to 64 MiB and is capped at
-128 MiB on 32-bit builds, even if a larger value was saved. Mipmaps, retained
-source textures, PBR maps and the rest of the game require additional memory;
-this is not a total-process memory limit. ARM64 budgets remain unchanged.
+Block-sprite budgets retain Starling's configured values and its 256 MiB default,
+as in the Android fork; there is no extra 32-bit 64/128 MiB override. These
+budgets do not bound total game memory.
 Normal GPU arena growth on Android ARM32 uses steps of at most 8 MiB, following
 the Android fork's policy while retaining Starling's newer paged arenas. A single
 larger allocation request can still require a larger step.
