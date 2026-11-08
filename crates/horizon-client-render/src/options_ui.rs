@@ -1237,6 +1237,18 @@ fn set_filtering(s: &mut Settings, anisotropy_bit: i32, filtering: i32) {
 
 /// `Options.preferredGraphicsBackend`'s tooltip: the restart note once the choice differs from
 /// the startup one, the description, and Vulkan's warning.
+/// The Options page's entries, with Diagnostics on a phone. Apart from `OptionsUi::layout`:
+/// horizon-mixins refuses to hook a function with a `#[cfg]` in it (E_UNSUPPORTED_CFG).
+fn with_diagnostics<const N: usize>(
+    entries: [(&'static str, Option<Page>); N],
+) -> Vec<(&'static str, Option<Page>)> {
+    let mut all = Vec::from(entries);
+    if cfg!(target_os = "android") {
+        all.push(("starling.diagnostics.title", Some(Page::Diagnostics)));
+    }
+    all
+}
+
 fn graphics_api_tooltip(s: &Settings) -> Text {
     let line = |key: &str| lang::get_or(key, key);
     let mut lines = Vec::new();
@@ -3884,9 +3896,8 @@ impl OptionsUi {
                     ("horizon.pages.open.horizon_settings", Some(Page::Horizon)),
                     ("horizon.pages.open.mods", Some(Page::Mods)),
                     ("options.credits_and_attribution", Some(Page::Credits)),
-                    #[cfg(target_os = "android")]
-                    ("starling.diagnostics.title", Some(Page::Diagnostics)),
                 ];
+                let entries = with_diagnostics(entries);
                 let rows = entries.len().div_ceil(2) as f32;
                 let gy = (61.0 + 30.0f32).min(h - 33.0 - rows * 24.0);
                 for (i, (key, page)) in entries.iter().enumerate() {
