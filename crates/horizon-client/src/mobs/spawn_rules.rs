@@ -658,8 +658,8 @@ impl SpawnLevel for OneState<'_> {
     fn peaceful(&self) -> bool {
         false
     }
-    fn dimension(&self) -> Dimension {
-        Dimension::Overworld
+    fn dimension_type(&self) -> &DimensionFacts {
+        DimensionFacts::vanilla("minecraft:overworld").unwrap()
     }
     fn surface_slime_chance(&self, _: i32, _: i32, _: i32) -> f32 {
         0.0

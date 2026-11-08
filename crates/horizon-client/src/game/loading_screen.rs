@@ -386,13 +386,13 @@ impl Loading {
         }
         event_loop.set_control_flow(ControlFlow::Poll);
     }
+    pub(super) fn draw(&mut self) {
         let diagnostic_started = Instant::now();
         let diagnostic_elapsed = self
             .menu
             .diagnostic_frame
             .replace(diagnostic_started)
             .map(|at| diagnostic_started.duration_since(at).as_secs_f32() * 1000.0);
-    pub(super) fn draw(&mut self) {
         let Some(size) = self
             .renderer
             .as_ref()

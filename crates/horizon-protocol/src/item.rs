@@ -1357,33 +1357,6 @@ fn write_patch(s: &Stack, w: &mut Writer) {
     }
 }
 
-/// How deep stacks may nest in stacks (a bundle in a shulker box in a bundle...): deeper, the
-/// packet is refused before a hostile server's nesting can overflow the reading thread's stack.
-const MAX_NESTING: u32 = 64;
-thread_local! {
-    static NESTING: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
-/// One level of stacks inside a stack, left when dropped.
-struct Nested;
-impl Nested {
-    fn enter() -> Result<Self> {
-        NESTING.with(|n| {
-            if n.get() >= MAX_NESTING {
-                return Err(crate::Error::new(format!(
-                    "item stacks nested over {MAX_NESTING} deep"
-                )));
-            }
-            n.set(n.get() + 1);
-            Ok(Nested)
-        })
-    }
-}
-impl Drop for Nested {
-    fn drop(&mut self) {
-        NESTING.with(|n| n.set(n.get().saturating_sub(1)));
-    }
-}
-
 /// A stack of either optional codec: with `delimited` each component value
 /// has a length in front (DataComponentPatch.DELIMITED_STREAM_CODEC). The
 /// patch is also kept, in the delimited form, for [`Stack::wire`].

@@ -77,10 +77,10 @@ impl ParsedModels {
                 }
             }
         }
-        let parsed = crate::par::par_map(&files, |(id, path)| {
+        let parsed = crate::par::par_map(&files, |(_, path)| {
             let text = horizon_core::prepared_files::read_to_string(path).ok()?;
             let model = CuboidModel::from_json(&text).ok()?;
-            Some(Arc::new(with_mesh(root, id, model)))
+            Some(Arc::new(model))
         });
         let models = files
             .into_iter()
@@ -130,7 +130,7 @@ impl ParsedModels {
                         let text = horizon_core::prepared_files::read_to_string(
                             &root.join(format!("assets/{namespace}/models/{path}.json")),
                         )?;
-                        Ok(with_mesh(root, &name, CuboidModel::from_json(&text)?))
+                        Ok(CuboidModel::from_json(&text)?)
                     };
                     match read() {
                         Ok(model) => Arc::new(model),
@@ -154,20 +154,6 @@ impl ParsedModels {
             .map(|library| Arc::new(library.with_assets(Arc::new(RootAssets(root)))))
             .map_err(|e| format!("item models: {e:?}"))
     }
-}
-
-/// A `neoforge:obj` model with its mesh, its OBJ and MTL files read under `root`
-/// (`horizon_assets::obj::read_mesh`). A mesh that does not read leaves the model without faces,
-/// logged.
-fn with_mesh(root: &Path, name: &str, mut model: CuboidModel) -> CuboidModel {
-    let Some(source) = &model.obj else {
-        return model;
-    };
-    match horizon_assets::obj::read_mesh(source, |path| fs::read_to_string(root.join(path)).ok()) {
-        Ok(faces) => model.mesh = Some(Arc::new(faces)),
-        Err(e) => log::warn!("Horizon: model {name}'s OBJ mesh {}: {e}", source.model),
-    }
-    model
 }
 
 #[cfg(test)]

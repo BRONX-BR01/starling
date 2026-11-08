@@ -71,13 +71,6 @@ impl ResolvedCuboidModel {
             .and_then(|m| m.elements.as_deref())
             .unwrap_or(&[])
     }
-    /// The geometry's OBJ mesh faces (NeoForge's OBJ models), drawn with the elements.
-    pub fn mesh(&self) -> &[crate::obj::MeshFace] {
-        self.geometry
-            .as_ref()
-            .and_then(|m| m.mesh.as_deref())
-            .map_or(&[], Vec::as_slice)
-    }
     /// Native slot lookup strips a single leading '#'. Non-reference names
     /// are still slot names, not direct sprite identifiers.
     pub fn material(&self, slot: &str) -> Result<Option<&Material>> {

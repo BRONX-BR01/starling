@@ -2929,10 +2929,6 @@ pub fn resource_root(base: &Path, mods: &[ContentMod], cache: &Path) -> Result<P
     resource_root_with(base, mods, cache, &mut || {})
 }
 
-/// Sets of mods whose roots stay built: worlds with other sets start again with theirs
-/// (Starling's game/world_content.rs), and going back to one of these needs no build.
-const KEPT_SETS: usize = 3;
-
 /// [`resource_root`], calling `on_build` before a build (none when the root is reused), so a
 /// loading screen can say why it waits.
 pub fn resource_root_with(

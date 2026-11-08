@@ -1974,7 +1974,7 @@ impl Title {
                 // Starling's account, where the game signs in itself: in the top left corner,
                 // clear of the logo, so vanilla's buttons stay as they are.
                 if crate::accounts::in_game() {
-                    buttons.push(b(4.0, 4.0, 120.0, &account::main_label(), true, 8));
+                    buttons.push(b(4.0, 4.0, 120.0, &account::main_label(), true, 80));
                 }
                 buttons
             }
@@ -3801,7 +3801,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                 self.mode = Mode::Multiplayer(crate::multiplayer::Screen::friend(true));
                 Action::None
             }
-            (Mode::Main, Some(8)) => {
+            (Mode::Main, Some(80)) => {
                 self.mode = Mode::Account;
                 Action::None
             }

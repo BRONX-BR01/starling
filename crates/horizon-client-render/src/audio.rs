@@ -1673,7 +1673,7 @@ impl Audio {
         m.channels.insert(
             id,
             Channel {
-                samples: Some((samples, rate)),
+                samples: Some((samples, rate, 1)),
                 position: 0.0,
                 state: State::Playing,
                 gain: gain * self.master,
@@ -1685,6 +1685,7 @@ impl Audio {
                 owner: 0,
                 world: 0,
                 started: None,
+                unmuffled: false,
             },
         );
     }

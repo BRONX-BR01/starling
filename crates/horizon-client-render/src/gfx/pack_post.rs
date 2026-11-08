@@ -2827,6 +2827,7 @@ impl PackPost {
             table: g.table,
             depth_write: g.depth_write,
             atlas: g.atlas.clone(),
+            material_maps: g.material_maps,
             ids: block_ids.as_ref().map(|i| &i.0),
             cull: g.cull,
             prepass: prepass_wanted(),
@@ -2855,6 +2856,7 @@ impl PackPost {
             material_maps: g.material_maps,
             ids: g.ids,
             cull: false,
+            prepass: false,
         });
         let shadow_terrain = post
             .shadow
@@ -3015,6 +3017,7 @@ impl PackPost {
                 material_maps: false,
                 ids: None,
                 cull: false,
+                prepass: false,
             };
             paged(build(p, Some(&g)))
         });
@@ -3040,6 +3043,7 @@ impl PackPost {
             material_maps: false,
             ids: None,
             cull: false,
+            prepass: false,
         };
         let lines = post.lines.and_then(|p| build(p, Some(&line_geometry)));
         // Developers' aid: `HORIZON_SHADER_PACK_SKIP=composite,final` leaves programs out.

@@ -32,6 +32,7 @@ fn clipped(text: &str, chars: usize) -> String {
 /// Where the Shader Packs page's folder is, as a player finds it: on a phone, from the storage's
 /// root (`Starling/shaderpacks`), or in the app's own files, which Open Pack Folder sets up a
 /// reachable folder for.
+#[expect(dead_code, reason = "the Shader Packs rows return on shader_ui.rs")]
 fn shader_folder_note() -> String {
     let dir = std::env::current_dir()
         .unwrap_or_default()
@@ -1631,10 +1632,13 @@ enum Act {
     ResetKeys,
     ToggleMod(usize),
     /// The next profile of the chosen pack, on the Shader Packs page.
+    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
     PackProfile,
     /// The next of the resolutions the Shader Packs page offers.
+    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
     ShaderResolution,
     /// The next of the frame limits the Shader Packs page offers.
+    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
     ShaderFpsLimit,
     /// The Custom Buttons page, a new button there, one to change or take away, a control or a
     /// keyboard key for it, and its icon.
@@ -3810,7 +3814,7 @@ impl OptionsUi {
             Page::CustomDraw(id) => vec![Row::Canvas(id)],
             Page::CustomPick(id, CustomPick::Control) => {
                 let mut mappings: Vec<(&'static str, &'static str)> =
-                    MAPPINGS.iter().map(|(n, _, c)| (*n, *c)).collect();
+                    all_mappings().map(|(n, _, c)| (*n, *c)).collect();
                 mappings.retain(|(name, _)| keybinds::key_code(s.keys.get(name)).is_some());
                 mappings.sort_by(|a, b| {
                     let ca = CATEGORIES.iter().position(|c| *c == a.1).unwrap_or(99);

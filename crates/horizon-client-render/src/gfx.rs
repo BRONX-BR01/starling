@@ -5240,7 +5240,6 @@ impl Renderer {
             pack_material_atlases: None,
             shared_material_maps: [None, None],
             pack_terrain_flat: false,
-            pack_loading: None,
             separate_ao: false,
             pack_pages: Vec::new(),
             outline_edges_scratch: Vec::new(),
@@ -7275,10 +7274,6 @@ impl Renderer {
                     .map(|t| t.as_ref().map(|t| t.create_view(&Default::default()))),
             );
         }
-        let report = post.as_ref().map(|p| {
-            let programs = p.programs().into_iter().map(str::to_owned).collect();
-            (programs, p.notes.clone())
-        });
         let report = post.as_ref().map(pack_post::PackPost::report);
         self.pack_post = Some((dimension, post));
         if self.pack_post.as_ref().is_some_and(|p| p.1.is_some()) {
@@ -13166,6 +13161,7 @@ fn frustum(m: Mat4) -> [Vec4; 6] {
 /// light and the camera's near plane too, drawn at that plane: the camera sits 128 blocks toward
 /// the light, and with the sun low the ground over a cave is farther than that along its rays;
 /// cut off, it let the sun into the cave.
+#[cfg(test)]
 fn light_frustum(cull: Mat4, clamped: bool) -> Frustum {
     let mut planes = frustum(cull);
     if clamped {
