@@ -750,6 +750,24 @@ const OVERDUE_CHUNK_PACKETS_PER_FRAME: Duration = Duration::from_millis(4);
 /// A gap in the ticks or movement sent to the server worth a log line (an old server's
 /// anticheat behind ViaVersion counts on one each tick, and a reminder every 20).
 const GAP_LOGGED: Duration = Duration::from_millis(1100);
+
+/// A movement packet in the log, when it came late or was the first. Apart from
+/// `remote_send_state`: horizon-mixins refuses to hook a function that calls `log::info!`
+/// (E_UNSUPPORTED_MACRO).
+fn log_movement_gap(moved_at: &mut Option<Instant>, play_began: Option<Instant>) {
+    let now = Instant::now();
+    match moved_at.replace(now).map(|at| now - at) {
+        Some(gap) if gap >= GAP_LOGGED => log::info!(
+            "Horizon: {} ms between two movement packets",
+            gap.as_millis()
+        ),
+        Some(_) => {}
+        None => log::info!(
+            "Horizon: the first movement packet {} ms after the play phase began",
+            play_began.map_or(0, |at| (now - at).as_millis())
+        ),
+    }
+}
 /// How many movement packets the first setback's log line shows.
 const TRAIL: usize = 12;
 /// Free stick direction rests this long after a hit, a use or a drop: those go with the view's
@@ -7514,18 +7532,7 @@ impl Game<'_> {
             }
             r.trail
                 .push_back((pos, on_ground, r.last_input, Instant::now()));
-            let now = Instant::now();
-            match r.moved_at.replace(now).map(|at| now - at) {
-                Some(gap) if gap >= GAP_LOGGED => log::info!(
-                    "Horizon: {} ms between two movement packets",
-                    gap.as_millis()
-                ),
-                Some(_) => {}
-                None => log::info!(
-                    "Horizon: the first movement packet {} ms after the play phase began",
-                    r.play_began.map_or(0, |at| (now - at).as_millis())
-                ),
-            }
+            log_movement_gap(&mut r.moved_at, r.play_began);
             out.push(packet);
         }
         // Creative inventory edits are sent slot by slot (SetCreativeModeSlot).
