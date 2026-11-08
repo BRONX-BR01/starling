@@ -36,7 +36,8 @@ pub enum Shelf {
     Mods,
     /// Modrinth's resource packs.
     ResourcePacks,
-    /// Horizon's own shader packs, then Modrinth's, which the game converts.
+    /// Modrinth's Iris and OptiFine shader packs, which the game converts. A search also finds
+    /// Horizon's own.
     ShaderPacks,
 }
 
@@ -79,11 +80,16 @@ pub fn search(
             Modrinth.search(&query)
         }
         Shelf::ShaderPacks => {
-            // The registry's come first, and the pages go on into Modrinth's. Its index being out
-            // of reach doesn't take Modrinth's away.
-            let mut query = Query::new(text, Kind::Shader);
-            query.limit = usize::MAX;
-            let own = Registry.search(&query).unwrap_or_default();
+            // The Java packs are the shelf. The registry's only come up when searched for, ahead
+            // of them, and the pages go on into Modrinth's. Its index being out of reach doesn't
+            // take Modrinth's away.
+            let own = if text.trim().is_empty() {
+                Vec::new()
+            } else {
+                let mut query = Query::new(text, Kind::Shader);
+                query.limit = usize::MAX;
+                Registry.search(&query).unwrap_or_default()
+            };
             let mut page: Vec<Project> = own.iter().skip(offset).take(limit).cloned().collect();
             if page.len() < limit {
                 let rest = limit - page.len();
@@ -96,7 +102,8 @@ pub fn search(
 }
 
 /// A page of Modrinth's shader packs. The browser leaves them out: the desktop's game has its own
-/// format, and Starling converts these.
+/// format, and Starling converts these. Only Iris's and OptiFine's: what Modrinth files as a shader
+/// for the other loaders is no pack the game can read.
 fn modrinth_shader_packs(text: &str, offset: usize, limit: usize) -> Result<Vec<Project>, String> {
     let mut request = ureq::AgentBuilder::new()
         .user_agent(USER_AGENT)
@@ -104,7 +111,10 @@ fn modrinth_shader_packs(text: &str, offset: usize, limit: usize) -> Result<Vec<
         .timeout_read(std::time::Duration::from_secs(30))
         .build()
         .get(MODRINTH_API)
-        .query("facets", r#"[["project_type:shader"]]"#)
+        .query(
+            "facets",
+            r#"[["project_type:shader"],["categories:iris","categories:optifine"]]"#,
+        )
         .query("offset", &offset.to_string())
         .query("limit", &limit.clamp(1, 100).to_string());
     let text = text.trim();

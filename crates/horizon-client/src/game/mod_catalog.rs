@@ -26,6 +26,10 @@ const FOOT_H: f32 = 50.0;
 const ROW_H: f32 = 60.0;
 const ROW_BUTTON_W: f32 = 110.0;
 const CLEAR_W: f32 = 56.0;
+/// What the screen leaves free while typing: the system's navigation bar comes back with the
+/// keyboard, over the right edge in landscape, and takes the touches there. 48 dp, at most this
+/// much of a phone's width.
+const NAV_BAR_SHARE: f32 = 0.08;
 /// The most characters a search takes.
 const QUERY_CHARS: usize = 64;
 /// The search runs once the typing has paused this long.
@@ -256,6 +260,7 @@ impl Game<'_> {
     fn catalog_install(&mut self, index: usize) {
         let card = &mut self.catalog;
         let shared = card.shared.clone();
+        let worker = shared.clone();
         let project = {
             let mut s = shared.lock().unwrap_or_else(PoisonError::into_inner);
             if s.installing.is_some() {
@@ -275,19 +280,31 @@ impl Game<'_> {
         card.notice = None;
         let everything = card.everything;
         let home = Self::game_dir();
-        let _ = std::thread::Builder::new()
+        let title = project.title.clone();
+        let started = std::thread::Builder::new()
             .name("catalog install".into())
             .spawn(move || {
                 let progress = |line: &str, fraction: f32| {
-                    let mut s = shared.lock().unwrap_or_else(PoisonError::into_inner);
+                    let mut s = worker.lock().unwrap_or_else(PoisonError::into_inner);
                     line.clone_into(&mut s.line);
                     s.fraction = fraction;
                 };
-                let result = starling_catalog::install(&project, everything, &home, &progress);
-                let mut s = shared.lock().unwrap_or_else(PoisonError::into_inner);
+                // However it ends, the screen stops saying Installing: nothing else can install
+                // while it does.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    starling_catalog::install(&project, everything, &home, &progress)
+                }))
+                .unwrap_or_else(|_| Err(format!("Installing {} stopped.", project.title)));
+                let mut s = worker.lock().unwrap_or_else(PoisonError::into_inner);
                 s.installing = None;
                 s.finished = Some((project.title, result));
             });
+        if let Err(e) = started {
+            let mut s = shared.lock().unwrap_or_else(PoisonError::into_inner);
+            s.installing = None;
+            let why = format!("Installing {title} didn't start: {e}");
+            s.finished = Some((title, Err(why)));
+        }
     }
 
     /// The screen, over everything else while it is open.
@@ -299,12 +316,13 @@ impl Game<'_> {
         let shared = card.shared.lock().unwrap_or_else(PoisonError::into_inner);
         let mut ui = Ui::new(&self.gui.atlas, batch, (-1.0, -1.0));
         let (w, h) = (ui.w, ui.h);
+        let edge = w - MARGIN - if card.typing { w * NAV_BAR_SHARE } else { 0.0 };
         let mut drawn = Vec::new();
         ui.fill(0.0, 0.0, w, h, color::BG);
         ui.text(Face::Semibold, 18.0, MARGIN, 14.0, color::TEXT, "Catalog");
         button(
             &mut ui,
-            [w - MARGIN - 84.0, 10.0, 84.0, 30.0],
+            [edge - 84.0, 10.0, 84.0, 30.0],
             "Close",
             false,
             Act::Close,
@@ -324,7 +342,7 @@ impl Game<'_> {
             );
             x += width + 8.0;
         }
-        let search = [x + 4.0, 50.0, (w - MARGIN - x - 4.0).max(80.0), 34.0];
+        let search = [x + 4.0, 50.0, (edge - x - 4.0).max(80.0), 34.0];
         ui.rounded(
             search[0],
             search[1],
@@ -380,7 +398,7 @@ impl Game<'_> {
         }
         drawn.push((search, Act::Search));
 
-        let row_w = w - 2.0 * MARGIN;
+        let row_w = edge - MARGIN;
         let mut full = false;
         match &shared.results {
             None => {
@@ -497,7 +515,7 @@ impl Game<'_> {
             );
             left += 84.0;
         }
-        let mut right = w - MARGIN;
+        let mut right = edge;
         if card.shelf == Shelf::ResourcePacks {
             let label = if card.everything {
                 "All game versions"
