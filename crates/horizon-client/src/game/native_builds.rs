@@ -87,6 +87,8 @@ pub(super) struct NativeBuilds {
     mining: super::build_mining::BuildMining,
     /// Under a build: digging, not fishing.
     digging: bool,
+    /// What failed last was a compile: Try again compiles, and doesn't show the published builds.
+    compile_failed: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -609,6 +611,7 @@ impl Game<'_> {
 
     /// Shows the card: the builds for this version, looked up now.
     pub(super) fn open_native_builds(&mut self) {
+        self.native_builds.compile_failed = false;
         let Some((version, _)) = crate::android::app_version() else {
             return;
         };
@@ -664,6 +667,7 @@ impl Game<'_> {
         if (matches!(card.stage, Some(Stage::Downloading(_))) || shared.compiling)
             && let Some(result) = shared.downloaded.take()
         {
+            card.compile_failed = shared.compiling && result.is_err();
             shared.compiling = false;
             card.stage = Some(match result {
                 Ok(name) => Stage::Chosen(name),
@@ -1011,6 +1015,10 @@ impl Game<'_> {
         };
         let Some((version, _)) = crate::android::app_version() else {
             return;
+        };
+        let act = match act {
+            Act::Retry if self.native_builds.compile_failed => Act::Compile,
+            other => other,
         };
         match act {
             Act::Use(build) => {
