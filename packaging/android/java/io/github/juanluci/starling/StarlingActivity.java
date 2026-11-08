@@ -59,7 +59,7 @@ import javax.crypto.spec.GCMParameterSpec;
  * file picker, the clipboard, the keyboard's editor (TextMirror), the browser, the keystore, the
  * mouse's capture and the controllers' makers and motors.
  */
-public final class StarlingActivity extends NativeActivity {
+public class StarlingActivity extends NativeActivity {
     private static final int PICK_FILE = 1;
     /** Horizon Android's folder picked: its worlds and packs come over (HorizonImport). */
     private static final int PICK_HORIZON = 2;
@@ -131,8 +131,31 @@ public final class StarlingActivity extends NativeActivity {
                 : null;
     }
 
+    public void openDiagnostics() {
+        runOnUiThread(new Runnable() {
+            @Override public void run() { startActivity(new Intent(StarlingActivity.this, DiagnosticsActivity.class)); }
+        });
+    }
+
+    /** Only the explicitly exported diagnostic ZIP is shared; no app data directory grant. */
+    public void shareDiagnostic(final String name) {
+        if (!name.matches("starling-diagnostics-[0-9]+\\.zip")) return;
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                Uri uri = Uri.parse("content://" + getPackageName() + ".updates/diagnostics/" + name);
+                Intent send = new Intent(Intent.ACTION_SEND).setType("application/zip");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.setClipData(ClipData.newRawUri("diagnostic report", uri));
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                try { startActivity(Intent.createChooser(send, null)); }
+                catch (ActivityNotFoundException e) { android.util.Log.w("starling", "No report sharing activity", e); }
+            }
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        StartupRecovery.begin(this);
         loadGame();
         // Before super.onCreate starts the game's thread, which reads it first thing.
         onStorage(sharedFolder(this));
@@ -158,7 +181,7 @@ public final class StarlingActivity extends NativeActivity {
         decor.postDelayed(new Runnable() {
             @Override
             public void run() {
-                firstFrame();
+                showFirstFrame();
             }
         }, 10000);
         if (Build.VERSION.SDK_INT >= 28) {
@@ -446,6 +469,11 @@ public final class StarlingActivity extends NativeActivity {
 
     /** The game drew its first frame: let the window show. */
     public void firstFrame() {
+        StartupRecovery.shown(this);
+        showFirstFrame();
+    }
+
+    private void showFirstFrame() {
         NativeMods.started(this);
         runOnUiThread(new Runnable() {
             @Override

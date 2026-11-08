@@ -1,0 +1,14 @@
+<resources>
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_intro">View logs and export a report, even if the game cannot start.</string>
+    <string name="diagnostics_recovery_intro">Starling did not finish starting last time. Try again, or export a report to send us.</string>
+    <string name="diagnostics_view_log">View latest log</string>
+    <string name="diagnostics_export">Export diagnostic ZIP</string>
+    <string name="diagnostics_share">Share latest ZIP</string>
+    <string name="diagnostics_start">Try starting the game</string>
+    <string name="diagnostics_working">Preparing report…</string>
+    <string name="diagnostics_exported">Report exported. Review it before sharing.</string>
+    <string name="diagnostics_failed">Diagnostic operation failed: %1$s</string>
+    <string name="diagnostics_no_report">Export a report first.</string>
+    <string name="diagnostics_close">Close</string>
+</resources>

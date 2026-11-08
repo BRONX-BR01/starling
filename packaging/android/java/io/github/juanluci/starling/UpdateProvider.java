@@ -13,7 +13,8 @@ import java.io.FileNotFoundException;
 /**
  * The update the game downloaded (files/updates/, game/update_offer.rs), read by Android's package
  * installer: an app may hand another its private files only through a provider like this one. It
- * serves APKs of that folder and nothing else, read-only, to whoever the install intent grants.
+ * serves update APKs and explicitly exported diagnostic ZIPs read-only, only to recipients
+ * granted access by the install or share intent.
  */
 public final class UpdateProvider extends ContentProvider {
     static final String TYPE = "application/vnd.android.package-archive";
@@ -25,10 +26,14 @@ public final class UpdateProvider extends ContentProvider {
 
     private File file(Uri uri) throws FileNotFoundException {
         String name = uri.getLastPathSegment();
-        if (name == null || !name.matches("[A-Za-z0-9._-]+\\.apk")) {
+        boolean report = uri.getPathSegments().size() == 2
+                && "diagnostics".equals(uri.getPathSegments().get(0));
+        if (name == null || !(report
+                ? name.matches("starling-diagnostics-[0-9]+\\.zip")
+                : uri.getPathSegments().size() == 1 && name.matches("[A-Za-z0-9._-]+\\.apk"))) {
             throw new FileNotFoundException(String.valueOf(uri));
         }
-        File file = new File(new File(getContext().getFilesDir(), "updates"), name);
+        File file = new File(new File(getContext().getFilesDir(), report ? "performance" : "updates"), name);
         if (!file.isFile()) {
             throw new FileNotFoundException(file.getPath());
         }
@@ -42,11 +47,13 @@ public final class UpdateProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return TYPE;
+        return uri.getPathSegments().size() == 2
+                && "diagnostics".equals(uri.getPathSegments().get(0)) ? "application/zip" : TYPE;
     }
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        if (!"r".equals(mode)) throw new FileNotFoundException("Read-only provider");
         return ParcelFileDescriptor.open(file(uri), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 

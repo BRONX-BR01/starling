@@ -72,6 +72,10 @@ public final class LauncherActivity extends Activity {
                     play();
                 }
             });
+        } else if (StartupRecovery.interrupted(this)) {
+            startActivity(new Intent(this, DiagnosticsActivity.class)
+                    .putExtra(StartupRecovery.RECOVERY, true));
+            finish();
         } else {
             play();
         }
@@ -79,7 +83,7 @@ public final class LauncherActivity extends Activity {
 
     private void play() {
         // The game's own task (singleTask): it stays in the recents, this one does not.
-        Intent game = new Intent(this, StarlingActivity.class);
+        Intent game = new Intent(this, GameActivity.class);
         game.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(game);
         finish();

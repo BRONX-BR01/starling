@@ -45,10 +45,9 @@ pub struct Update {
     pub sha256: Option<String>,
 }
 
-/// The release `latest` (a `releases/latest` answer) as a Starling update, when it is newer than
-/// `current` and has Starling's own APK for its version.
-pub fn update_in(latest: &serde_json::Value, current: &str) -> Option<Update> {
-    let abi = if cfg!(target_arch = "arm") {
+/// The Android ABI of this process (not every ABI the device can run).
+pub const fn process_abi() -> &'static str {
+    if cfg!(target_arch = "arm") {
         "armeabi-v7a"
     } else if cfg!(target_arch = "x86") {
         "x86"
@@ -56,8 +55,21 @@ pub fn update_in(latest: &serde_json::Value, current: &str) -> Option<Update> {
         "x86_64"
     } else {
         "arm64-v8a"
-    };
-    update_for_abi(latest, current, abi)
+    }
+}
+
+/// Whether a native build's metadata targets this process. Metadata published
+/// before the ABI field existed is ARM64, the service's original sole target.
+pub fn native_build_matches(about: &serde_json::Value, abi: &str) -> bool {
+    match about.get("abi") {
+        None => abi == "arm64-v8a",
+        Some(value) => value.as_str() == Some(abi),
+    }
+}
+
+/// The release `latest` as an update when it has a newer APK for this process.
+pub fn update_in(latest: &serde_json::Value, current: &str) -> Option<Update> {
+    update_for_abi(latest, current, process_abi())
 }
 
 fn update_for_abi(latest: &serde_json::Value, current: &str, abi: &str) -> Option<Update> {
@@ -164,6 +176,25 @@ pub fn merge_native_builds(lists: impl IntoIterator<Item = Vec<NativeBuild>>) ->
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn native_build_metadata_must_match_the_process_before_downloading() {
+        let abis = ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"];
+        for target in abis {
+            assert_eq!(
+                native_build_matches(&json!({}), target),
+                target == "arm64-v8a"
+            );
+            assert!(!native_build_matches(&json!({"abi":null}), target));
+            assert!(!native_build_matches(&json!({"abi":"unknown"}), target));
+            for build in abis {
+                assert_eq!(
+                    native_build_matches(&json!({"abi":build}), target),
+                    build == target
+                );
+            }
+        }
+    }
 
     fn asset(name: &str) -> serde_json::Value {
         json!({

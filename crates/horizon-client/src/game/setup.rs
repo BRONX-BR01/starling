@@ -86,6 +86,7 @@ enum Action {
     Fish,
     Back,
     Settings,
+    Diagnostics,
 }
 
 #[derive(Default)]
@@ -113,7 +114,7 @@ pub(super) struct Setup {
     /// screen without it draws every letter as an empty box).
     pub(super) starting: bool,
     /// The buttons as last drawn (dp): rectangle and what it does.
-    buttons: Cell<[Option<([f32; 4], Action)>; 3]>,
+    buttons: Cell<[Option<([f32; 4], Action)>; 4]>,
     fishing: fishing::Fishing,
     /// The water as last drawn (dp), while there is a wait to pass.
     pond: Cell<Option<[f32; 4]>>,
@@ -568,7 +569,7 @@ impl Loading {
                 ty += 18.0;
             }
         }
-        let mut drawn = [None, None, None];
+        let mut drawn = [None, None, None, None];
         let shown: Vec<_> = actions.iter().flatten().collect();
         if !shown.is_empty() {
             let by = y + card_h - pad - button_h;
@@ -630,6 +631,18 @@ impl Loading {
             );
             drawn[0] = Some((rect, Action::Back));
         }
+        // Reports must be reachable even before sign-in or resource preparation.
+        let rect = [(w - 160.0).max(16.0), 16.0, 144.0, 36.0];
+        ui.rounded(rect[0], rect[1], rect[2], rect[3], 10.0, color::RAISED);
+        ui.text_centered(
+            Face::Semibold,
+            15.0,
+            rect[0] + rect[2] / 2.0,
+            rect[1] + 8.0,
+            color::TEXT,
+            &horizon_client::lang::get("starling.diagnostics.title"),
+        );
+        drawn[3] = Some((rect, Action::Diagnostics));
         ui.finish();
         self.setup.buttons.set(drawn);
         // Fishing under the card: the card itself takes no cast.
@@ -749,6 +762,12 @@ impl Loading {
                 self.setup.fishing_open = false;
             }
             Action::Settings => self.open_menu_options(horizon_client::options_ui::Page::Main),
+            Action::Diagnostics => {
+                #[cfg(target_os = "android")]
+                crate::android::open_recovery();
+                #[cfg(not(target_os = "android"))]
+                self.open_menu_options(horizon_client::options_ui::Page::Diagnostics);
+            }
             Action::Retry => match (preparer::stage(), accounts::files()) {
                 (Stage::Failed(_) | Stage::Idle, Files::Ready) => {
                     preparer::start(self.vanilla_root.clone())

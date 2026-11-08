@@ -12,10 +12,79 @@ use std::{
 };
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static RECORDING: AtomicBool = AtomicBool::new(false);
+type Totals = (u64, f64, f64, f32);
+type Trace = std::collections::BTreeMap<(&'static str, &'static str), Totals>;
+static TRACE: std::sync::Mutex<Trace> = std::sync::Mutex::new(Trace::new());
+
+/// Opt-in bounded, aggregate timings. Names are engine constants, never world data.
+pub fn record_timings(on: bool) {
+    DIAGNOSTIC_HERE.with(|h| h.set(on));
+    RECORDING.store(on, Ordering::Relaxed);
+    TRACE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+fn collect(role: &'static str, span: Span) {
+    if !RECORDING.load(Ordering::Relaxed) {
+        return;
+    }
+    let mut trace = TRACE.lock().unwrap_or_else(|e| e.into_inner());
+    // Bounds the registry even if future instrumentation adds dynamic stages.
+    if trace.len() >= 256 && !trace.contains_key(&(role, span.name)) {
+        return;
+    }
+    let total = trace.entry((role, span.name)).or_default();
+    total.0 += 1;
+    total.1 += f64::from(span.ms);
+    total.2 += f64::from(span.cpu_ms);
+    total.3 = total.3.max(span.ms);
+}
+pub fn drain_timings() -> serde_json::Value {
+    let trace = std::mem::take(&mut *TRACE.lock().unwrap_or_else(|e| e.into_inner()));
+    serde_json::Value::Array(
+        trace
+            .into_iter()
+            .map(|((role, stage), (calls, wall, cpu, max))| {
+                serde_json::json!({"role": role, "stage": stage, "calls": calls,
+            "wall_ms": wall, "thread_cpu_ms": cpu, "max_ms": max})
+            })
+            .collect(),
+    )
+}
+/// A worker task measured independently of the render/server thread's spans.
+pub fn job<T>(name: &'static str, f: impl FnOnce() -> T) -> T {
+    if !RECORDING.load(Ordering::Relaxed) {
+        return f();
+    }
+    let (started, cpu) = (Instant::now(), thread_cpu());
+    let value = f();
+    let ms = started.elapsed().as_secs_f32() * 1000.0;
+    let cpu_ms = thread_cpu()
+        .zip(cpu)
+        .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
+    let thread = std::thread::current();
+    let role = if thread.name() == Some("Server thread") {
+        "server"
+    } else {
+        "worker"
+    };
+    collect(
+        role,
+        Span {
+            name,
+            ms,
+            cpu_ms,
+            depth: 0,
+        },
+    );
+    value
+}
+
 thread_local! {
     static SPANS: RefCell<Vec<Span>> = const { RefCell::new(Vec::new()) };
     /// Spans recorded on this thread alone, wall time only ([`record_here`]).
     static HERE: Cell<bool> = const { Cell::new(false) };
+    /// The caller that started local recording drains raw spans each rendered frame.
+    static DIAGNOSTIC_HERE: Cell<bool> = const { Cell::new(false) };
     /// How many timed spans the thread is inside: the next span's [`Span::depth`].
     static DEPTH: Cell<u8> = const { Cell::new(0) };
 }
@@ -40,16 +109,33 @@ pub fn enabled() -> bool {
 /// Records `ms` under `name`, measured by the caller (the sum of a loop's parts); its wall time
 /// stands for its CPU time.
 pub fn add(name: &'static str, ms: f32) {
-    if enabled() {
-        let depth = DEPTH.with(Cell::get);
-        SPANS.with(|s| {
-            s.borrow_mut().push(Span {
-                name,
-                ms,
-                cpu_ms: ms,
-                depth,
-            })
+    if recording_here() {
+        emit(Span {
+            name,
+            ms,
+            cpu_ms: ms,
+            depth: DEPTH.with(Cell::get),
         });
+    }
+}
+/// Raw spans belong only to threads whose existing consumer drains them. Recording
+/// aggregate diagnostics must not grow a worker's thread-local buffer forever.
+fn emit(span: Span) {
+    if RECORDING.load(Ordering::Relaxed) {
+        let role = if std::thread::current().name() == Some("Server thread") {
+            "server"
+        } else if HERE.with(Cell::get) || DIAGNOSTIC_HERE.with(Cell::get) {
+            "render"
+        } else {
+            "worker"
+        };
+        collect(role, span);
+    }
+    if enabled()
+        || HERE.with(Cell::get)
+        || (RECORDING.load(Ordering::Relaxed) && DIAGNOSTIC_HERE.with(Cell::get))
+    {
+        SPANS.with(|s| s.borrow_mut().push(span));
     }
 }
 /// Record this thread's spans even with spans off, their wall time only (no CPU clock read):
@@ -61,13 +147,13 @@ pub fn record_here(on: bool) {
 /// Whether this thread records spans: all of them on, or [`record_here`].
 #[inline]
 pub fn recording_here() -> bool {
-    ENABLED.load(Ordering::Relaxed) || HERE.with(Cell::get)
+    ENABLED.load(Ordering::Relaxed) || HERE.with(Cell::get) || RECORDING.load(Ordering::Relaxed)
 }
 /// The thread's CPU time when spans are on for every thread (`HORIZON_SPIKES`): only they
 /// print it.
 #[inline]
 fn cpu_if_enabled() -> Option<Duration> {
-    if ENABLED.load(Ordering::Relaxed) {
+    if ENABLED.load(Ordering::Relaxed) || RECORDING.load(Ordering::Relaxed) {
         thread_cpu()
     } else {
         None
@@ -88,13 +174,11 @@ pub fn time<T>(name: &'static str, f: impl FnOnce() -> T) -> T {
         .and_then(|start| Some((thread_cpu()?, start)))
         .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
     DEPTH.with(|d| d.set(depth));
-    SPANS.with(|s| {
-        s.borrow_mut().push(Span {
-            name,
-            ms,
-            cpu_ms,
-            depth,
-        })
+    emit(Span {
+        name,
+        ms,
+        cpu_ms,
+        depth,
     });
     out
 }
@@ -120,13 +204,11 @@ impl Laps {
             .zip(*cpu)
             .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
         let depth = DEPTH.with(Cell::get);
-        SPANS.with(|s| {
-            s.borrow_mut().push(Span {
-                name,
-                ms,
-                cpu_ms,
-                depth,
-            })
+        emit(Span {
+            name,
+            ms,
+            cpu_ms,
+            depth,
         });
         (*started, *cpu) = (now, now_cpu);
     }
@@ -419,6 +501,39 @@ pub mod startup {
 #[cfg(test)]
 mod tests {
     use super::Span;
+    static SETTINGS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn diagnostic_aggregates_do_not_retain_worker_raw_spans() {
+        let _settings = SETTINGS.lock().unwrap();
+        super::record_timings(true);
+        super::time("render_step", || ());
+        assert_eq!(super::take_raw()[0].name, "render_step");
+        std::thread::spawn(|| {
+            for _ in 0..10000 {
+                super::time("worker_step", || ());
+            }
+            assert!(super::take_raw().is_empty());
+        })
+        .join()
+        .unwrap();
+        let rows = super::drain_timings();
+        assert!(
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["stage"] == "render_step" && row["role"] == "render")
+        );
+        let step = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["stage"] == "worker_step")
+            .unwrap();
+        assert_eq!(step["calls"], 10000);
+        assert_eq!(step["role"], "worker");
+        super::record_timings(false);
+    }
 
     /// Spans of one name add up; a span the thread spent mostly waiting
     /// shows its CPU time after the wall time, short ones are left out.
@@ -530,6 +645,7 @@ mod tests {
     /// Laps record the steps between them while spans are on, and nothing while off.
     #[test]
     fn laps_time_consecutive_steps() {
+        let _settings = SETTINGS.lock().unwrap();
         let _ = super::take();
         let mut off = super::laps();
         off.lap("unseen");

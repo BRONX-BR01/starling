@@ -11,6 +11,8 @@ The x86 architectures have not been tested on a physical device.
 
 ARM64, ARMv7, x86 and x86_64 share the same build/sign/release matrix. Each is
 published as a separate APK; release publication waits for all four builds.
+A failed build of any ABI deliberately blocks that release batch, including
+x86, whose resource setup uses import rather than on-device preparation.
 ARMv7 builds use `armeabi-v7a` and require Android
 8 or newer. CPU ABI support alone does not guarantee that a device's graphics
 driver can run the engine. Older PowerVR/Mali/Adreno hardware needs separate
@@ -72,11 +74,17 @@ larger allocation request can still require a larger step.
 The updater selects the APK matching the process ABI. A release with only an
 ARM64 APK is not offered as an ARMv7 update. Native-mod libraries must also match
 the process ABI; existing ARM64 prebuilt native mods are not ARMv7 builds.
+The build service and prebuilt selection are offered only in ARM64 processes.
+Other architectures explain this limitation on imported native mods and do not
+submit builds or download incompatible libraries.
+
+On 32-bit Android, preparation runs its lanes sequentially and caps each Java
+heap at 512 MiB, including the persistent exporters, javac and data generator.
+Smaller requested heaps stay smaller. This bounds JVM heap reservations, not
+total Java/Rust/native memory; very low-memory devices can still run out of RAM.
 
 ## Relation to diagnostics
 
-Android preparation-lock fixes and renderer-independent diagnostic recovery are
-provided separately by PR #272. Until those changes reach the target branch,
-full on-device preparation still has that known dependency. Pre-prepared private
-resources can be used to validate the ARMv7 renderer independently. Never commit
-Minecraft files, generated resource tables or prepared resources.
+Android preparation-lock fixes and renderer-independent diagnostic recovery from
+PR #272 are included from the target branch. Never commit Minecraft files,
+generated resource tables or prepared resources.

@@ -55,6 +55,7 @@ pub(super) struct StartupMenu {
     pub pending: Option<PendingWorldEntry>,
     pub reload_packs: bool,
     pub perf: horizon_client::telemetry::Session,
+    pub(super) diagnostic_frame: Option<Instant>,
 }
 
 impl StartupMenu {
@@ -359,6 +360,8 @@ pub(super) fn spawn_loader(
     started: Instant,
     progress: &Progress,
 ) -> Result<(Receiver<LoaderMsg>, JoinHandle<()>)> {
+    #[cfg(target_os = "android")]
+    crate::diagnostics::checkpoint("resource_loading", || serde_json::json!({}));
     let (sender, receiver) = std::sync::mpsc::channel();
     let settings = settings.clone();
     let vanilla_root = vanilla_root.to_path_buf();
@@ -693,6 +696,22 @@ impl Loading {
     fn menu_option_events(&mut self, events: Vec<Event>) {
         for event in events {
             match event {
+                Event::DiagnosticsExport => super::diagnostics::export_diagnostics(),
+                Event::DiagnosticsOpen => super::diagnostics::open_diagnostics(),
+                Event::DiagnosticsRecord => {
+                    if crate::performance::active() {
+                        crate::performance::stop();
+                    } else if let Err(error) = crate::performance::start(
+                        &horizon_client::logging::private_home(),
+                        serde_json::json!({"phase":"setup"}),
+                    ) {
+                        log::warn!("Cannot start performance recording: {error}");
+                    }
+                }
+                Event::DiagnosticsGpu => crate::performance::configure_gpu_profile(
+                    !crate::performance::gpu_profile(),
+                    &horizon_client::logging::private_home(),
+                ),
                 Event::Changed => {
                     self.save_menu_settings();
                     self.apply_menu_settings();
@@ -1364,6 +1383,16 @@ impl Loading {
     }
 
     pub(super) fn draw_menu(&mut self, batch: &mut HudBatch) {
+        self.menu.options.diagnostics_status = super::diagnostics::status();
+        if let Some(r) = &self.renderer {
+            self.menu
+                .options
+                .diagnostics_status
+                .push(horizon_client::lang::tr(
+                    "starling.diagnostics.hardware",
+                    &[&r.info.name, &format!("{:?}", r.info.backend)],
+                ));
+        }
         self.menu_button_image();
         let logs = horizon_client::logging::recent_lines();
         let Some(gui) = &self.gui else {
@@ -1531,6 +1560,38 @@ mod tests {
             sound_registry: None,
             suspended: false,
         }
+    }
+
+    #[test]
+    fn retry_after_a_delivered_failure_reads_the_new_loader_result() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        sender
+            .send(LoaderMsg::Done(Err("first failure".into())))
+            .unwrap();
+        drop(sender);
+        let mut loading = loading(receiver);
+        loading.poll_menu_resources().unwrap();
+        assert!(loading.loaded.take().unwrap().is_err());
+        loading.failure = Some("first failure".into());
+        let scratch = std::env::temp_dir().join(format!(
+            "starling-retry-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        loading.vanilla_root = scratch.clone();
+        loading.options =
+            Options::parse(["--resources".to_owned(), scratch.display().to_string()].into_iter())
+                .unwrap();
+        loading.retry().unwrap();
+        loading.handle.take().unwrap().join().unwrap();
+        loading.poll_menu_resources().unwrap();
+        assert!(
+            matches!(loading.loaded, Some(Err(_))),
+            "the replacement loader's result must be delivered even if the first attempt failed"
+        );
     }
 
     #[test]

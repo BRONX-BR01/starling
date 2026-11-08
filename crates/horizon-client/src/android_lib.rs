@@ -97,3 +97,41 @@ extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_onPointerCa
 ) {
     horizon_client::android::note_pointer_capture_lost();
 }
+
+/// The system diagnostics window calls this on its worker, without starting the game.
+#[unsafe(no_mangle)]
+extern "system" fn Java_io_github_juanluci_starling_DiagnosticsActivity_makeReport(
+    mut env: jni::JNIEnv,
+    activity: jni::objects::JObject,
+    private: jni::objects::JString,
+    game: jni::objects::JString,
+    export: jni::sys::jboolean,
+) -> jni::sys::jstring {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || -> Result<String, String> {
+            let private = std::path::PathBuf::from(String::from(
+                env.get_string(&private).map_err(|e| e.to_string())?,
+            ));
+            let game = std::path::PathBuf::from(String::from(
+                env.get_string(&game).map_err(|e| e.to_string())?,
+            ));
+            horizon_client::android::recovery_report(
+                &mut env,
+                &activity,
+                &private,
+                &game,
+                export != 0,
+            )
+        },
+    ))
+    .unwrap_or_else(|_| Err("Diagnostic worker failed".into()));
+    match result {
+        Ok(text) => env
+            .new_string(text)
+            .map_or(std::ptr::null_mut(), |text| text.into_raw()),
+        Err(error) => {
+            let _ = env.throw_new("java/io/IOException", error);
+            std::ptr::null_mut()
+        }
+    }
+}

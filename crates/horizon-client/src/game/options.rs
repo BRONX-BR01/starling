@@ -240,6 +240,7 @@ impl Game<'_> {
     }
     pub(super) fn draw_options(&mut self, batch: &mut HudBatch) {
         self.watch_pack_folder();
+        self.poll_diagnostics();
         let mut ui = std::mem::take(&mut self.ui.options);
         ui.draw(&self.settings, batch, &self.gui.atlas, self.cursor);
         self.ui.options = ui;
@@ -381,6 +382,10 @@ impl Game<'_> {
     pub(super) fn handle_option_events(&mut self, events: Vec<Event>) -> Result<()> {
         for e in events {
             match e {
+                Event::DiagnosticsExport => self.export_diagnostics(),
+                Event::DiagnosticsOpen => self.open_diagnostics(),
+                Event::DiagnosticsRecord => self.toggle_diagnostic_recording(),
+                Event::DiagnosticsGpu => self.toggle_diagnostic_gpu(),
                 Event::ButtonClick => self.audio.play_button_click(),
                 Event::Changed => {
                     self.settings.save(&Self::options_path());

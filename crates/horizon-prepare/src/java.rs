@@ -38,6 +38,32 @@ pub fn supply(runtime: Supplied) -> bool {
 /// 1.25 GB instead of 2 GB.
 pub(crate) const BATCH_OPTIONS: [&str; 2] = ["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC"];
 
+pub(crate) const SMALL_ANDROID: bool =
+    cfg!(all(target_os = "android", target_pointer_width = "32"));
+
+/// 32-bit Android cannot reserve multi-gigabyte heaps. This is a maximum, not
+/// committed memory; smaller exporter requests keep their original limit.
+pub(crate) fn heap_arg(heap: &str) -> String {
+    heap_for(heap, SMALL_ANDROID)
+}
+
+fn heap_for(heap: &str, small: bool) -> String {
+    let bytes = heap
+        .strip_suffix(['G', 'g'])
+        .and_then(|n| n.parse::<u64>().ok())
+        .and_then(|n| n.checked_mul(1024 * 1024 * 1024))
+        .or_else(|| {
+            heap.strip_suffix(['M', 'm'])
+                .and_then(|n| n.parse::<u64>().ok())
+                .and_then(|n| n.checked_mul(1024 * 1024))
+        });
+    if small && bytes.is_none_or(|n| n > 512 * 1024 * 1024) {
+        "-Xmx512M".into()
+    } else {
+        format!("-Xmx{heap}")
+    }
+}
+
 /// Exporters and JDK probes write to pipes or log files: on Windows they open no terminal.
 pub(crate) fn command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
@@ -377,6 +403,9 @@ impl Jdk {
     /// stdout=log, stderr=STDOUT, timeout=3600)`.
     pub fn javac(&self, major: i64, args: &[String], log: &fs::File) -> Result<(), String> {
         let mut command = command(&self.javac);
+        if SMALL_ANDROID {
+            command.arg("-J-Xmx512M");
+        }
         command
             .args(BATCH_OPTIONS.map(|option| format!("-J{option}")))
             .args(["--release", &major.to_string(), "-proc:none"])
@@ -386,7 +415,15 @@ impl Jdk {
 
     pub fn java(&self, args: &[String], cwd: Option<&Path>, log: &fs::File) -> Result<(), String> {
         let mut command = command(&self.java);
-        command.args(BATCH_OPTIONS).args(args);
+        command.args(BATCH_OPTIONS);
+        // The vanilla data generator has no explicit heap argument either.
+        if SMALL_ANDROID && !args.iter().any(|arg| arg.starts_with("-Xmx")) {
+            command.arg(heap_arg("512M"));
+        }
+        command.args(args.iter().map(|arg| {
+            arg.strip_prefix("-Xmx")
+                .map_or_else(|| arg.clone(), heap_arg)
+        }));
         if let Some(dir) = cwd {
             command.current_dir(dir);
         }
@@ -429,6 +466,16 @@ fn run(mut command: Command, log: &fs::File) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn small_android_caps_large_heaps_without_enlarging_small_requests() {
+        for heap in ["2G", "1G", "768M"] {
+            assert_eq!(heap_for(heap, true), "-Xmx512M");
+            assert_eq!(heap_for(heap, false), format!("-Xmx{heap}"));
+        }
+        assert_eq!(heap_for("512M", true), "-Xmx512M");
+        assert_eq!(heap_for("128M", true), "-Xmx128M");
+    }
 
     #[test]
     fn verbatim_drive_paths_lose_their_prefix() {

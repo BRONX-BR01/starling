@@ -73,13 +73,21 @@ What the Android port covers so far; what is being done now and next is in the [
 | Microsoft account sign-in | <img src="docs/media/progress/100.svg" alt="100%"> | On the first start and in the game (the title screen's corner); the code and the ownership check work on a phone |
 
 ARMv7 build instructions and GPU/memory limitations are documented in
-[Android ARMv7](docs/android-armv7.md). The normal release remains ARM64.
+[Android architectures](docs/android-armv7.md). Release APKs are published for
+ARM64, ARMv7, x86 and x86_64; install the one matching your device.
+
+Local crash reports, Android exit history and optional CPU/GPU performance
+recordings are available under **Options → Diagnostics**. Export a diagnostic ZIP,
+review it, then share it with a bug report. See [Android diagnostics](docs/android-diagnostics.md)
+for contents, limits and controls. Before installation or after an early startup
+failure, Diagnostics also opens in a separate window; long-press the app icon to
+reach it without starting the game.
 
 ## Mods
 
 Starling runs Horizon's mods. Open the file with Starling, from your file manager or your downloads, and it shows up in **Options > Mods**.
 
-- **`.hnmod`, native mods:** tap **Compile**. Starling tells you the risks, builds the game with your mods while you fish or mine, and restarts with them. It takes a few minutes and needs a connection, and after an update you compile again. A native mod runs as part of the game, so install only the ones you trust. See [native mods](docs/native-mods.md) and [how Starling builds them](docs/starling-native-mods.md); [wrench](native-mods/wrench) is an example.
+- **`.hnmod`, native mods (ARM64 only):** tap **Compile**. Starling tells you the risks, builds the game with your mods while you fish or mine, and restarts with them. It takes a few minutes and needs a connection, and after an update you compile again. The build service currently produces ARM64 libraries; other app architectures explain this limitation and do not offer compilation or prebuilt downloads. A native mod runs as part of the game, so install only the ones you trust. See [native mods](docs/native-mods.md) and [how Starling builds them](docs/starling-native-mods.md); [wrench](native-mods/wrench) is an example.
 - **`.hmod`, content mods:** data-only mods, with nothing to compile. See [mods](docs/mods.md).
 
 The old Starling mods and the WebAssembly mod format of v0.1 are gone.

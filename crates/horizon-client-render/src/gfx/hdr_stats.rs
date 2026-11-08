@@ -188,3 +188,22 @@ fn source(gl: bool) -> std::borrow::Cow<'static, str> {
     result.replace_range(start..end, &lowered);
     std::borrow::Cow::Owned(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::source;
+
+    #[test]
+    fn vulkan_is_unchanged_and_gles_hdr_validates() {
+        assert_eq!(source(false), include_str!("../hdr_stats.wgsl"));
+        assert!(matches!(source(false), std::borrow::Cow::Borrowed(_)));
+        let module = naga::front::wgsl::parse_str(&source(true)).unwrap();
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .unwrap();
+        assert_eq!(module.entry_points.len(), 2);
+    }
+}

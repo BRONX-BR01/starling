@@ -3,6 +3,8 @@
 //! the preparer's kit the app carries (`assets/prepare-kit.zip`, build_apk.py), then
 //! horizon-prepare over those files with the app's Java launchers. What it makes becomes the
 //! game's resources folder; the runtime goes once it is done.
+#[path = "preparer_install.rs"]
+mod install;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
@@ -161,17 +163,15 @@ fn run(resources: &Path) -> Result<(), String> {
     )?;
     // The sounds: `prepare` leaves them out (the desktop launcher copies them after it,
     // backend.rs). Without them the game plays, silent.
-    if let Err(e) = copy_sounds(&kit) {
-        log::warn!("Horizon: no sounds (the game will be silent): {e}");
+    copy_sounds(&kit)?;
+    let missing = horizon_prepare::check(&kit, &made)?;
+    if !missing.is_empty() {
+        return Err(format!(
+            "Prepared resources are incomplete: {}",
+            missing.join("; ")
+        ));
     }
-    // The prepared folder becomes the resources; the ones there did not load.
-    if resources.exists() {
-        std::fs::remove_dir_all(resources).map_err(|e| format!("{}: {e}", resources.display()))?;
-    }
-    if let Some(parent) = resources.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    }
-    std::fs::rename(&made, resources).map_err(|e| format!("{}: {e}", resources.display()))?;
+    install::activate(&made, resources)?;
     // Bedrock's touch buttons, from Mojang too, so the first game already has them.
     crate::bedrock_touch::fetch_logged(resources);
     // Everything the game reads is in the resources now: the runtime and the work files go.

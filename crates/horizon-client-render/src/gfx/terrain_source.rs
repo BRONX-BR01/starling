@@ -112,7 +112,7 @@ fn unroll_emissive_lookup(mut source: String) -> String {
     let mut helper = String::from("fn legacy_emissive_layer(layer: u32) -> u32 {\n");
     for i in 0..128 {
         helper.push_str(&format!(
-            "    if globals.emissive_count.x > {i}u && globals.emissive_layers[{i}].x == layer {{ return globals.emissive_layers[{i}].y; }}\n"
+            "    if globals.emissive_count.x <= {i}u {{ return 0xffffffffu; }}\n    if globals.emissive_layers[{i}].x == layer {{ return globals.emissive_layers[{i}].y; }}\n"
         ));
     }
     helper.push_str("    return 0xffffffffu;\n}\n");
