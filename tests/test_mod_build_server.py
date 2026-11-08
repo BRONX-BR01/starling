@@ -1,8 +1,12 @@
 """What the mod build service tells a player about a failed build (packaging/android/mod_build_server.py)."""
 import importlib.util
+import io
+import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest import mock
 
 SERVER = Path(__file__).resolve().parents[1] / "packaging" / "android" / "mod_build_server.py"
 spec = importlib.util.spec_from_file_location("mod_build_server", SERVER)
@@ -43,6 +47,51 @@ class WhyFailed(unittest.TestCase):
 
     def test_nothing_readable_is_a_plain_failure(self):
         self.assertEqual(why_failed("killed\n"), "The build failed.")
+
+
+def bundle(mod_id):
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("horizon-native.json", json.dumps({"id": mod_id}))
+        archive.writestr(f"mixins/{mod_id}/horizon-mixin.toml", "")
+    data = out.getvalue()
+    return len(data).to_bytes(4, "big") + data
+
+
+class AskedAgain(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        for patcher in (
+            mock.patch.object(server, "ROOT", Path(folder.name)),
+            mock.patch.object(server, "commit_of", return_value="commit"),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        server.jobs.clear()
+        server.line.clear()
+        self.key = server.submit("0.2.3", bundle("jade"), "a")
+        server.line.clear()
+
+    def fail_with(self, error):
+        server.jobs[self.key] = {"state": "failed", "error": error}
+        return server.submit("0.2.3", bundle("jade"), "b")
+
+    def test_a_refused_mod_is_not_built_again(self):
+        key = self.fail_with("The mod jade does not fit this game (E_UNSUPPORTED_MACRO): no")
+        self.assertEqual(key, self.key)
+        self.assertEqual(server.line, [])
+        self.assertEqual(server.jobs[key]["state"], "failed")
+
+    def test_a_compile_error_is_not_built_again(self):
+        self.fail_with("This mod does not compile on this version of the game. error[E0308]: mismatched")
+        self.assertEqual(server.line, [])
+
+    def test_what_may_be_the_machines_fault_builds_again(self):
+        for error in ("The build failed.", "The build took too long.", "This mod does not compile on this version of the game. error: No space left on device"):
+            server.line.clear()
+            self.fail_with(error)
+            self.assertEqual(server.line, [self.key], error)
 
 
 if __name__ == "__main__":
