@@ -1621,7 +1621,7 @@ fn tab_walks_the_edit_server_screen_through_its_buttons() {
 fn the_account_screen_offers_signing_in_and_goes_back() {
     let mut f = Fixture::new();
     // Only where the game signs in itself (Android): the title keeps vanilla's buttons here.
-    assert!(f.title.buttons(480.0, 262.0).iter().all(|b| b.id != 8));
+    assert!(f.title.buttons(480.0, 262.0).iter().all(|b| b.id != 80));
     f.title.mode = Mode::Account;
     let labels: Vec<String> = f
         .title

@@ -1015,6 +1015,8 @@
   "Editing: %s": "Editing: %s",
   "Press the button for this. %s cancels.": "Press the button for this. %s cancels.",
   "This button also does: %s": "This button also does: %s",
+  "How the stick moves on a server: a server's anticheat may pull you back for the stick's own speed and angle.": "How the stick moves on a server: a server's anticheat may pull you back for the stick's own speed and angle.",
+  "When a server keeps pulling you back while the stick moves you, ask how the stick should move there.": "When a server keeps pulling you back while the stick moves you, ask how the stick should move there.",
   "horizon.pad.notice.connected.press": "Press to use it",
   "horizon.recipe_transfer.missing": "Missing Items",
   "horizon.recipe_transfer.no_room": "Inventory full",

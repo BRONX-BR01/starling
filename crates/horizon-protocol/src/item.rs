@@ -2345,7 +2345,7 @@ mod tests {
             w.varint(1);
             crossbows(w, depth - 1);
         }
-        for (depth, ok) in [(MAX_NESTING - 1, true), (MAX_NESTING, false)] {
+        for (depth, ok) in [(MAX_NESTING, true), (MAX_NESTING + 1, false)] {
             let mut w = Writer::new();
             crossbows(&mut w, depth);
             let read = Template::read(&mut Reader::new(&w.data));
@@ -2391,15 +2391,15 @@ mod tests {
 
     #[test]
     fn direct_trims_banners_and_songs() {
-        // A trim with a direct holder keeps its bytes.
-        raw_round_trip(component::TRIM, |w| {
+        // A trim with a direct holder is read into its own type and keeps its bytes.
+        typed_round_trip(component::TRIM, |w| {
             w.varint(3);
             w.varint(0);
             w.string("minecraft:sentry");
             text(w, "Sentry Armor Trim");
             w.bool(false);
         });
-        raw_round_trip(component::TRIM, |w| {
+        typed_round_trip(component::TRIM, |w| {
             w.varint(0);
             w.string("minecraft:amethyst");
             text(w, "Amethyst Material");
