@@ -11,6 +11,7 @@ what the browser asks of the rest of the launcher.
 | Resource packs | Modrinth | `resourcepacks/` | The player turns it on |
 | Shader packs | Modrinth's Iris and OptiFine packs; a search also finds the registry's | `shaderpacks/` | The player chooses it |
 
+- **Native mods** are only offered on ARM64: the build service makes no library for the other architectures.
 - **Java mods aren't offered.** Modrinth's mods are Java: on the desktop their content is ported, and this catalog
   leaves that out.
 - **Resource packs for other versions** stay hidden until the player asks for all game versions. Each then says what it
