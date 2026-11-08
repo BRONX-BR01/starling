@@ -156,6 +156,15 @@ fn translucent_batchable(info: &wgpu::AdapterInfo, multi_draw: bool) -> bool {
     multi_draw && info.backend != wgpu::Backend::Gl
 }
 
+/// Two solid passes only where a discard costs the GPU its hidden surface removal: Apple's tiled
+/// GPUs, behind Metal, and phones' (Vasysik's Android fork measured 25-27% less GPU time on an
+/// Adreno 710). Elsewhere the second pass would double the solid draw calls and vertex work for
+/// nothing.
+fn splits_solid(info: &wgpu::AdapterInfo) -> bool {
+    info.backend == wgpu::Backend::Metal
+        || (cfg!(target_os = "android") && info.backend == wgpu::Backend::Vulkan)
+}
+
 /// The vertices flat draws bind for a call's page key: a page of the section arena, or of
 /// the translucent arena up to its last range in use (`flat::TRANSLUCENT_KEYS`).
 fn flat_vertices<'a>(
@@ -3878,9 +3887,9 @@ impl Renderer {
         let static_entity_index_quads = 1 << 14;
         let static_entity_indices = Self::quad_indices(&device, static_entity_index_quads);
         let flat_wanted = flat::wanted(&adapter, &device);
-        // Metal draws solid terrain in two passes (`split_solid`): meshes put all
+        // Metal and phones draw solid terrain in two passes (`splits_solid`): meshes put all
         // their opaque quads first, so each pass draws its part in a run or two.
-        crate::mesher::group_parts(adapter.get_info().backend == wgpu::Backend::Metal);
+        crate::mesher::group_parts(splits_solid(&adapter.get_info()));
         // Readable as storage where flat draws run: a shader pack's terrain program reads them.
         let arena = arena::Arena::new(
             &device,
@@ -3897,6 +3906,7 @@ impl Renderer {
             })];
             let info = adapter.get_info();
             let min_sections = if flat::is_broken_intel_vulkan(&info)
+                || flat::is_powervr_vulkan(&info)
                 || std::env::var("HORIZON_FLAT_DRAWS").as_deref() == Ok("1")
             {
                 0
@@ -3983,7 +3993,11 @@ impl Renderer {
         // broke now and then left most of the terrain out of a frame, or a chunk out for longer.
         let cull_on = cull.is_some() && (!cfg!(target_os = "android") || cull_env.is_ok());
         let depth = Self::depth(&device, &config);
-        let world_post = world_post::Post::new(&device, config.format.remove_srgb_suffix());
+        let world_post = world_post::Post::new(
+            &device,
+            config.format.remove_srgb_suffix(),
+            &adapter.get_info().name,
+        );
         let uploads = upload::Uploads::new(&device);
         let section_uploads = upload::Uploads::with_chunk(&device, SECTION_UPLOAD_CHUNK);
         let stars = stars::Stars::new(&device, config.format.remove_srgb_suffix());
@@ -6797,10 +6811,10 @@ impl Renderer {
         self.phase2_pages.clear();
         self.solid_runs.clear();
         self.phase2_runs.clear();
-        // On Metal, phase 1 goes the opaque quads of every list, then the cutout
-        // ones (`Part`), each solid pass drawing its own: `[..opaque_draws]`,
+        // On Metal and phones, phase 1 goes the opaque quads of every list, then the
+        // cutout ones (`Part`), each solid pass drawing its own: `[..opaque_draws]`,
         // then the rest. A fading list's quads all draw in the cutout pass.
-        let split_solid = self.info.backend == wgpu::Backend::Metal;
+        let split_solid = splits_solid(&self.info);
         let parts = |fading: bool| -> &'static [(u8, Quads)] {
             match (split_solid, fading) {
                 (false, _) => &[(0, Quads::All)],
@@ -8069,10 +8083,7 @@ impl Renderer {
             .filter(|_| !frame.title)
             .and_then(|n| Some((n.material.as_ref()?, &n.frame.group)));
         let solid_pipeline = material.map_or(&self.solid, |(m, _)| &m.solid);
-        // Two solid passes only where a discard costs the GPU its hidden surface
-        // removal: Apple's tiled GPUs, behind Metal. Elsewhere the second pass
-        // would double the solid draw calls and vertex work for nothing.
-        let split_solid = self.info.backend == wgpu::Backend::Metal;
+        let split_solid = splits_solid(&self.info);
         let translucent_pipeline = material.map_or(&self.translucent, |(m, _)| &m.translucent);
         let pack_flat = material.and_then(|(m, _)| m.flat.as_ref());
         // A material stage's translucent pass reads a copy of the depth the solid terrain
