@@ -11,6 +11,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -38,6 +39,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.ViewTreeObserver;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.WindowManager;
 import android.widget.EditText;
@@ -572,8 +574,20 @@ public class StarlingActivity extends NativeActivity {
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         address.setHint("https://example.com");
         address.setText(current);
+        float dp = getResources().getDisplayMetrics().density;
+        // The game's own look, not the system's white box; the keyboard leaves the warning in view.
+        GradientDrawable box = new GradientDrawable();
+        box.setColor(0xFF1E2127);
+        box.setCornerRadius(8 * dp);
+        box.setStroke(Math.round(dp), 0xFF8B7CF6);
+        address.setBackground(box);
+        address.setTextColor(0xFFFFFFFF);
+        address.setHintTextColor(0xFF8A8F98);
+        address.setPadding(Math.round(12 * dp), Math.round(10 * dp), Math.round(12 * dp),
+                Math.round(10 * dp));
+        address.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_DONE);
         FrameLayout frame = new FrameLayout(this);
-        int side = Math.round(20 * getResources().getDisplayMetrics().density);
+        int side = Math.round(20 * dp);
         frame.setPadding(side, 0, side, 0);
         frame.addView(address);
 
