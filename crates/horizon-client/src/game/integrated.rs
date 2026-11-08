@@ -240,18 +240,15 @@ impl Integrated {
             Err(RecvTimeoutError::Disconnected) => None,
         }
     }
-<<<<<<< HEAD
     /// `MinecraftServer.execute`: run `f` on the server thread between two ticks, without
     /// waiting for it.
     pub fn execute(&self, f: impl FnOnce(&mut Game<'_>) + Send + 'static) {
-        let _ = self.tasks.send(Box::new(f));
-||||||| 31f83499b6
-=======
+        let _ = self.post(f);
+    }
     /// `execute`: run `f` on the server thread between two ticks, without
     /// waiting for it. False once the server has stopped.
     pub fn post(&self, f: impl FnOnce(&mut Game<'_>) + Send + 'static) -> bool {
         self.tasks.send(Box::new(f)).is_ok()
->>>>>>> c98a51a664
     }
     /// `IntegratedServer.halt(true)`: returns once the world is saved and let go.
     pub fn stop(mut self) -> Result<()> {
@@ -403,17 +400,13 @@ impl Game<'_> {
         creative: bool,
         create: Option<&WorldOptions>,
     ) -> Result<()> {
-<<<<<<< HEAD
         // Signed in, a name chosen in Skin Customization goes before the account's: worlds take
         // it, servers keep the account's (remote.rs `join_server`).
-||||||| 31f83499b6
-=======
         // The window's mod configs before the server's, as on NeoForge.
         self.native_configs_client_start();
         horizon_client::command::vanilla::set_horizon_commands(
             self.options.pregen || self.settings.extras.pregen,
         );
->>>>>>> c98a51a664
         let auth = horizon_client::auth::current();
         let player = match &auth {
             Some(account) => std::env::current_dir()

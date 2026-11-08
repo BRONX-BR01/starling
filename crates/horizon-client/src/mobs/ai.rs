@@ -701,13 +701,7 @@ pub fn tick(
     if m.species() == Species::Strider {
         super::strider::pre_tick(m, w, events);
     }
-<<<<<<< HEAD
-    parts::time(1, || base_tick(m, w, events));
-||||||| 31f83499b6
-    base_tick(m, w, events);
-=======
-    let was_on_fire = base_tick(m, w, events);
->>>>>>> c98a51a664
+    let was_on_fire = parts::time(1, || base_tick(m, w, events));
     if m.species() == Species::Rabbit {
         super::rabbit::base_tick(m);
     }
@@ -804,27 +798,12 @@ pub fn tick(
     }
     count_fall_fly_ticks(m);
     effects_from_blocks(m, w, level_random, events);
-<<<<<<< HEAD
-    parts::time(5, || after_step(m, w, level_random, events));
-    true
-}
-
-/// The tick's end: head turn, sounds out, animations, species extras.
-fn after_step(
-    m: &mut Mob,
-    w: &MobWorld,
-    level_random: &mut LegacyRandom,
-    events: &mut Vec<MobEvent>,
-) {
-||||||| 31f83499b6
-=======
     extinguish_if_wet(m, w, was_on_fire, events);
     if m.species() == Species::SulfurCube && m.alive() {
         // SulfurCube.doPush applies the body's contact damage even with NoAI.
         // Player contact keeps its existing player_push route.
         super::sulfur_cube::mob_contacts(m, w, events);
     }
->>>>>>> c98a51a664
     if m.species() == Species::Rabbit {
         super::rabbit::post_tick(m);
     }
@@ -862,10 +841,6 @@ fn after_step(
         super::panda::tick(m, w, events);
     }
     aquatic::school_tick(m, w, level_random);
-<<<<<<< HEAD
-||||||| 31f83499b6
-    true
-=======
     // Dolphin.tick: after super.tick, NoAI restores the species maximum.
     if m.no_ai && m.species() == Species::Dolphin {
         m.air = m.max_air_supply();
@@ -873,7 +848,6 @@ fn after_step(
     // TraderLlama.maybeDespawn discards the llama in its aiStep: it leaves the
     // level's entity list in this tick, after the rest of its tick ran.
     !(m.removed && m.species() == Species::TraderLlama)
->>>>>>> c98a51a664
 }
 /// `LivingEntity.aiStep` -> `Entity.applyEffectsFromBlocks` for the blocks
 /// that hurt, hold or slide a mob: the cactus (`CactusBlock.entityInside`, 1),
@@ -1830,7 +1804,8 @@ fn ai_step(m: &mut Mob, w: &MobWorld, level_random: &mut LegacyRandom, events: &
         f64::from(m.ai.yya),
         f64::from(m.ai.zza),
     );
-<<<<<<< HEAD
+    update_fall_flying(m, w, events);
+    reset_effect_fall_distance(m);
     parts::time(3, || {
         if super::equine::moved_by_client(m) {
             // LivingEntity.travelRidden: the rider's client moves it
@@ -1839,37 +1814,14 @@ fn ai_step(m: &mut Mob, w: &MobWorld, level_random: &mut LegacyRandom, events: &
         } else if !(m.species() == Species::Mannequin && m.extra.immovable) {
             // Mannequin.isEffectiveAi: an immovable one never travels.
             m.travel(w, input, events);
+            // A fall's hurt (checkFallDamage) teleports at once.
+            hurt_teleports(m, w, events);
         }
     });
-    parts::time(4, || push_entities(m, w, events));
-||||||| 31f83499b6
-    if super::equine::moved_by_client(m) {
-        // LivingEntity.travelRidden: the rider's client moves it
-        // (handleMoveVehicle), so the server only stops it.
-        m.velocity = Vec3::ZERO;
-    } else if !(m.species() == Species::Mannequin && m.extra.immovable) {
-        // Mannequin.isEffectiveAi: an immovable one never travels.
-        m.travel(w, input, events);
-    }
-    push_entities(m, w, events);
-=======
-    update_fall_flying(m, w, events);
-    reset_effect_fall_distance(m);
-    if super::equine::moved_by_client(m) {
-        // LivingEntity.travelRidden: the rider's client moves it
-        // (handleMoveVehicle), so the server only stops it.
-        m.velocity = Vec3::ZERO;
-    } else if !(m.species() == Species::Mannequin && m.extra.immovable) {
-        // Mannequin.isEffectiveAi: an immovable one never travels.
-        m.travel(w, input, events);
-        // A fall's hurt (checkFallDamage) teleports at once.
-        hurt_teleports(m, w, events);
-    }
     // LivingEntity.aiStep: applyEffectsFromBlocks follows travel.
     m.apply_effects_from_blocks(w, events);
-    push_entities(m, w, events);
+    parts::time(4, || push_entities(m, w, events));
     hurt_by_water(m, w, events);
->>>>>>> c98a51a664
     // Spider.tick: climbing while pressed against a wall.
     if m.kind.flags.climber {
         m.climbing = m.horizontal_collision;

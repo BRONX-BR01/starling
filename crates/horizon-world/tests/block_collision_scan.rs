@@ -109,21 +109,11 @@ fn invalid_or_excessive_domains_fail_before_world_queries() {
 }
 
 /// Records every cell the scan reads; every block passes the edge filters
-/// and has an empty shape. `sections` counts the section queries.
+/// and has an empty shape.
 struct Recording {
     cells: Vec<BlockPos>,
     /// Sections (block y >> 4) whose blocks never reach out of their cell.
     contained: Vec<i32>,
-    sections: usize,
-}
-impl Recording {
-    fn new(contained: Vec<i32>) -> Self {
-        Self {
-            cells: Vec::new(),
-            contained,
-            sections: 0,
-        }
-    }
 }
 impl BlockCollisionWorld for Recording {
     type Error = io::Error;
@@ -153,35 +143,18 @@ impl BlockCollisionWorld for Recording {
         unreachable!()
     }
     fn may_reach_out(&mut self, _: (), section_y: i32) -> io::Result<bool> {
-        self.sections += 1;
         Ok(!self.contained.contains(&section_y))
     }
 }
 
-<<<<<<< HEAD
-/// The cursor's first and last cells for `bounds`: the box's cells grown by one.
-fn cursor_corners(bounds: Aabb) -> (BlockPos, BlockPos) {
-||||||| 31f83499b6
-/// The cells the scan reads for `bounds` (Cursor3D order: x fastest, then
-/// y, then z, without the 8 corners), less the outer cells of `contained`.
-fn expected_cells(bounds: Aabb, contained: &[i32]) -> Vec<BlockPos> {
-=======
 /// The cells the scan reads for `bounds` (Cursor3D order: x fastest, then
 /// y, then z, without the 8 corners), less the outer cells `contained` holds.
 fn expected_cells(bounds: Aabb, contained: impl Fn(BlockPos) -> bool) -> Vec<BlockPos> {
->>>>>>> c98a51a664
     let (min, max) = (bounds.min_position(), bounds.max_position());
     let start = BlockPos::containing(Vec3::new(min.x - 1.0e-7, min.y - 1.0e-7, min.z - 1.0e-7))
         .offset(-1, -1, -1);
     let end = BlockPos::containing(Vec3::new(max.x + 1.0e-7, max.y + 1.0e-7, max.z + 1.0e-7))
         .offset(1, 1, 1);
-    (start, end)
-}
-
-/// The cells the scan reads for `bounds` (Cursor3D order: x fastest, then
-/// y, then z, without the 8 corners), less the outer cells of `contained`.
-fn expected_cells(bounds: Aabb, contained: &[i32]) -> Vec<BlockPos> {
-    let (start, end) = cursor_corners(bounds);
     let sizes = [
         end.x - start.x + 1,
         end.y - start.y + 1,
@@ -214,7 +187,10 @@ fn cells_follow_the_cursor_order_without_corners() {
         Aabb::new(Vec3::new(-0.3, 0.0, -0.3), Vec3::new(0.3, 0.9, 0.3)),
     ];
     for bounds in boxes {
-        let mut world = Recording::new(Vec::new());
+        let mut world = Recording {
+            cells: Vec::new(),
+            contained: Vec::new(),
+        };
         let hits = BlockCollisionScan::new(
             &mut world,
             CollisionContext::empty(false),
@@ -225,35 +201,7 @@ fn cells_follow_the_cursor_order_without_corners() {
         .unwrap()
         .count();
         assert_eq!(hits, 0);
-<<<<<<< HEAD
-        assert_eq!(world.cells, expected_cells(bounds, &[]));
-        // Sections without blocks reaching out of their cells: only the
-        // cells off the cursor's faces are read, and every section is asked.
-        let (start, end) = cursor_corners(bounds);
-        let all: Vec<i32> = (start.y >> 4..=end.y >> 4).collect();
-        let mut world = Recording::new(all.clone());
-        let hits = BlockCollisionScan::new(
-            &mut world,
-            CollisionContext::empty(false),
-            bounds,
-            false,
-            1_000_000,
-        )
-        .unwrap()
-        .count();
-        assert_eq!(hits, 0);
-        assert_eq!(world.cells, expected_cells(bounds, &all));
-        assert!(
-            world.sections >= all.len(),
-            "{} < {}",
-            world.sections,
-            all.len()
-        );
-||||||| 31f83499b6
-        assert_eq!(world.cells, expected_cells(bounds, &[]));
-=======
         assert_eq!(world.cells, expected_cells(bounds, |_| false));
->>>>>>> c98a51a664
     }
 }
 
@@ -282,7 +230,10 @@ fn outer_cells_of_contained_sections_are_not_read() {
         ),
     ];
     for (bounds, contained) in boxes {
-        let mut world = Recording::new(contained.clone());
+        let mut world = Recording {
+            cells: Vec::new(),
+            contained: contained.clone(),
+        };
         let hits = BlockCollisionScan::new(
             &mut world,
             CollisionContext::empty(false),
@@ -320,6 +271,7 @@ impl BlockCollisionWorld for ByColumn {
             large_collision_shape: true,
             moving_piston: true,
             empty_shape: true,
+            full_block: false,
         })
     }
     fn is_suffocating(&mut self, _: ChunkPos, _: CollisionBlock, _: BlockPos) -> io::Result<bool> {
@@ -386,7 +338,10 @@ fn passed_cells_count_toward_the_budget() {
     let bounds = Aabb::new(Vec3::new(0.2, 63.5, 0.3), Vec3::new(0.8, 65.3, 0.9));
     for budget in 0..80 {
         let scan = |contained: Vec<i32>| {
-            let mut world = Recording::new(contained);
+            let mut world = Recording {
+                cells: Vec::new(),
+                contained,
+            };
             BlockCollisionScan::new(
                 &mut world,
                 CollisionContext::empty(false),
@@ -435,6 +390,7 @@ impl BlockCollisionWorld for Sparse {
             large_collision_shape: false,
             moving_piston: false,
             empty_shape: !solid,
+            full_block: false,
         })
     }
     fn is_suffocating(

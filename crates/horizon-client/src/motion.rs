@@ -768,7 +768,6 @@ impl PlayerMotion {
             .map_err(attribute_error)?;
         Ok(())
     }
-<<<<<<< HEAD
     /// `ClientPacketListener.handleUpdateAttributes` for this player: the server's base value
     /// and modifiers (`(id, amount, operation)`) replace the instance's own.
     pub fn apply_snapshot(
@@ -808,8 +807,8 @@ impl PlayerMotion {
                 Ok(())
             })
             .map_err(attribute_error)?;
-||||||| 31f83499b6
-=======
+        Ok(())
+    }
     /// `LivingEntity.onAttributeUpdated` for `max_health`: a health above the
     /// new maximum drops to it (#8573: health_boost ending at 24/24 leaves 20).
     pub fn clamp_health_to_max(&mut self) -> Result<()> {
@@ -818,7 +817,6 @@ impl PlayerMotion {
         if health > max {
             self.set_health(max, false)?;
         }
->>>>>>> c98a51a664
         Ok(())
     }
     /// `AttributeMap.pack` in `AttributeInstance.Packed.LIST_CODEC`'s form: the

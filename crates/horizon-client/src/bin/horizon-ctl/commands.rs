@@ -599,7 +599,6 @@ pub const COMMANDS: &[Cmd] = &[
     cmd!("bench", Scripting, "bench SECONDS", "reset frame stats, wait, reply with the summary", "", ["horizon-ctl bench 10"], &[p("seconds", Ty::Num, "how long to measure")], mcp: true, local: false),
     cmd!("stats", Scripting, "stats [reset] [raw]", "frame-time summary since the last reset", "", ["horizon-ctl stats"], &[opt("reset", Ty::Bool, "start counting again"), opt("raw", Ty::Bool, "every frame time too (frame_ms, cpu_ms, gpu_ms)")], mcp: true, local: false),
     cmd!("gpu-passes", Scripting, "gpu-passes [on|off]", "time Horizon's own render passes on the GPU, shown in F3 and in stats and bench", "", ["horizon-ctl gpu-passes on"], &[opt("mode", Ty::Enum(&["on", "off"]), "on or off; without it, only reports")], mcp: false, local: false),
-<<<<<<< HEAD
     cmd!("perf", Scripting, "perf", "the Stats overlay's numbers: fps with the 1% low, CPU and GPU time, memory, chunks, meshing, draws, temperatures, throttling",
         "Memory is the process's (rss, pss), the native heap's and the GPU allocator's; temperatures and throttling are what the device lets the game read (null where it does not).",
         ["horizon-ctl perf"], &[], mcp: true, local: false),
@@ -608,8 +607,6 @@ pub const COMMANDS: &[Cmd] = &[
         ["horizon-ctl touch-layout", "horizon-ctl touch-layout edit"], &[opt("action", Ty::Enum(&["edit", "done", "reset"]), "what to do (nothing: show it)")], mcp: true, local: false),
     cmd!("overlay", Scripting, "overlay off|fps|graph|stats", "show a performance overlay; stats is the full panel (perf's numbers)",
         "", ["horizon-ctl overlay stats"], &[p("mode", Ty::Enum(&["off", "fps", "graph", "stats"]), "which overlay")], mcp: true, local: false),
-||||||| 31f83499b6
-=======
     cmd!("trace", Scripting, "trace [FILE [SECONDS] | stop]", "write every thread's timed spans to FILE as a timeline that ui.perfetto.dev opens, for SECONDS or until stop",
         "Each span (ticks by system, streaming, uploads, far terrain, lighting, the renderer) shows on the thread that ran it, nested by time. Without arguments, only reports whether a trace is being written. HORIZON_TRACE=FILE writes one from the start; horizon-trace on a dedicated server's console writes one to reports/. See docs/graphics.md.",
         ["horizon-ctl trace /tmp/frame.json 10", "horizon-ctl trace stop"], &[], mcp: false, local: false),
@@ -620,7 +617,6 @@ pub const COMMANDS: &[Cmd] = &[
     cmd!("render-capture", Scripting, "render-capture on|off|DIR", "keep CPU copies of the meshes the renderer draws (on), or write the next frame's scene to DIR for the scene_replay example",
         "on meshes every section and far tile again so the copies are complete (HORIZON_RENDER_CAPTURE=1 keeps them from the start). DIR gets the camera, frame inputs, settings and every resident near section and far tile mesh; entities, particles, weather, the hand and the HUD are left out. See docs/graphics.md.",
         ["horizon-ctl render-capture on", "horizon-ctl render-capture /tmp/scene"], &[], mcp: false, local: false),
->>>>>>> c98a51a664
     cmd!("fly", Scripting, "fly X1 Y1 Z1 X2 Y2 Z2 SECONDS [PITCH [raw]]", "fly the camera along a line, then reply with the frame summary",
         "The reply's tick_ms and tick_ms_max are the world's smoothed tick time over the flight (the server thread's when single player runs on one). With raw, the reply also lists every frame time in milliseconds (frame_ms).",
         ["horizon-ctl fly 0 100 0 500 100 0 20"], &[], mcp: false, local: false),

@@ -129,14 +129,8 @@ impl<'r> BlockCollisionRegistry<'r> {
                 u8::from(large)
                     | (u8::from(state.name == "minecraft:moving_piston") << 1)
                     | (u8::from(empty) << 2)
-<<<<<<< HEAD
-                    | (u8::from(contextual.contains_key(&id)) << 3)
+                    | (u8::from(contextual.contains_key(&id) || declared_collision) << 3)
                     | (u8::from(full) << 4),
-||||||| 31f83499b6
-                    | (u8::from(contextual.contains_key(&id)) << 3),
-=======
-                    | (u8::from(contextual.contains_key(&id) || declared_collision) << 3),
->>>>>>> c98a51a664
             );
             if cached.cached_shape(id)?.is_none()
                 && let Some(rule) =

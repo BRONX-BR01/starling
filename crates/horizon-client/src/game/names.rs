@@ -757,10 +757,94 @@ impl Game<'_> {
     ) -> Vec<horizon_client::font::Patch> {
         // Options.getBackgroundOpacity(0.25) black, as ARGB.color.
         const BACKGROUND: u32 = 0x3F00_0000;
-        let background = background.then_some(BACKGROUND);
-        self.text_quads(
-            o, lines, unit, text_alpha, background, text_layer, light, out,
-        )
+        let axes = self.camera_text_axes();
+        let away = axes.away;
+        let mut batch = HudBatch::new([1, 1]);
+        let last = lines.len().saturating_sub(1);
+        for (n, (text, lift)) in lines.iter().enumerate() {
+            let o = (o + glam::DVec3::new(0.0, *lift, 0.0)).as_vec3();
+            let (r, u) = (axes.right * unit, axes.up * unit);
+            // Text space: x right, y down (scale 0.025, -0.025).
+            let at = |x: f32, y: f32| o + r * x - u * y;
+            let y0 = if text.plain() == "deadmau5" {
+                -10.0
+            } else {
+                0.0
+            };
+            batch.vertices.clear();
+            // Font.prepareText, as any text: bold, italic, fonts and each
+            // glyph's own box (accented.png's are 12 pixels tall).
+            let behind = match layouts.as_deref_mut() {
+                Some(layouts) => layouts.name_tag(
+                    &mut batch,
+                    &self.gui.atlas,
+                    text,
+                    y0,
+                    text_alpha,
+                    background,
+                ),
+                None => batch.name_tag(
+                    &self.gui.atlas,
+                    text,
+                    y0,
+                    text_alpha << 24 | 0xFF_FFFF,
+                    if background { BACKGROUND } else { 0 },
+                ),
+            };
+            if n == last && marks.horizon {
+                let x = -self.gui.atlas.font.width_text(text) / 2.0 - 10.0;
+                // 8 text pixels square, a pixel left of the background.
+                for (mx, my, w, h, argb) in horizon_cosmetics::mark::MARK {
+                    let a = text_alpha * (argb >> 24) / 255;
+                    batch.fill(
+                        &self.gui.atlas,
+                        x + f32::from(mx),
+                        y0 + f32::from(my),
+                        f32::from(w),
+                        f32::from(h),
+                        horizon_client::hud_layout::abgr(a << 24 | argb & 0xFF_FFFF),
+                    );
+                }
+            }
+            if let Some(style) = marks.style.filter(|_| n == last) {
+                let width = self.gui.atlas.font.width_text(text);
+                let x = -width / 2.0;
+                let alpha = text_alpha << 24;
+                // The badge, 8 text pixels square, a pixel right of the background.
+                batch.rect_uv(x + width + 2.0, y0, 8.0, 8.0, style.mark, alpha | 0xFF_FFFF);
+                // The line, a pixel tall, under the background (which runs from -1 to 9).
+                batch.fill(
+                    &self.gui.atlas,
+                    x - 1.0,
+                    y0 + 9.0,
+                    width + 1.0,
+                    1.0,
+                    // The batch takes RGBA: the line as ARGB, swapped.
+                    horizon_client::hud_layout::abgr(alpha | style.line),
+                );
+            }
+            for (i, quad) in batch.vertices.as_chunks::<6>().0.iter().enumerate() {
+                let shift = if i * 6 < behind {
+                    away
+                } else {
+                    glam::Vec3::ZERO
+                };
+                // The corners from the bottom left, as the world draws quads.
+                for v in [quad[5], quad[2], quad[1], quad[0]] {
+                    out.push(Vertex {
+                        normal: [0; 4],
+                        pos: (at(v.pos[0], v.pos[1]) + shift).to_array(),
+                        uv: v.uv,
+                        layer: text_layer,
+                        color: v.color,
+                        light,
+                        glint_uv: [0.0, 0.0],
+                    });
+                }
+            }
+        }
+        // Glyphs rasterized on first use (Unifont's) upload with the frame.
+        batch.patches
     }
     /// Lines of text facing the camera as a name tag's, `scale` blocks a text pixel: the text
     /// at `text_alpha` in its layer, on `background` (RGBA8, alpha on top: unlit, a hair
@@ -819,8 +903,7 @@ impl Game<'_> {
     ) -> Vec<horizon_client::font::Patch> {
         let away = axes.away;
         let mut batch = HudBatch::new([1, 1]);
-        let last = lines.len().saturating_sub(1);
-        for (n, (text, lift)) in lines.iter().enumerate() {
+        for (text, lift) in lines {
             let o = (o + glam::DVec3::new(0.0, *lift, 0.0)).as_vec3();
             let (r, u) = (axes.right * scale, axes.up * scale);
             // Text space: x right, y down (scale 0.025, -0.025).
@@ -833,7 +916,6 @@ impl Game<'_> {
             batch.vertices.clear();
             // Font.prepareText, as any text: bold, italic, fonts and each
             // glyph's own box (accented.png's are 12 pixels tall).
-<<<<<<< HEAD
             let behind = batch.name_tag(
                 &self.gui.atlas,
                 text,
@@ -841,65 +923,6 @@ impl Game<'_> {
                 text_alpha << 24 | 0xFF_FFFF,
                 background.unwrap_or(0),
             );
-||||||| 31f83499b6
-            let behind = batch.name_tag(
-                &self.gui.atlas,
-                text,
-                y0,
-                text_alpha << 24 | 0xFF_FFFF,
-                if background { BACKGROUND } else { 0 },
-            );
-=======
-            let behind = match layouts.as_deref_mut() {
-                Some(layouts) => layouts.name_tag(
-                    &mut batch,
-                    &self.gui.atlas,
-                    text,
-                    y0,
-                    text_alpha,
-                    background,
-                ),
-                None => batch.name_tag(
-                    &self.gui.atlas,
-                    text,
-                    y0,
-                    text_alpha << 24 | 0xFF_FFFF,
-                    if background { BACKGROUND } else { 0 },
-                ),
-            };
-            if n == last && marks.horizon {
-                let x = -self.gui.atlas.font.width_text(text) / 2.0 - 10.0;
-                // 8 text pixels square, a pixel left of the background.
-                for (mx, my, w, h, argb) in horizon_cosmetics::mark::MARK {
-                    let a = text_alpha * (argb >> 24) / 255;
-                    batch.fill(
-                        &self.gui.atlas,
-                        x + f32::from(mx),
-                        y0 + f32::from(my),
-                        f32::from(w),
-                        f32::from(h),
-                        horizon_client::hud_layout::abgr(a << 24 | argb & 0xFF_FFFF),
-                    );
-                }
-            }
-            if let Some(style) = marks.style.filter(|_| n == last) {
-                let width = self.gui.atlas.font.width_text(text);
-                let x = -width / 2.0;
-                let alpha = text_alpha << 24;
-                // The badge, 8 text pixels square, a pixel right of the background.
-                batch.rect_uv(x + width + 2.0, y0, 8.0, 8.0, style.mark, alpha | 0xFF_FFFF);
-                // The line, a pixel tall, under the background (which runs from -1 to 9).
-                batch.fill(
-                    &self.gui.atlas,
-                    x - 1.0,
-                    y0 + 9.0,
-                    width + 1.0,
-                    1.0,
-                    // The batch takes RGBA: the line as ARGB, swapped.
-                    horizon_client::hud_layout::abgr(alpha | style.line),
-                );
-            }
->>>>>>> c98a51a664
             for (i, quad) in batch.vertices.as_chunks::<6>().0.iter().enumerate() {
                 let shift = if i * 6 < behind {
                     away
@@ -925,7 +948,6 @@ impl Game<'_> {
     }
 }
 
-<<<<<<< HEAD
 /// The way text lies: unit vectors to its right and its top, and the small step a background
 /// goes behind it.
 #[derive(Clone, Copy)]
@@ -935,8 +957,6 @@ pub(super) struct TextAxes {
     pub(super) away: glam::Vec3,
 }
 
-||||||| 31f83499b6
-=======
 /// Use the renderer's camera-relative clip test before measuring or emitting text.
 fn name_tag_in_view(
     frustum: Option<&impl horizon_client::gfx::Cull>,
@@ -1010,7 +1030,6 @@ fn collect_vehicle_ids(
 fn named_by_player_list(players: &[(&Mob, String)]) -> std::collections::HashSet<u32> {
     players.iter().map(|(player, _)| player.id).collect()
 }
->>>>>>> c98a51a664
 /// `EntityAttachment.NAME_TAG`: `(0, bbHeight, 0)` of the box of the entity's
 /// current pose, which the submitter lifts 0.5 more, between the last two tick
 /// positions. The player box is `Pose::dimensions(1.0)`.

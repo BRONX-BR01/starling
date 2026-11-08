@@ -3283,7 +3283,6 @@ fn back_up_unreadable_player(path: &Path) {
 /// Write a gzip NBT file the way vanilla does (`<name>_new`, keep `_old`). Inside
 /// [`later::deferred`] it goes to the background writer.
 pub fn write_dat(path: &Path, tag: Tag) -> Result<()> {
-<<<<<<< HEAD
     if later::is_deferred() {
         later::queue(path, later::Job::Dat(tag));
         return Ok(());
@@ -3319,8 +3318,6 @@ pub fn read_file(path: &Path) -> std::io::Result<Vec<u8>> {
     }
 }
 fn write_dat_now(path: &Path, tag: Tag) -> Result<()> {
-||||||| 31f83499b6
-=======
     write_dat_as(path, tag, false)
 }
 
@@ -3328,12 +3325,14 @@ fn write_dat_now(path: &Path, tag: Tag) -> Result<()> {
 /// folder after, so a power loss leaves the old file or the new one. A hand-over's commit
 /// point (`player-confirm`) replies only once its files are.
 pub fn write_dat_durable(path: &Path, tag: Tag) -> Result<()> {
+    later::flush();
     write_dat_as(path, tag, true)
 }
 
 /// `bytes` written to `path` through `<name>_new` and a rename, synced to the disk as
 /// [`write_dat_durable`] syncs: never a half-written file in place.
 pub fn write_durable(path: &Path, bytes: &[u8]) -> Result<()> {
+    later::flush();
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -3365,7 +3364,6 @@ fn sync_folder(path: &Path) -> std::io::Result<()> {
 }
 
 fn write_dat_as(path: &Path, tag: Tag, durable: bool) -> Result<()> {
->>>>>>> c98a51a664
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }

@@ -826,20 +826,15 @@ impl Game<'_> {
             }
             "block" => {
                 let p = self.block_pos_arg(ctx, &format!("{prefix}Pos"))?;
-<<<<<<< HEAD
                 // A content mod's machine keeps its block entity as a saved tag (read only here).
                 let machine = self.machine_kind(p).is_some()
                     && crate::game::spill::saved_entity(&self.world, p).is_some();
-                if !self.world.block_entities.contains_key(&(p[0], p[1], p[2])) && !machine {
-||||||| 31f83499b6
-                if !self.world.block_entities.contains_key(&(p[0], p[1], p[2])) {
-=======
                 if !self.world.block_entities.contains_key(&(p[0], p[1], p[2]))
                     && self.comparator_data(p).is_none()
                     && self.pot_data(p).is_none()
                     && self.moving_piston_data(p).is_none()
+                    && !machine
                 {
->>>>>>> c98a51a664
                     return Err(err("commands.data.block.invalid", &[]));
                 }
                 Ok(DataRef::Block(p))
@@ -862,46 +857,10 @@ impl Game<'_> {
                 }
                 Ok(tag)
             }
-<<<<<<< HEAD
-            DataRef::Block(p) => {
-                let key = (p[0], p[1], p[2]);
-                let name = self.data_block_name(*p);
-                if !self.world.block_entities.contains_key(&key)
-                    && let Some(tag) = crate::game::spill::saved_entity(&self.world, *p)
-                {
-                    return Ok(tag);
-                }
-                let e = self
-                    .world
-                    .block_entities
-                    .get(&key)
-                    .ok_or_else(|| err("commands.data.block.invalid", &[]))?;
-                // BlockEntity.saveWithFullMetadata: no chunk-only keepPacked,
-                // and the lock the model does not hold.
-                let mut tag = save::block_entity_data(key, e, &name, self.world.block_lock(key));
-                self.restore_loot_table(key, &mut tag);
-                Ok(tag)
-            }
-||||||| 31f83499b6
-            DataRef::Block(p) => {
-                let key = (p[0], p[1], p[2]);
-                let name = self.data_block_name(*p);
-                let e = self
-                    .world
-                    .block_entities
-                    .get(&key)
-                    .ok_or_else(|| err("commands.data.block.invalid", &[]))?;
-                // BlockEntity.saveWithFullMetadata: no chunk-only keepPacked,
-                // and the lock the model does not hold.
-                let mut tag = save::block_entity_data(key, e, &name, self.world.block_lock(key));
-                self.restore_loot_table(key, &mut tag);
-                Ok(tag)
-            }
-=======
             DataRef::Block(p) => self
                 .block_entity_nbt(*p)
+                .or_else(|| crate::game::spill::saved_entity(&self.world, *p))
                 .ok_or_else(|| err("commands.data.block.invalid", &[])),
->>>>>>> c98a51a664
             DataRef::Storage(id) => Ok(self.score.storage.get(id)),
         }
     }

@@ -739,41 +739,18 @@ impl Mob {
                 ..Default::default()
             }),
         };
-<<<<<<< HEAD
         use super::ai::parts;
-        // Entity.collide: the world border's walls stop the mob too.
-||||||| 31f83499b6
-        // Entity.collide: the world border's walls stop the mob too.
-=======
         // Entity.collide: the world border's walls stop the mob too, and so
         // do the entities it may not pass through.
->>>>>>> c98a51a664
         let border = w.border.map(|b| (b, [self.position.x, self.position.z]));
-<<<<<<< HEAD
+        let entities = self.entity_collisions(w, wanted);
         let bounds = self.bounds();
         let on_ground = self.on_ground;
         let moved = parts::time(6, || {
             scene
-                .resolve_in_border(bounds, wanted, step, on_ground, border)
+                .resolve_in_border_with(bounds, wanted, step, on_ground, border, &entities)
                 .unwrap_or(Vec3::ZERO)
         });
-||||||| 31f83499b6
-        let moved = scene
-            .resolve_in_border(self.bounds(), wanted, step, self.on_ground, border)
-            .unwrap_or(Vec3::ZERO);
-=======
-        let entities = self.entity_collisions(w, wanted);
-        let moved = scene
-            .resolve_in_border_with(
-                self.bounds(),
-                wanted,
-                step,
-                self.on_ground,
-                border,
-                &entities,
-            )
-            .unwrap_or(Vec3::ZERO);
->>>>>>> c98a51a664
         let length = moved.x * moved.x + moved.y * moved.y + moved.z * moved.z;
         let wanted_length = wanted.x * wanted.x + wanted.y * wanted.y + wanted.z * wanted.z;
         if length > 1.0e-7 || wanted_length - length < 1.0e-7 {
@@ -796,7 +773,7 @@ impl Mob {
         self.on_ground = self.vertical_collision_below;
         // Entity.setOnGroundWithMovement's checkSupportingBlock, before
         // checkFallDamage reads the landing block (getOnPosLegacy).
-        self.supporting = self.supporting_block(w, moved);
+        self.supporting = parts::time(8, || self.supporting_block(w, moved));
         // Strider.checkFallDamage: lava breaks any fall, and the fluid state
         // waits for the next baseTick; Bat and Bee.checkFallDamage do nothing.
         if self.kind.flags.lava_walker && self.fluids.in_lava {
@@ -835,20 +812,7 @@ impl Mob {
                 input,
             );
         }
-<<<<<<< HEAD
-        // Entity.checkSupportingBlock
-        self.supporting = parts::time(8, || self.supporting_block(w, moved));
         parts::time(9, || self.movement_emission(w, moved, events));
-        // Entity.applyEffectsFromBlocks: bubble columns push the mob, and the
-        // server shows the surface of one it is at the top of.
-||||||| 31f83499b6
-        // Entity.checkSupportingBlock
-        self.supporting = self.supporting_block(w, moved);
-        self.movement_emission(w, moved, events);
-        // Entity.applyEffectsFromBlocks: bubble columns push the mob, and the
-        // server shows the surface of one it is at the top of.
-=======
-        self.movement_emission(w, moved, events);
         // Entity.move's last step: soul sand, honey and the like slow the
         // horizontal speed of whatever the mob stands in or on.
         let factor = self.block_speed_factor(w);
@@ -869,7 +833,6 @@ impl Mob {
     /// by that tick's drag, and the server shows the surface of one it is at the
     /// top of.
     pub fn apply_effects_from_blocks(&mut self, w: &MobWorld, events: &mut Vec<MobEvent>) {
->>>>>>> c98a51a664
         let mut tops = Vec::new();
         if crate::motion::bubble_column_push_over(
             w.world,

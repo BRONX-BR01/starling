@@ -9,18 +9,11 @@ use horizon_client::actions::Action;
 use horizon_client::held::Source;
 use horizon_client::{
     Result,
-<<<<<<< HEAD
-    gamepad::{self, Button, Edges, GlyphStyle, HealthWatch, PadState, Rumble},
-    input_mode::InputMode,
-    keybinds::{KeyBinds, key_code, mouse_button},
-||||||| 31f83499b6
-    gamepad::{self, Button, Edges, GlyphStyle, HealthWatch, PadState, Rumble},
-    keybinds::{KeyBinds, key_code, mouse_button},
-=======
     controller_notice::{Glyph, Notice, NoticeId, Priority},
     controller_ui::Device,
     gamepad::{self, Button, Edges, GlyphStyle, HealthWatch, PadState, Route, Rumble},
->>>>>>> c98a51a664
+    input_mode::InputMode,
+    keybinds::{KeyBinds, key_code, mouse_button},
     keymapping::SNEAK,
 };
 use serde_json::{Value, json};
@@ -42,18 +35,10 @@ pub(super) const HELP: &[&str] = &[
 pub(super) struct Pads {
     /// Splitscreen: this player's pad, read by `PadRouter` for every game, instead of the pads.
     pub(super) feed: Option<PadState>,
-<<<<<<< HEAD
-    /// The real controllers and the DualSense's output, or Android's controllers.
-    #[cfg(any(feature = "controllers", target_os = "android"))]
-||||||| 31f83499b6
-    /// The real controllers and the DualSense's output.
-    #[cfg(feature = "controllers")]
-=======
     /// The pad behind `feed`.
     feed_source: Option<PadId>,
-    /// The real controllers and the DualSense's output.
-    #[cfg(feature = "controllers")]
->>>>>>> c98a51a664
+    /// The real controllers and the DualSense's output, or Android's controllers.
+    #[cfg(any(feature = "controllers", target_os = "android"))]
     devices: hardware::Devices,
     /// The virtual pad of `horizon-ctl pad`.
     injected: PadState,
@@ -61,22 +46,16 @@ pub(super) struct Pads {
     virtual_input: bool,
     /// Buttons a `pad ... tap` releases at the next poll.
     taps: Vec<Button>,
-<<<<<<< HEAD
     /// The touch controls' pad (game/touch.rs), and its taps: it plays like a pad but does not
     /// make the pad the active input, so menus stay pointer-driven.
     touch: PadState,
     touch_taps: Vec<Button>,
-    edges: Edges,
-||||||| 31f83499b6
-    edges: Edges,
-=======
     pub(super) edges: Edges,
     activity: gamepad::Activity,
     context: Option<Context>,
     blocked_sticks: [bool; 2],
     /// Releases use the action that received the press, even after a rebind.
     actions: [Vec<&'static str>; 16],
->>>>>>> c98a51a664
     /// The game tick each button went down in, and releases held back until
     /// a tick has passed: vanilla samples keys once per tick, so a click
     /// shorter than that (a quick stick click for sprint) would be lost.
@@ -172,15 +151,9 @@ mod no_router {
     #[derive(Default)]
     pub(in crate::game) struct PadRouter {}
     impl PadRouter {
-<<<<<<< HEAD
-        pub(in crate::game) fn events(&mut self) -> Vec<PadEvent> {
-||||||| 31f83499b6
-        pub(in crate::game) fn events(&mut self) -> Vec<super::PadEvent> {
-=======
         pub(in crate::game) fn adopt(&mut self, _: &mut Pads) {}
         pub(in crate::game) fn hand_back(&mut self, _: &mut Pads) {}
-        pub(in crate::game) fn events(&mut self) -> Vec<super::PadEvent> {
->>>>>>> c98a51a664
+        pub(in crate::game) fn events(&mut self) -> Vec<PadEvent> {
             Vec::new()
         }
         pub(in crate::game) fn device(
@@ -297,7 +270,6 @@ impl Pads {
     pub(super) fn player_replaced(&mut self) {
         self.health.forget();
     }
-<<<<<<< HEAD
     /// The touch controls (game/touch.rs) play through their own pad.
     pub(super) fn touch_hold(&mut self, button: Button, down: bool) {
         self.touch.set(button, down);
@@ -312,13 +284,11 @@ impl Pads {
     /// 0: use (left trigger), 1: attack (right trigger).
     pub(super) fn touch_trigger(&mut self, trigger: usize, value: f32) {
         self.touch.triggers[trigger] = value;
-||||||| 31f83499b6
-=======
+    }
 
     /// The active pad is a Nintendo one going by its letters.
     fn by_letter(&self, settings: &gamepad::PadSettings) -> bool {
         self.style == GlyphStyle::Nintendo && settings.nintendo_letters
->>>>>>> c98a51a664
     }
 }
 
@@ -336,14 +306,36 @@ impl Game<'_> {
 
     /// Once per loop iteration: read the pads and act on button changes.
     pub(super) fn poll_pads(&mut self, event_loop: &dyn EventLoopCtl) {
-<<<<<<< HEAD
+        self.pad.virtual_input = self.pad.injected != PadState::default();
+        let context = self.pad_context();
+        if let Some(old) = self.pad.context.filter(|old| *old != context) {
+            if old.screen != context.screen {
+                self.pad_remember_focus(old.screen);
+            }
+            self.pad_cancel_inputs(event_loop);
+        }
+        self.pad.context = Some(context);
         // Off leaves the controllers out; the touch controls play through the pad all the same.
         let enabled = self.settings.controller.enabled;
         let hardware = if enabled {
-            let hardware = match self.pad.feed {
+            match self.pad.feed {
                 Some(state) => state,
                 None => self.pad.read(),
-            };
+            }
+        } else {
+            self.pad_output_off();
+            self.pad.in_use = false;
+            PadState::default()
+        };
+        // A Nintendo pad going by its letters is read that way: its own, or the one
+        // splitscreen's router feeds this player.
+        let hardware = if enabled && self.pad.by_letter(&self.settings.controller) {
+            hardware.by_letter()
+        } else {
+            hardware
+        };
+        let connections = std::mem::take(&mut self.pad.connections);
+        if enabled {
             // A person's pad, for `input-log` and the repro recording; the virtual
             // pad is an agent's `pad` line and is recorded as that.
             let hardware_edges = self.pad.hardware_edges(hardware);
@@ -355,103 +347,17 @@ impl Game<'_> {
                         action: if down { "down" } else { "up" }.to_owned(),
                     },
                 );
-||||||| 31f83499b6
-        let settings = &self.settings.controller;
-        if !settings.enabled {
-            self.pad_output_off();
-            if self.pad.state != PadState::default() {
-                self.pad.state = PadState::default();
-                for (button, down) in self.pad.edges.release_all() {
-                    self.pad_edge(event_loop, button, down);
-                }
-=======
-        self.pad.virtual_input = self.pad.injected != PadState::default();
-        let context = self.pad_context();
-        if let Some(old) = self.pad.context.filter(|old| *old != context) {
-            if old.screen != context.screen {
-                self.pad_remember_focus(old.screen);
->>>>>>> c98a51a664
             }
-<<<<<<< HEAD
-            self.ui.options.pad_style = self.settings.controller.glyphs.resolve(self.pad.style);
-            hardware
-        } else {
-            self.pad_output_off();
-            PadState::default()
-||||||| 31f83499b6
-            // The keyboard's menu focus follows its widget all the same.
-            self.pad_menu_frame(event_loop);
-            return;
+            for change in connections {
+                self.pad_connection_notice(change);
+            }
+            let style = self.settings.controller.glyphs.resolve(self.pad.style);
+            self.ui.options.pad_style = style;
+            // Nintendo glyphs on a pad going by its letters name the button playing each part.
+            self.ui.options.pad_by_letter =
+                style == GlyphStyle::Nintendo && self.pad.by_letter(&self.settings.controller);
+            self.ui.options.pad_driving = self.pad.in_use && self.pad_focus_mode();
         }
-        let hardware = match self.pad.feed {
-            Some(state) => state,
-            None => self.pad.read(),
-=======
-            self.pad_cancel_inputs(event_loop);
-        }
-        self.pad.context = Some(context);
-        if !self.settings.controller.enabled {
-            self.pad_output_off();
-            self.pad_cancel_inputs(event_loop);
-            self.pad.state = PadState::default();
-            self.pad.in_use = false;
-            // The keyboard's menu focus follows its widget all the same.
-            self.pad_menu_frame(event_loop);
-            return;
-        }
-        let hardware = match self.pad.feed {
-            Some(state) => state,
-            None => self.pad.read(),
->>>>>>> c98a51a664
-        };
-<<<<<<< HEAD
-        let state = hardware.merge(&self.pad.injected);
-        self.pad.virtual_input = self.pad.injected != PadState::default();
-||||||| 31f83499b6
-        // A person's pad, for `input-log` and the repro recording; the virtual
-        // pad is an agent's `pad` line and is recorded as that.
-        let hardware_edges = self.pad.hardware_edges(hardware);
-        for (button, down) in hardware_edges {
-            self.note_input(
-                super::input_trace::InputOrigin::User,
-                super::input_trace::TraceKind::Pad {
-                    button: button.name().to_owned(),
-                    action: if down { "down" } else { "up" }.to_owned(),
-                },
-            );
-        }
-        self.ui.options.pad_style = self.settings.controller.glyphs.resolve(self.pad.style);
-        let state = hardware.merge(&self.pad.injected);
-        self.pad.virtual_input = self.pad.injected != PadState::default();
-=======
-        // A Nintendo pad going by its letters is read that way: its own, or the one
-        // splitscreen's router feeds this player.
-        let hardware = if self.pad.by_letter(&self.settings.controller) {
-            hardware.by_letter()
-        } else {
-            hardware
-        };
-        // A person's pad, for `input-log` and the repro recording; the virtual
-        // pad is an agent's `pad` line and is recorded as that.
-        let hardware_edges = self.pad.hardware_edges(hardware);
-        for (button, down) in hardware_edges {
-            self.note_input(
-                super::input_trace::InputOrigin::User,
-                super::input_trace::TraceKind::Pad {
-                    button: button.name().to_owned(),
-                    action: if down { "down" } else { "up" }.to_owned(),
-                },
-            );
-        }
-        for change in std::mem::take(&mut self.pad.connections) {
-            self.pad_connection_notice(change);
-        }
-        let style = self.settings.controller.glyphs.resolve(self.pad.style);
-        self.ui.options.pad_style = style;
-        // Nintendo glyphs on a pad going by its letters name the button playing each part.
-        self.ui.options.pad_by_letter =
-            style == GlyphStyle::Nintendo && self.pad.by_letter(&self.settings.controller);
-        self.ui.options.pad_driving = self.pad.in_use && self.pad_focus_mode();
         let mut state = hardware.merge(&self.pad.injected);
         let activity = self.pad.activity.observe(&state, &self.settings.controller);
         for (i, (stick, deadzone)) in [
@@ -468,21 +374,10 @@ impl Game<'_> {
                 *stick = [0.0; 2];
             }
         }
->>>>>>> c98a51a664
         for button in std::mem::take(&mut self.pad.taps) {
             self.pad.injected.set(button, false);
         }
-<<<<<<< HEAD
-        if state.active(&self.settings.controller) {
-||||||| 31f83499b6
-        let threshold = self.settings.controller.trigger_threshold;
-        let edges = self.pad.edges.update(&state, threshold);
-        if state.active(&self.settings.controller) {
-=======
-        let threshold = self.settings.controller.trigger_threshold;
-        let edges = self.pad.edges.update(&state, threshold);
         if activity && self.pad_focused() {
->>>>>>> c98a51a664
             self.last_input = Instant::now();
             self.input_used(InputMode::Pad);
             self.pad.in_use = true;
@@ -495,16 +390,10 @@ impl Game<'_> {
         let threshold = self.settings.controller.trigger_threshold;
         let edges = self.pad.edges.update(&state, threshold);
         self.pad.state = state;
-<<<<<<< HEAD
         if enabled {
+            self.pad_drop_frame();
             self.pad_output_frame();
         }
-||||||| 31f83499b6
-        self.pad_output_frame();
-=======
-        self.pad_drop_frame();
-        self.pad_output_frame();
->>>>>>> c98a51a664
         // Damage from any source, here or on a server; nothing counts on
         // the title screen.
         let health = self

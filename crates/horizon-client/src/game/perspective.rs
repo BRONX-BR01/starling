@@ -1080,21 +1080,6 @@ impl Game<'_> {
         overlay: u32,
         out: &mut Vec<horizon_client::mesher::Vertex>,
     ) {
-<<<<<<< HEAD
-        // The worn stack's own equipment asset (a server's custom armour's `equippable`), else
-        // the item's.
-        let asset = stack.and_then(|s| self.worn_asset(s)).or_else(|| {
-            chest
-                .and_then(|item| self.items().get(item))
-                .and_then(|i| i.equip_asset.clone())
-        });
-        let Some(asset) = asset else {
-||||||| 31f83499b6
-        let Some(asset) = chest
-            .and_then(|item| self.items().get(item))
-            .and_then(|i| i.equip_asset.as_ref())
-        else {
-=======
         // The worn stack's own `equippable`, for the chest slot, with an asset
         // (getEquipmentIfRenderable: anything else counts as nothing worn).
         let equippable = match stack {
@@ -1106,19 +1091,11 @@ impl Game<'_> {
             .filter(|e| e.slot == "chest")
             .and_then(|e| e.asset_id)
         else {
->>>>>>> c98a51a664
             return;
         };
         let assets = &self.armor_stand_assets;
         let Some((texture, _)) = assets
-<<<<<<< HEAD
             .equipment_layers
-||||||| 31f83499b6
-            .equipment
-            .get(asset)
-=======
-            .equipment
->>>>>>> c98a51a664
             .get(&asset)
             .and_then(|k| k.get("wings"))
             .and_then(|layers| layers.first())
@@ -1219,7 +1196,7 @@ impl Game<'_> {
         let layers = equippable
             .filter(|e| e.slot == "chest")
             .and_then(|e| e.asset_id)
-            .and_then(|asset| self.armor_stand_assets.equipment.get(&asset));
+            .and_then(|asset| self.armor_stand_assets.equipment_layers.get(&asset));
         if layers.is_some_and(|k| k.contains_key("wings")) {
             return;
         }

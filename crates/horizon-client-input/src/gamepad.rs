@@ -5,22 +5,14 @@
 //! This module is the backend-free part: positional buttons, the action
 //! bindings, deadzones and the look curve, button edges from successive pad
 //! states, and `horizon-controller.txt`, kept next to `options.txt` so that
-<<<<<<< HEAD
 //! file stays exactly vanilla's. The game reads the pads with gilrs, and on Android from the
 //! system's events ([`android`]).
-use std::{collections::BTreeMap, fs, path::Path};
-||||||| 31f83499b6
-//! file stays exactly vanilla's. The game reads the pads with gilrs.
-use std::{collections::BTreeMap, fs, path::Path};
-=======
-//! file stays exactly vanilla's. The game reads the pads with gilrs.
 use std::{
     collections::BTreeMap,
     fs,
     path::Path,
     time::{Duration, Instant},
 };
->>>>>>> c98a51a664
 
 pub mod android;
 
@@ -632,20 +624,16 @@ pub struct PadSettings {
     /// The sneak button flips sneaking (Bedrock's default) instead of
     /// holding it, unless vanilla's toggle crouch is on already.
     pub toggle_sneak: bool,
-<<<<<<< HEAD
     /// Starling's: how the stick moves on a server (`game/remote.rs`); a server may also have
     /// one of its own (`stick_memory`).
     pub server_stick: ServerStick,
     /// Starling's: ask which [`ServerStick`] to use when a server keeps pulling the player
     /// back while the stick moves it.
     pub stick_prompt: bool,
-||||||| 31f83499b6
-=======
     /// LT + A on a recipe crafts on every server, not only in single player and on LAN worlds
     /// found in the server list. Off by default: a server's rules may count a repeated craft as a
     /// macro.
     pub craft_on_servers: bool,
->>>>>>> c98a51a664
     pub glyphs: GlyphStyle,
     /// A Nintendo pad's face buttons go by their letters (A confirms and jumps, as on the
     /// Switch's own menus and keyboard) instead of their places (B, at the bottom, does): on
@@ -677,13 +665,9 @@ impl Default for PadSettings {
             look_deadzone: 0.12,
             trigger_threshold: 0.4,
             toggle_sneak: true,
-<<<<<<< HEAD
             server_stick: ServerStick::Analog,
             stick_prompt: true,
-||||||| 31f83499b6
-=======
             craft_on_servers: false,
->>>>>>> c98a51a664
             glyphs: GlyphStyle::Auto,
             nintendo_letters: cfg!(target_os = "horizon"),
             keyboard: TextKeyboard::Auto,
@@ -754,13 +738,9 @@ impl PadSettings {
                     s.trigger_threshold = unit(s.trigger_threshold).clamp(0.1, 0.9)
                 }
                 "toggleSneak" => s.toggle_sneak = flag(s.toggle_sneak),
-<<<<<<< HEAD
                 "serverStick" => s.server_stick = ServerStick::parse(value),
                 "stickPrompt" => s.stick_prompt = flag(s.stick_prompt),
-||||||| 31f83499b6
-=======
                 "craftOnServers" => s.craft_on_servers = flag(s.craft_on_servers),
->>>>>>> c98a51a664
                 "glyphs" => s.glyphs = GlyphStyle::parse(value),
                 "nintendoLetters" => s.nintendo_letters = flag(s.nintendo_letters),
                 "keyboard" => s.keyboard = TextKeyboard::parse(value),
@@ -805,13 +785,7 @@ impl PadSettings {
     }
     pub fn serialize(&self) -> String {
         let mut text = format!(
-<<<<<<< HEAD
-            "enabled:{}\nvibration:{}\nadaptiveTriggers:{}\nlightbar:{}\nlookSensitivity:{}\ninvertX:{}\ninvertY:{}\nmoveDeadzone:{}\nlookDeadzone:{}\ntriggerThreshold:{}\ntoggleSneak:{}\nserverStick:{}\nstickPrompt:{}\nglyphs:{}\nmenuNavigation:{}\nkeyboard:{}\n",
-||||||| 31f83499b6
-            "enabled:{}\nvibration:{}\nadaptiveTriggers:{}\nlightbar:{}\nlookSensitivity:{}\ninvertX:{}\ninvertY:{}\nmoveDeadzone:{}\nlookDeadzone:{}\ntriggerThreshold:{}\ntoggleSneak:{}\nglyphs:{}\nmenuNavigation:{}\nkeyboard:{}\n",
-=======
-            "enabled:{}\nvibration:{}\nadaptiveTriggers:{}\nlightbar:{}\nlookSensitivity:{}\ninvertX:{}\ninvertY:{}\nmoveDeadzone:{}\nlookDeadzone:{}\ntriggerThreshold:{}\ntoggleSneak:{}\nglyphs:{}\nnintendoLetters:{}\nkeyboard:{}\n",
->>>>>>> c98a51a664
+            "enabled:{}\nvibration:{}\nadaptiveTriggers:{}\nlightbar:{}\nlookSensitivity:{}\ninvertX:{}\ninvertY:{}\nmoveDeadzone:{}\nlookDeadzone:{}\ntriggerThreshold:{}\ntoggleSneak:{}\nserverStick:{}\nstickPrompt:{}\nglyphs:{}\nnintendoLetters:{}\nkeyboard:{}\n",
             bool_text(self.enabled),
             bool_text(self.vibration),
             bool_text(self.adaptive_triggers),

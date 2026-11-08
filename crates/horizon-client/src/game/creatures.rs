@@ -1242,7 +1242,7 @@ impl Game<'_> {
                 horizon_client::mobs::seen_grid::SeenGrid::new(snapshot.iter().map(|s| s.bounds));
             // The mob ticks' time and count, summed (spans: HORIZON_SPIKES).
             let timed = horizon_client::spans::enabled();
-            let (mut tick_ms, mut ticked) = (0.0f32, 0usize);
+            let (mut tick_ms, mut ticked_count) = (0.0f32, 0usize);
             // All but the snapshot is the same for every mob of the tick, so
             // build it once: the player view and the teams scan every UUID.
             self.leash_boats = self
@@ -1351,15 +1351,6 @@ impl Game<'_> {
                 horizon_client::mobs::apply_mob_pushes(m, &mut pushes);
                 horizon_client::mobs::blocks_changed(m, &path_changes);
                 let from = events.len();
-<<<<<<< HEAD
-                let started = timed.then(std::time::Instant::now);
-                let kept = m.tick(&w, &mut scratch, &mut events);
-                if let Some(t) = started {
-                    tick_ms += t.elapsed().as_secs_f32() * 1000.0;
-                    ticked += 1;
-||||||| 31f83499b6
-                let kept = m.tick(&w, &mut scratch, &mut events);
-=======
                 // The guest's view is lent to the mob for its tick, not copied:
                 // the tick only reads it (`&MobWorld`), and it goes back to the
                 // guest's slot straight after.
@@ -1387,8 +1378,13 @@ impl Game<'_> {
                 ticked.insert(mobs[i].id);
                 // `horizon-report`'s cost by mob type (tick_profile.rs).
                 let sampled = super::tick_profile::start().map(|t| (t, mobs[i].kind.clone()));
+                let started_at = timed.then(std::time::Instant::now);
                 let kept =
                     horizon_client::mobs::riders::tick(&mut mobs, i, &w, &mut scratch, &mut events);
+                if let Some(t) = started_at {
+                    tick_ms += t.elapsed().as_secs_f32() * 1000.0;
+                    ticked_count += 1;
+                }
                 if let Some((started, kind)) = sampled {
                     super::tick_profile::add(level_id, &kind, started);
                 }
@@ -1437,7 +1433,6 @@ impl Game<'_> {
                         }
                     }
                     targets[i] = m.ai.target;
->>>>>>> c98a51a664
                 }
                 // A killed mob's body is removed: its effects that act on
                 // death run (`LivingEntity.remove` with KILLED).
@@ -1502,12 +1497,9 @@ impl Game<'_> {
                 grid.update(i, snapshot[i].bounds);
                 horizon_client::mobs::apply_brain_events(&mut mobs, &mut events, from);
             }
-<<<<<<< HEAD
             horizon_client::spans::add("entities.mob_tick", tick_ms);
-            horizon_client::spans::add("entities.ticked_count", ticked as f32);
+            horizon_client::spans::add("entities.ticked_count", ticked_count as f32);
             horizon_client::mobs::ai::parts::flush();
-||||||| 31f83499b6
-=======
             // Targets changed after the mob's own tick (another mob's alert):
             // heard now, and a cancel puts the old one back before its next tick.
             for (i, m) in mobs.iter_mut().enumerate() {
@@ -1546,7 +1538,6 @@ impl Game<'_> {
                 }
             }
             laps.lap("creature_loop");
->>>>>>> c98a51a664
             let mut flags = keep.into_iter();
             mobs.retain(|_| flags.next().unwrap_or(true));
             for m in &mut mobs {

@@ -433,15 +433,12 @@ fn read_value(kind: i32, r: &mut Reader) -> Result<Option<Value>> {
         }
         // VillagerData: type, profession and level.
         VILLAGER_DATA => Value::Ids(vec![r.varint()?, r.varint()?, r.varint()?]),
-<<<<<<< HEAD
         // GlobalPos.STREAM_CODEC: the dimension ResourceKey, then a BlockPos.
         OPTIONAL_GLOBAL_POS => Value::OptGlobalPos(if r.bool()? {
             Some((r.string(32767)?, crate::buf::Pos::read(r)?))
         } else {
             None
         }),
-||||||| 31f83499b6
-=======
         WOLF_VARIANT if ids::quirks().wolf_variant_holder => {
             let holder = r.varint()?;
             if holder <= 0 {
@@ -460,7 +457,6 @@ fn read_value(kind: i32, r: &mut Reader) -> Result<Option<Value>> {
                     .ok_or_else(|| crate::Error::new("invalid legacy variant id"))?,
             )
         }
->>>>>>> c98a51a664
         // VarInt-encoded: direction, block states, optional ints, pose, the
         // holder-registry variants (cat to zombie nautilus, painting) and the
         // enum states (sniffer to weathering copper), arm, dye.

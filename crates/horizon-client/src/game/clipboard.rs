@@ -13,12 +13,7 @@ impl Game<'_> {
             return None;
         }
         let m = self.modifiers;
-<<<<<<< HEAD
         // The keys the player holds: Toggle Sprint and Toggle Sneak hold Ctrl and Shift too.
-||||||| 31f83499b6
-        let held = |keys: [KeyCode; 2]| keys.iter().any(|k| self.keys.contains(k));
-=======
->>>>>>> c98a51a664
         let held = |keys: [KeyCode; 2]| keys.iter().any(|k| self.physical_keys.contains(k));
         clipboard::edit_shortcut(
             clipboard::shortcut_letter(&event.logical_key, event.physical_key),
@@ -33,12 +28,7 @@ impl Game<'_> {
     /// keys, never `keys`: a latched sprint or sneak toggle puts Control or
     /// Shift in `keys` without the key being down.
     pub(super) fn has_control_down_with_quirk(&self) -> bool {
-<<<<<<< HEAD
         // The keys the player holds: Toggle Sprint holds Ctrl too.
-||||||| 31f83499b6
-        let held = |keys: [KeyCode; 2]| keys.iter().any(|k| self.keys.contains(k));
-=======
->>>>>>> c98a51a664
         let held = |keys: [KeyCode; 2]| keys.iter().any(|k| self.physical_keys.contains(k));
         if cfg!(target_os = "macos") {
             self.modifiers.super_key() || held([KeyCode::SuperLeft, KeyCode::SuperRight])

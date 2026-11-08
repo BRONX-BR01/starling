@@ -48,14 +48,9 @@ const JVM_OPTION_VARS: [&str; 3] = ["JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_J
 /// run with [`BATCH_OPTIONS`] alone, whatever options the player's environment sets for Java.
 pub(crate) fn command(program: impl AsRef<OsStr>) -> Command {
     let mut command = Command::new(program);
-<<<<<<< HEAD
-||||||| 31f83499b6
-    let command = Command::new(program);
-=======
     for var in JVM_OPTION_VARS {
         command.env_remove(var);
     }
->>>>>>> c98a51a664
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

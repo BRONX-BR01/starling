@@ -220,47 +220,33 @@ impl Game<'_> {
         self.armor_layers(
             armor
                 .each_ref()
-                .map(|s| s.as_ref().map(|s| (self.worn_asset(s), Some(s)))),
+                .map(|s| s.as_ref().map(|s| (&*s.item, Some(s)))),
         )
     }
     /// The equipment asset `stack` draws when worn: its own `equippable`'s (a server's custom
     /// armour), else its item's.
     pub(super) fn worn_asset(&self, stack: &ItemStack) -> Option<String> {
-        stack.equippable_asset().or_else(|| {
-            self.res
-                .items()
-                .get(&stack.item)
-                .and_then(|i| i.equip_asset.clone())
-        })
+        horizon_client::item_sync::equippable(stack, self.res.items()).and_then(|e| e.asset_id)
     }
     /// `HumanoidArmorLayer` for another player's model: the armour it wears
     /// (`extra.head` .. `extra.feet`).
     pub(super) fn worn_armor_layers(&self, m: &Mob) -> Vec<(&Part, [f32; 4], u32, u32, bool)> {
         let e = &m.extra;
-        // The stacks (a server's) carry the dye, the trim and their own equipment asset.
-        let worn = [
-            (&e.head, e.armor[0].as_ref()),
-            (&e.chest, e.armor[1].as_ref()),
-            (&e.legs, e.armor[2].as_ref()),
-            (&e.feet, e.armor[3].as_ref()),
-        ];
-        self.armor_layers(worn.map(|(item, stack)| {
-            item.as_deref().map(|item| {
-                let asset = stack.and_then(ItemStack::equippable_asset).or_else(|| {
-                    self.res
-                        .items()
-                        .get(item)
-                        .and_then(|i| i.equip_asset.clone())
-                });
-                (asset, stack)
-            })
-        }))
+        self.armor_layers(
+            [
+                (e.head.as_deref(), e.armor[0].as_ref()),
+                (e.chest.as_deref(), e.armor[1].as_ref()),
+                (e.legs.as_deref(), e.armor[2].as_ref()),
+                (e.feet.as_deref(), e.armor[3].as_ref()),
+            ]
+            .map(|(item, stack)| item.map(|i| (i, stack))),
+        )
     }
-    /// The layers of the armour `worn` (each piece's equipment asset, and its stack when known,
-    /// for its dye colour, trim and CIT armour rules), head to feet.
+    /// The layers of the armour items `worn` (with their stacks when known,
+    /// for trims and CIT armour rules), head to feet.
     fn armor_layers(
         &self,
-        worn: [Option<(Option<String>, Option<&ItemStack>)>; 4],
+        worn: [Option<(&str, Option<&ItemStack>)>; 4],
     ) -> Vec<(&Part, [f32; 4], u32, u32, bool)> {
         let assets = &self.armor_stand_assets;
         // The shaders' GameTime: the part of the day gone.
@@ -272,27 +258,6 @@ impl Game<'_> {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut out = Vec::new();
-<<<<<<< HEAD
-        for (item, layer) in worn
-            .into_iter()
-            .zip(["helmet", "chestplate", "leggings", "boots"])
-        {
-            let Some((Some(asset), stack)) = item else {
-||||||| 31f83499b6
-        for (item, layer) in worn
-            .into_iter()
-            .zip(["helmet", "chestplate", "leggings", "boots"])
-        {
-            let Some((item, stack)) = item else {
-                continue;
-            };
-            let Some(asset) = self
-                .res
-                .items()
-                .get(item)
-                .and_then(|i| i.equip_asset.clone())
-            else {
-=======
         for (item, (layer, slot)) in worn.into_iter().zip([
             ("helmet", "head"),
             ("chestplate", "chest"),
@@ -312,7 +277,6 @@ impl Game<'_> {
                 .filter(|e| e.slot == slot)
                 .and_then(|e| e.asset_id)
             else {
->>>>>>> c98a51a664
                 continue;
             };
             let kind = if layer == "leggings" {
@@ -424,18 +388,8 @@ impl Game<'_> {
             let Some(stack) = stack.filter(|s| s.extra.is_some()) else {
                 continue;
             };
-<<<<<<< HEAD
-            let Some(asset) = stack
-                .equippable_asset()
-                .or_else(|| items.get(&stack.item).and_then(|i| i.equip_asset.clone()))
-||||||| 31f83499b6
-            let Some(asset) = items
-                .get(&stack.item)
-                .and_then(|i| i.equip_asset.as_deref())
-=======
             let Some(asset) =
                 horizon_client::item_sync::equippable(stack, items).and_then(|e| e.asset_id)
->>>>>>> c98a51a664
             else {
                 continue;
             };
@@ -1510,23 +1464,12 @@ impl Game<'_> {
             let Some(stack) = &a.equipment[slot] else {
                 continue;
             };
-<<<<<<< HEAD
-            let Some(asset) = self.worn_asset(stack) else {
-||||||| 31f83499b6
-            let Some(asset) = self
-                .res
-                .items()
-                .get(&stack.item)
-                .and_then(|i| i.equip_asset.clone())
-            else {
-=======
             // HumanoidArmorLayer.renderArmorPiece: the stack's own
             // `equippable`, drawn when it has an asset and is worn in its slot.
             let Some(asset) = horizon_client::item_sync::equippable(stack, self.res.items())
                 .filter(|e| e.slot == worn)
                 .and_then(|e| e.asset_id)
             else {
->>>>>>> c98a51a664
                 continue;
             };
             let kind = if layer == "leggings" {
@@ -1982,18 +1925,8 @@ impl Game<'_> {
         }
         // A head item that is not worn armour.
         if let Some(stack) = &a.equipment[5]
-<<<<<<< HEAD
-            && self.worn_asset(stack).is_none()
-||||||| 31f83499b6
-            && self
-                .res
-                .items()
-                .get(&stack.item)
-                .is_none_or(|i| i.equip_asset.is_none())
-=======
             && !horizon_client::item_sync::equippable(stack, self.res.items())
                 .is_some_and(|e| e.asset_id.is_some() && e.slot == "head")
->>>>>>> c98a51a664
             && let Some(head) = part_matrix(model, base, poses, "head", 0.0)
         {
             let pose = head

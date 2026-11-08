@@ -412,12 +412,10 @@ impl Game<'_> {
         if let Some(value) = self.friends_control(&words)? {
             return Ok(Some(value));
         }
-<<<<<<< HEAD
         if let Some(value) = account_control(&words)? {
-||||||| 31f83499b6
-=======
+            return Ok(Some(value));
+        }
         if let Some(value) = self.studio_control(&words)? {
->>>>>>> c98a51a664
             return Ok(Some(value));
         }
         match self.agent_command(&words, line, reply, event_loop)? {
@@ -1346,19 +1344,13 @@ impl Game<'_> {
         Ok(())
     }
 
-<<<<<<< HEAD
-    pub(super) fn control_key_down(&mut self, key: KeyCode) -> Result<()> {
+    pub(super) fn control_key_down(&mut self, key: KeyCode, raw: KeyCode) -> Result<()> {
         // Over everything, the server pack prompt takes Escape as it takes the keyboard's (the
         // back key, the touch close button and the control socket come this way, not as window
         // events).
         if key == KeyCode::Escape && self.server_packs.prompting() {
             return self.answer_pack_prompt(false);
         }
-||||||| 31f83499b6
-    fn control_key_down(&mut self, key: KeyCode) -> Result<()> {
-=======
-    fn control_key_down(&mut self, key: KeyCode, raw: KeyCode) -> Result<()> {
->>>>>>> c98a51a664
         self.physical_keys.insert(key);
         // The window's shortcuts come before any screen, here too.
         if self.screenshot_shortcut(key, false) {

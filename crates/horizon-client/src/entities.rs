@@ -90,12 +90,7 @@ fn slime_at(world: &World, facts: &BlockFacts, x: i32, y: i32, z: i32) -> bool {
 }
 
 mod fluids;
-<<<<<<< HEAD
 pub use fluids::flow_vector;
-pub use fluids::update_entity_fluids;
-||||||| 31f83499b6
-pub use fluids::update_entity_fluids;
-=======
 pub use fluids::{fluid_flow, update_entity_fluids};
 
 #[cfg(test)]
@@ -205,7 +200,6 @@ pub fn drop_motion(
         f64::from(cos_y * cos_x * 0.3) + jmath::sin(dir) * pow,
     ]
 }
->>>>>>> c98a51a664
 
 #[derive(Clone, Debug)]
 pub struct ItemEntity {

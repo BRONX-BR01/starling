@@ -72,46 +72,32 @@ pub mod component {
     pub const LORE: i32 = 11;
     pub const RARITY: i32 = 12;
     pub const ENCHANTMENTS: i32 = 13;
-<<<<<<< HEAD
-||||||| 31f83499b6
-=======
     /// `AdventureModePredicate`: the blocks an adventure player may place on.
->>>>>>> c98a51a664
     pub const CAN_PLACE_ON: i32 = 14;
     /// `AdventureModePredicate`: the blocks an adventure player may break.
     pub const CAN_BREAK: i32 = 15;
-<<<<<<< HEAD
-||||||| 31f83499b6
-=======
     /// `ItemAttributeModifiers`: a list of entries, each with a display from 1.21.6 on.
->>>>>>> c98a51a664
     pub const ATTRIBUTE_MODIFIERS: i32 = 16;
     pub const CUSTOM_MODEL_DATA: i32 = 17;
     pub const TOOLTIP_DISPLAY: i32 = 18;
     pub const REPAIR_COST: i32 = 19;
     pub const CREATIVE_SLOT_LOCK: i32 = 20;
     pub const ENCHANTMENT_GLINT_OVERRIDE: i32 = 21;
-<<<<<<< HEAD
     pub const INTANGIBLE_PROJECTILE: i32 = 22;
     pub const FOOD: i32 = 23;
+    /// `Consumable.STREAM_CODEC`: consumeSeconds first.
     pub const CONSUMABLE: i32 = 24;
     pub const USE_REMAINDER: i32 = 25;
     pub const USE_COOLDOWN: i32 = 26;
     pub const DAMAGE_RESISTANT: i32 = 27;
     pub const TOOL: i32 = 28;
     pub const WEAPON: i32 = 29;
-||||||| 31f83499b6
-=======
-    /// `Consumable.STREAM_CODEC`: consumeSeconds first.
-    pub const CONSUMABLE: i32 = 24;
->>>>>>> c98a51a664
     /// `AttackRange`: six floats, in the record's field order.
     pub const ATTACK_RANGE: i32 = 30;
     pub const ENCHANTABLE: i32 = 31;
     pub const EQUIPPABLE: i32 = 32;
     pub const REPAIRABLE: i32 = 33;
     pub const GLIDER: i32 = 34;
-<<<<<<< HEAD
     pub const TOOLTIP_STYLE: i32 = 35;
     pub const DEATH_PROTECTION: i32 = 36;
     pub const BLOCKS_ATTACKS: i32 = 37;
@@ -122,10 +108,6 @@ pub mod component {
     pub const ADDITIONAL_TRADE_COST: i32 = 42;
     pub const BLOCK_TRANSFORMER: i32 = 43;
     pub const VILLAGER_FOOD: i32 = 44;
-||||||| 31f83499b6
-=======
-    pub const BLOCKS_ATTACKS: i32 = 37;
->>>>>>> c98a51a664
     pub const STORED_ENCHANTMENTS: i32 = 45;
     pub const DYE: i32 = 46;
     pub const DYED_COLOR: i32 = 47;
@@ -146,18 +128,10 @@ pub mod component {
     pub const BLOCK_ENTITY_DATA: i32 = 62;
     pub const INSTRUMENT: i32 = 63;
     pub const PROVIDES_TRIM_MATERIAL: i32 = 64;
-<<<<<<< HEAD
     pub const OMINOUS_BOTTLE_AMPLIFIER: i32 = 65;
     pub const JUKEBOX_PLAYABLE: i32 = 66;
     pub const PROVIDES_BANNER_PATTERNS: i32 = 67;
     pub const RECIPES: i32 = 68;
-||||||| 31f83499b6
-=======
-    pub const PROVIDES_BANNER_PATTERNS: i32 = 67;
-    pub const DAMAGE_TYPE: i32 = 8;
-    pub const CHICKEN_VARIANT: i32 = 104;
-    pub const ZOMBIE_NAUTILUS_VARIANT: i32 = 106;
->>>>>>> c98a51a664
     pub const LODESTONE_TRACKER: i32 = 69;
     pub const FIREWORK_EXPLOSION: i32 = 70;
     pub const FIREWORKS: i32 = 71;
@@ -166,8 +140,6 @@ pub mod component {
     pub const BANNER_PATTERNS: i32 = 74;
     pub const BASE_COLOR: i32 = 75;
     pub const POT_DECORATIONS: i32 = 76;
-    pub const JUKEBOX_PLAYABLE: i32 = 66;
-    pub const DAMAGE_RESISTANT: i32 = 27;
     pub const CONTAINER: i32 = 77;
     pub const BLOCK_STATE: i32 = 78;
     pub const BEES: i32 = 79;
@@ -201,7 +173,6 @@ pub mod component {
     pub const FROG_VARIANT: i32 = 107;
     pub const HORSE_VARIANT: i32 = 108;
     pub const PAINTING_VARIANT: i32 = 109;
-<<<<<<< HEAD
     pub const LLAMA_VARIANT: i32 = 110;
     pub const AXOLOTL_VARIANT: i32 = 111;
     pub const CAT_VARIANT: i32 = 112;
@@ -210,18 +181,13 @@ pub mod component {
     pub const SHEEP_COLOR: i32 = 115;
     pub const SHULKER_COLOR: i32 = 116;
     pub const PROVIDES_POTTERY_PATTERN: i32 = 117;
+    /// `SignText.STREAM_CODEC`: a sign item's text, front and back.
     pub const SIGN_TEXT_FRONT: i32 = 118;
     pub const SIGN_TEXT_BACK: i32 = 119;
     pub const WAXED: i32 = 120;
     pub const CUSHION_COLOR: i32 = 121;
     /// The number of component types; ids at or past it are refused.
     pub const COUNT: i32 = 122;
-||||||| 31f83499b6
-=======
-    /// `SignText.STREAM_CODEC`: a sign item's text, front and back.
-    pub const SIGN_TEXT_FRONT: i32 = 118;
-    pub const SIGN_TEXT_BACK: i32 = 119;
->>>>>>> c98a51a664
 }
 
 /// A written book's content (`WrittenBookContent.STREAM_CODEC`). The raw title
@@ -1535,18 +1501,10 @@ impl Codec<Option<Stack>> for DelimitedSlot {
 pub struct Template;
 impl Codec<Stack> for Template {
     fn read(r: &mut Reader) -> Result<Stack> {
-<<<<<<< HEAD
-        // Every stack inside a stack is a template: the one place nesting recurses.
-        let _nested = Nested::enter()?;
-        let item = r.varint()?;
-||||||| 31f83499b6
-        let item = r.varint()?;
-=======
         if ids::quirks().count_first_templates {
             return read_stack(r, false)?.ok_or_else(|| crate::Error::new("empty item template"));
         }
         let item = ids::item(r.varint()?);
->>>>>>> c98a51a664
         let count = r.varint()?;
         let positive = r.count(65536)?;
         let negative = r.count(65536)?;

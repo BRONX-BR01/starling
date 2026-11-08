@@ -614,7 +614,6 @@ impl SpawnLevel for super::MobWorld<'_> {
     }
 }
 
-<<<<<<< HEAD
 /// One block state everywhere: what the spawn checks of a single block read of a level.
 struct OneState<'a> {
     state: BlockStateId,
@@ -749,8 +748,8 @@ pub fn spot_table(
             bits
         })
         .collect()
-||||||| 31f83499b6
-=======
+}
+
 #[cfg(test)]
 mod underwater_sky_tests {
     use super::*;
@@ -886,5 +885,4 @@ mod light_draw_tests {
             },
         );
     }
->>>>>>> c98a51a664
 }

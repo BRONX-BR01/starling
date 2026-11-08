@@ -272,18 +272,9 @@ impl ChunkGenerator for NoTerrain {
 }
 
 /// A server entity the client tracks (position as last sent).
-<<<<<<< HEAD
 pub(super) struct Tracked {
     pub(super) kind: String,
     pub(super) position: [f64; 3],
-||||||| 31f83499b6
-struct Tracked {
-    kind: String,
-    position: [f64; 3],
-=======
-struct Tracked {
-    kind: String,
-    position: [f64; 3],
     /// `Entity.getPositionCodec`'s base: the position the server last
     /// reported (AddEntity, MoveEntity, EntityPositionSync), which a move
     /// packet's delta counts from. A TeleportEntity moves the entity but not
@@ -308,7 +299,6 @@ fn seat_passengers(entities: &mut HashMap<i32, Tracked>, vehicle: u32, passenger
             t.vehicle = None;
         }
     }
->>>>>>> c98a51a664
 }
 /// Smooth an entity toward a new position over three ticks (InterpolationHandler).
 #[derive(Clone, Copy)]
@@ -580,17 +570,12 @@ pub(super) struct Remote {
     /// `ClientLevel.serverSimulationDistance`: from the login or the last
     /// simulation-distance packet.
     pub(super) simulation_distance: i32,
-<<<<<<< HEAD
-||||||| 31f83499b6
-    sequence: i32,
-=======
     /// `BlockStatePredictionHandler.currentSequenceNr`: the level's, so a new level (a login,
     /// another dimension) counts from 0 again.
     sequence: i32,
     /// `BlockStatePredictionHandler.lastTeleportSequence`: the sequence of the last
     /// teleport, so a prediction made before it keeps its block but not its snap.
     last_teleport_sequence: i32,
->>>>>>> c98a51a664
     position_sender: horizon_client::player_sync::PositionSender,
     /// When the last tick ended to the server, and the last movement packet went: an old
     /// server behind ViaVersion (its anticheat) wants one every tick, so gaps are logged.
@@ -663,19 +648,6 @@ pub(super) struct Remote {
     /// The ClientInformation last sent (`Options.broadcastOptions` sends it
     /// again when a view distance, Chat, skin or Main Hand option changes).
     sent_info: horizon_protocol::packets::configuration::ClientInformation,
-<<<<<<< HEAD
-    /// BlockStatePredictionHandler: the actions' sequence and the blocks changed ahead of the
-    /// server (a predicted break), with the state the server last said they have. Until the
-    /// server acknowledges the action its block updates only replace the remembered state;
-    /// then the block takes it.
-    predictions: horizon_client::block_predictions::BlockPredictions,
-||||||| 31f83499b6
-    /// BlockStatePredictionHandler: blocks changed ahead of the server (a predicted break),
-    /// with the sequence of the last action that changed them and the state the server
-    /// last said they have. Until the server acknowledges that sequence its block updates
-    /// only replace the remembered state; then the block takes it.
-    predictions: HashMap<[i32; 3], (i32, i32)>,
-=======
     /// BlockStatePredictionHandler: blocks changed ahead of the server (a predicted break),
     /// with what it remembers of each of them. Until the server acknowledges the
     /// sequence its block updates only replace the remembered state; then the block
@@ -686,7 +658,6 @@ pub(super) struct Remote {
     /// ticks in the order entities were added, so these tick before the
     /// player and every later one after it.
     ticked_before_player: std::collections::HashSet<u32>,
->>>>>>> c98a51a664
     /// Open container: (window id, menu name).
     pub(super) menu: Option<(i32, String)>,
     /// The crafting result slot of the open menu as the server last set it
@@ -696,15 +667,10 @@ pub(super) struct Remote {
     pub(super) menu_title: Option<horizon_client::text::Text>,
     state_id: i32,
     use_target: Option<[i32; 3]>,
-<<<<<<< HEAD
-    pub(super) entities: HashMap<i32, Tracked>,
-||||||| 31f83499b6
-    entities: HashMap<i32, Tracked>,
-=======
     /// A mod menu's extra data, kept for the `OpenScreen` of its window that
     /// follows (`horizon:menu_extra`).
     menu_extra: Option<horizon_protocol::menu_extra::Message>,
-    entities: HashMap<i32, Tracked>,
+    pub(super) entities: HashMap<i32, Tracked>,
     /// Per-tick remote entity scratch retained between frames.
     tick_fluids: Vec<Option<horizon_client::mobs::living::Fluids>>,
     tick_rain: Vec<bool>,
@@ -712,7 +678,6 @@ pub(super) struct Remote {
     tick_water_fx: Vec<horizon_client::mobs::MobEvent>,
     /// Complete network riding graph, including invisible plugin seat entities.
     pub(super) passenger_vehicles: HashMap<u32, u32>,
->>>>>>> c98a51a664
     lerps: HashMap<i32, Lerp>,
     /// The minecarts the server moves with `ClientboundMoveMinecartPacket`
     /// (`NewMinecartBehavior`), which have no interpolation handler.
@@ -1169,16 +1134,10 @@ impl Game<'_> {
                 horizon_client::net::shown_address(address),
             );
         }
-<<<<<<< HEAD
         // A signed-in account always plays under its own name on servers (an online-mode one
         // takes no other); single player's own server, the name its world opened with
-        // (integrated.rs: a name chosen in Skin Customization goes first).
-||||||| 31f83499b6
-        // A signed-in account always plays under its own name.
-=======
-        // A signed-in account always plays under its own name; a splitscreen player signs in
-        // with its own account when it picked one.
->>>>>>> c98a51a664
+        // (integrated.rs: a name chosen in Skin Customization goes first); a splitscreen player
+        // signs in with its own account when it picked one.
         let auth = self.auth();
         let name = match (&auth, &local) {
             (Some(a), None) => a.name.as_str(),
@@ -1351,13 +1310,8 @@ impl Game<'_> {
             decoder: ChunkDecoder::new(),
             view_distance: self.settings.render_distance,
             simulation_distance: self.settings.simulation_distance,
-<<<<<<< HEAD
-||||||| 31f83499b6
-            sequence: 0,
-=======
             sequence: 0,
             last_teleport_sequence: -1,
->>>>>>> c98a51a664
             position_sender: Default::default(),
             tick_end_at: None,
             moved_at: None,
@@ -1391,14 +1345,8 @@ impl Game<'_> {
             native_epoch: None,
             level_load: horizon_client::level_loading::LevelLoadTracker::new(0),
             sent_info: info,
-<<<<<<< HEAD
-            predictions: Default::default(),
-||||||| 31f83499b6
-            predictions: HashMap::new(),
-=======
             predictions: HashMap::new(),
             ticked_before_player: std::collections::HashSet::new(),
->>>>>>> c98a51a664
             menu: None,
             craft_result: None,
             menu_title: None,
@@ -1803,6 +1751,7 @@ impl Game<'_> {
             Some(reason) => horizon_client::multiplayer::Screen::Disconnected {
                 reason,
                 retry: None,
+                lines: std::cell::Cell::new(1),
             },
             None => horizon_client::multiplayer::Screen::list(&saves),
         });
@@ -1837,51 +1786,6 @@ impl Game<'_> {
         if let Some(r) = self.renderer.as_mut() {
             r.clear_sections(self.world.layout());
         }
-<<<<<<< HEAD
-||||||| 31f83499b6
-        let saves = std::env::current_dir()?.join("saves");
-        let mut title = horizon_client::title::Title::new(saves.clone(), &self.options.resources)
-            .with_user(|| self.options.player_name());
-        title.last_server = self.settings.file.string("lastServer");
-        title.skip_multiplayer_warning = self.settings.file.bool("skipMultiplayerWarning");
-        if single_player && reason.is_none() {
-            self.title = Some(title);
-            self.capture(false);
-            return Ok(());
-        }
-        title.mode = horizon_client::title::Mode::Multiplayer(match reason {
-            Some(reason) => horizon_client::multiplayer::Screen::Disconnected {
-                reason,
-                retry: None,
-            },
-            None => horizon_client::multiplayer::Screen::list(&saves),
-        });
-        self.title = Some(title);
-        self.capture(false);
-        Ok(())
-=======
-        let saves = std::env::current_dir()?.join("saves");
-        let mut title = horizon_client::title::Title::new(saves.clone(), &self.options.resources)
-            .with_user(|| self.options.player_name());
-        title.last_server = self.settings.file.string("lastServer");
-        title.skip_multiplayer_warning = self.settings.file.bool("skipMultiplayerWarning");
-        if single_player && reason.is_none() {
-            self.title = Some(title);
-            self.capture(false);
-            return Ok(());
-        }
-        title.mode = horizon_client::title::Mode::Multiplayer(match reason {
-            Some(reason) => horizon_client::multiplayer::Screen::Disconnected {
-                reason,
-                retry: None,
-                lines: std::cell::Cell::new(1),
-            },
-            None => horizon_client::multiplayer::Screen::list(&saves),
-        });
-        self.title = Some(title);
-        self.capture(false);
-        Ok(())
->>>>>>> c98a51a664
     }
     /// `Hud.onDisconnected`, from `Minecraft.disconnect` and `clearClientLevel`
     /// (a proxy's reconfiguration too), but the chat: joining clears it and a
@@ -1897,8 +1801,17 @@ impl Game<'_> {
 
     pub(super) fn send(&self, packet: S) {
         if let Some(r) = &self.remote {
-<<<<<<< HEAD
             let interaction = is_interaction(&packet);
+            // MultiPlayerGameMode's attack, interact, useItem, useItemOn, releaseUsingItem, dropItem and
+            // piercingAttack run ensureHasSentCarriedItem before their packet: a slot the number keys
+            // chose this tick goes out first. A miss, a dig's start or a swap waits for the next tick.
+            if let S::Attack(_) | S::Interact(_) | S::UseItem(_) | S::UseItemOn(_) = &packet {
+                self.remote_send_carried();
+            } else if let S::PlayerAction(a) = &packet
+                && matches!(a.action, 4 | 5 | 6 | 8)
+            {
+                self.remote_send_carried();
+            }
             if (interaction || matches!(packet, S::Punch(_))) && r.stick_mode == ServerStick::Free {
                 // A hit, a use, a block placed or an item dropped goes where the player looks:
                 // a server places stairs, throws and aims by the rotation it was last sent. While
@@ -1915,23 +1828,10 @@ impl Game<'_> {
                     held.push(packet);
                     return;
                 }
-||||||| 31f83499b6
-=======
-            // MultiPlayerGameMode's attack, interact, useItem, useItemOn, releaseUsingItem, dropItem and
-            // piercingAttack run ensureHasSentCarriedItem before their packet: a slot the number keys
-            // chose this tick goes out first. A miss, a dig's start or a swap waits for the next tick.
-            if let S::Attack(_) | S::Interact(_) | S::UseItem(_) | S::UseItemOn(_) = &packet {
-                self.remote_send_carried();
-            } else if let S::PlayerAction(a) = &packet
-                && matches!(a.action, 4 | 5 | 6 | 8)
-            {
-                self.remote_send_carried();
->>>>>>> c98a51a664
             }
             r.session.send(packet);
         }
     }
-<<<<<<< HEAD
     /// The hits and uses held back while the stick steered (`send`), the tick after.
     fn send_held_back(&self) {
         if let Some(r) = &self.remote {
@@ -2139,8 +2039,7 @@ impl Game<'_> {
         }
         // Moving forward at yaw - a is moving at angle a (to the left) of yaw: Entity.moveRelative.
         Some(self.yaw - left.atan2(forward).to_degrees())
-||||||| 31f83499b6
-=======
+    }
     /// `LocalPlayer.isShiftKeyDown` (and so `isSecondaryUseActive`): the input as of the player's
     /// last tick (`input.keyPresses`, what the last ServerboundPlayerInputPacket said), not the key
     /// now: a sneak pressed in the frame of a click acts from the next tick, as on the server.
@@ -2148,10 +2047,11 @@ impl Game<'_> {
         self.remote
             .as_ref()
             .is_some_and(|r| r.last_input & SHIFT_INPUT != 0)
->>>>>>> c98a51a664
     }
     fn next_sequence(&mut self) -> i32 {
-        self.remote.as_mut().expect("remote").predictions.start()
+        let r = self.remote.as_mut().expect("remote");
+        r.sequence += 1;
+        r.sequence
     }
     fn item_name(&self, id: i32) -> Arc<str> {
         let r = self.remote.as_ref().expect("remote");
@@ -2819,19 +2719,11 @@ impl Game<'_> {
                     self.flush_chat_queue();
                     self.send_chat_acknowledgement();
                     self.close_dialogs();
-<<<<<<< HEAD
                     // The level goes, and a new listener starts from nothing when the
                     // configuration ends; the server configuring us now (a proxy's next one)
-                    // offers its own far terrain, or none.
-                    self.clear_remote_world();
-||||||| 31f83499b6
-                    // The server configuring us now (a proxy's next one)
-                    // offers its own far terrain, or none.
-=======
-                    // The server configuring us now (a proxy's next one)
                     // offers its own far terrain, or none, and announces its
                     // own features again (a Horizon server's quiet commands).
->>>>>>> c98a51a664
+                    self.clear_remote_world();
                     if let Some(remote) = &mut self.remote {
                         remote.far_terrain = None;
                         remote.quiet_commands = false;
@@ -3477,23 +3369,12 @@ impl Game<'_> {
     /// predicted state until the server acknowledges the action; the server's state is
     /// remembered for then.
     fn server_block(&mut self, pos: [i32; 3], state: i32) {
-<<<<<<< HEAD
-        if self
-||||||| 31f83499b6
-        if let Some((_, known)) = self
-=======
         if let Some(p) = self
->>>>>>> c98a51a664
             .remote
             .as_mut()
             .is_some_and(|r| r.predictions.update(pos, state))
         {
-<<<<<<< HEAD
-||||||| 31f83499b6
-            *known = state;
-=======
             p.state = state;
->>>>>>> c98a51a664
             return;
         }
         self.set_block(pos, state);
@@ -3508,22 +3389,6 @@ impl Game<'_> {
         let Some(r) = self.remote.as_mut() else {
             return;
         };
-<<<<<<< HEAD
-        for settled in r.predictions.end_up_to(sequence) {
-            let [x, y, z] = settled.pos;
-            if self.world.block(x, y, z).0 as i32 == settled.state {
-                continue;
-||||||| 31f83499b6
-        let settled: Vec<_> = r
-            .predictions
-            .iter()
-            .filter(|(_, (s, _))| *s <= sequence)
-            .map(|(&pos, &(_, state))| (pos, state))
-            .collect();
-        for (pos, state) in settled {
-            if let Some(r) = self.remote.as_mut() {
-                r.predictions.remove(&pos);
-=======
         let last_teleport = r.last_teleport_sequence;
         let settled: Vec<_> = r
             .predictions
@@ -3534,19 +3399,7 @@ impl Game<'_> {
         for (pos, prediction) in settled {
             if let Some(r) = self.remote.as_mut() {
                 r.predictions.remove(&pos);
->>>>>>> c98a51a664
             }
-<<<<<<< HEAD
-            self.set_block(settled.pos, settled.state);
-            let Some(back) = settled.player else {
-                continue;
-            };
-            if !self.player_collides_with(settled.pos, settled.state) {
-                continue;
-||||||| 31f83499b6
-            if self.world.block(pos[0], pos[1], pos[2]).0 as i32 != state {
-                self.set_block(pos, state);
-=======
             if self.world.block(pos[0], pos[1], pos[2]).0 as i32 == prediction.state {
                 continue;
             }
@@ -3557,7 +3410,6 @@ impl Game<'_> {
             let meets = self.block_meets_player(pos, prediction.state);
             if let Some(at) = snap_target(prediction.player_pos, last_teleport, sequence, meets) {
                 self.snap_player_to(at);
->>>>>>> c98a51a664
             }
             log::info!(
                 "Horizon: the server kept the block at {x} {y} {z}; the player goes back to \
@@ -3573,28 +3425,6 @@ impl Game<'_> {
             self.previous_position = back;
         }
     }
-<<<<<<< HEAD
-    /// Entity.isColliding: whether the block `state` at `pos` overlaps the player's box.
-    fn player_collides_with(&self, pos: [i32; 3], state: i32) -> bool {
-        let Some(player) = self.player.as_ref() else {
-            return false;
-        };
-        let mut scene = horizon_client::collisions::SceneCollisions {
-            world: &self.world,
-            binding: self.collision,
-            subject: None,
-        };
-        let Ok(shape) =
-            self.collision
-                .collision_shape(&mut scene, BlockStateId(state.max(0) as u32), pos)
-        else {
-            return false;
-        };
-        let at = Vec3::new(f64::from(pos[0]), f64::from(pos[1]), f64::from(pos[2]));
-        let bounds = player.bounds();
-        shape.moved(at).boxes().iter().any(|b| b.intersects(bounds))
-||||||| 31f83499b6
-=======
     /// The player's position, for `retainKnownServerState`'s `player.position()`.
     fn player_position(&self) -> [f64; 3] {
         let at = self
@@ -3647,7 +3477,6 @@ impl Game<'_> {
         let x = at[0].clamp(-3.0e7, 3.0e7);
         let z = at[2].clamp(-3.0e7, 3.0e7);
         player.position = Vec3::new(x, at[1], z);
->>>>>>> c98a51a664
     }
     fn set_block(&mut self, pos: [i32; 3], state: i32) {
         // A state we don't have (a server with mods we lack) reads as air, as in its chunks.
@@ -4308,16 +4137,10 @@ impl Game<'_> {
                 self.potions.effects.clear();
                 self.riding = None;
                 if let Some(r) = self.remote.as_mut() {
-<<<<<<< HEAD
                     r.player_attributes.clear();
-                    r.carried = Some(0);
-||||||| 31f83499b6
-                    r.carried = Some(0);
-=======
                     r.carried.set(Some(0));
                     // handleLogin makes a new ClientLevel: its predictions count from 0.
                     r.sequence = 0;
->>>>>>> c98a51a664
                     r.own_invisible = false;
                     r.own_on_fire = false;
                     r.online_mode = p.online_mode;
@@ -4762,11 +4585,8 @@ impl Game<'_> {
                 }
             }
             C::SetEntityData(p) => {
-<<<<<<< HEAD
                 // Any entity's custom name (armor stand holograms, objects).
                 self.remote_names_and_displays(p.id, &p.values);
-||||||| 31f83499b6
-=======
                 if let Some(r) = self.remote.as_mut() {
                     for (index, _, value) in &p.values {
                         if let (4, Value::Bool(silent)) = (index, value) {
@@ -4779,7 +4599,6 @@ impl Game<'_> {
                         }
                     }
                 }
->>>>>>> c98a51a664
                 // Entity.DATA_SHARED_FLAGS_ID, DATA_CUSTOM_NAME and
                 // DATA_CUSTOM_NAME_VISIBLE: server NPCs and holograms rely on
                 // these instead of saved NBT.
@@ -7163,10 +6982,7 @@ impl Game<'_> {
             (yaw, pitch),
             p,
         );
-<<<<<<< HEAD
         let mut setback = false;
-||||||| 31f83499b6
-=======
         // BlockStatePredictionHandler.onTeleport: a prediction made before this
         // one keeps its block but not the player position it remembered.
         if let Some(r) = self.remote.as_mut() {
@@ -7191,7 +7007,6 @@ impl Game<'_> {
             self.mining = None;
             return Ok(());
         }
->>>>>>> c98a51a664
         match self.player.as_mut() {
             Some(player) => {
                 // A short teleport back is a correction: the server would not take the move.
@@ -7260,18 +7075,12 @@ impl Game<'_> {
                 self.apply_remote_health();
             }
         }
-<<<<<<< HEAD
         if setback {
             self.stick_setback();
         }
-        self.previous_position = position;
-||||||| 31f83499b6
-        self.previous_position = position;
-=======
         if self.studio_replay.is_none() {
             self.previous_position = position;
         }
->>>>>>> c98a51a664
         self.yaw = yaw;
         self.pitch = pitch;
         // setValuesFromPositionPacket: setOldPosAndRot gives xRotO the same
@@ -7285,29 +7094,8 @@ impl Game<'_> {
         if let Some(id) = self.remote.as_mut().and_then(|r| r.ghast_dismount.take()) {
             self.place_ghast_under(id, position);
         }
-<<<<<<< HEAD
-        if let Some(r) = self.remote.as_mut() {
-            // handleMovePlayer does not change LocalPlayer.sendPosition's
-            // baseline: the next tick must still report the corrected state.
-            r.destroying = None;
-            // BlockStatePredictionHandler.onTeleport: the server's position stands against the
-            // breaks sent before it.
-            r.predictions.on_teleport();
-            r.is_destroying = false;
-        }
-        self.mining = None;
-||||||| 31f83499b6
-        if let Some(r) = self.remote.as_mut() {
-            // handleMovePlayer does not change LocalPlayer.sendPosition's
-            // baseline: the next tick must still report the corrected state.
-            r.destroying = None;
-            r.is_destroying = false;
-        }
-        self.mining = None;
-=======
         // handleMovePlayer does not change LocalPlayer.sendPosition's baseline:
         // the next tick must still report the corrected state.
->>>>>>> c98a51a664
         self.send(S::AcceptTeleportation(play::AcceptTeleportation {
             id: p.teleport,
             x: position.x,
@@ -7316,18 +7104,14 @@ impl Game<'_> {
             yaw,
             pitch,
         }));
-<<<<<<< HEAD
         if let Some(r) = self.remote.as_ref() {
             r.told_rotation.set(Some((yaw, pitch)));
         }
-||||||| 31f83499b6
-=======
         // Then MultiPlayerGameMode.stopDestroyBlock: a dig the teleport (an
         // anticheat's setback, a /tp) interrupts is aborted on the wire, and the
         // attack strength starts again.
         self.stop_remote_mining();
         self.mining = None;
->>>>>>> c98a51a664
         Ok(())
     }
 
@@ -7440,18 +7224,8 @@ impl Game<'_> {
         self.tick_enchanting_book();
         // Leaving a slot clears its bundle's selection here and on the server.
         self.tick_bundle_hover();
-<<<<<<< HEAD
         // Options.broadcastOptions: a changed render distance, Chat, skin or Main Hand
         // option is sent again.
-        self.tick_ram_limit();
-||||||| 31f83499b6
-        // Options.broadcastOptions: a changed render distance or Chat option
-        // is sent again.
-        self.tick_ram_limit();
-=======
-        // Options.broadcastOptions: a changed render distance or Chat option
-        // is sent again.
->>>>>>> c98a51a664
         let info = self
             .settings
             .client_information(client_view_distance(self.settings.render_distance));
@@ -7739,11 +7513,6 @@ impl Game<'_> {
         } else if !dead && !riding {
             player.client_side = true;
             player.velocity = player.velocity.add_vector(pushed);
-<<<<<<< HEAD
-            if let Some(yaw) = steer {
-                player.yaw = yaw;
-||||||| 31f83499b6
-=======
             // LivingEntity.checkAutoSpinAttack: a Riptide spin that touches a
             // mob ends and bounces back; the server deals the hit.
             player.spin_targets.clear();
@@ -7754,7 +7523,9 @@ impl Game<'_> {
                         .filter(|m| !m.removed)
                         .map(|m| (m.id, m.bounds())),
                 );
->>>>>>> c98a51a664
+            }
+            if let Some(yaw) = steer {
+                player.yaw = yaw;
             }
             MotionWorld {
                 entities: &entity_collisions,
@@ -8759,16 +8530,10 @@ impl Game<'_> {
             p.collision.horizontal,
             p.sprinting,
         );
-<<<<<<< HEAD
         let steer = self.remote.as_ref().and_then(|r| r.steer_yaw);
         // A finger aiming with tap to interact: the server sees the player look at what it acts on.
         let (look_yaw, look_pitch) = self.interaction_rotation();
-        let (yaw, pitch, selected) = (steer.unwrap_or(look_yaw), look_pitch, self.selected);
-||||||| 31f83499b6
-        let (yaw, pitch, selected) = (self.yaw, self.pitch, self.selected);
-=======
-        let (yaw, pitch) = (self.yaw, self.pitch);
->>>>>>> c98a51a664
+        let (yaw, pitch) = (steer.unwrap_or(look_yaw), look_pitch);
         let riding = self.riding.is_some();
         let controls_camera = self.controls_camera();
         let (paddles, vehicle): (Vec<S>, Vec<S>) = self
@@ -8812,46 +8577,33 @@ impl Game<'_> {
             sprint(r, &mut out);
             // LocalPlayer.sendPosition: no move while the view is another
             // entity's (the server keeps the player on it).
-<<<<<<< HEAD
-            && let Some(packet) = {
-                if let Some(told) = r.told_rotation.take() {
-                    r.position_sender.told_rotation(told);
-                }
-                r.position_sender
-                    .update(pos, (yaw, pitch), on_ground, collision)
-            }
-        {
-            r.count_rate(1, 0);
-            if r.trail.len() == TRAIL {
-                r.trail.pop_front();
-            }
-            r.trail
-                .push_back((pos, on_ground, r.last_input, Instant::now()));
-            let now = Instant::now();
-            match r.moved_at.replace(now).map(|at| now - at) {
-                Some(gap) if gap >= GAP_LOGGED => log::info!(
-                    "Horizon: {} ms between two movement packets",
-                    gap.as_millis()
-                ),
-                Some(_) => {}
-                None => log::info!(
-                    "Horizon: the first movement packet {} ms after the play phase began",
-                    r.play_began.map_or(0, |at| (now - at).as_millis())
-                ),
-            }
-            out.push(packet);
-||||||| 31f83499b6
-            && let Some(packet) =
-                r.position_sender
-                    .update(pos, (yaw, pitch), on_ground, collision)
-        {
-            out.push(packet);
-=======
             if controls_camera
-                && let Some(packet) =
+                && let Some(packet) = {
+                    if let Some(told) = r.told_rotation.take() {
+                        r.position_sender.told_rotation(told);
+                    }
                     r.position_sender
                         .update(pos, (yaw, pitch), on_ground, collision)
+                }
             {
+                r.count_rate(1, 0);
+                if r.trail.len() == TRAIL {
+                    r.trail.pop_front();
+                }
+                r.trail
+                    .push_back((pos, on_ground, r.last_input, Instant::now()));
+                let now = Instant::now();
+                match r.moved_at.replace(now).map(|at| now - at) {
+                    Some(gap) if gap >= GAP_LOGGED => log::info!(
+                        "Horizon: {} ms between two movement packets",
+                        gap.as_millis()
+                    ),
+                    Some(_) => {}
+                    None => log::info!(
+                        "Horizon: the first movement packet {} ms after the play phase began",
+                        r.play_began.map_or(0, |at| (now - at).as_millis())
+                    ),
+                }
                 out.push(packet);
                 moved_or_rotated = true;
             }
@@ -8910,7 +8662,6 @@ impl Game<'_> {
                 );
                 r.session.record_clientbound(&pkt);
             }
->>>>>>> c98a51a664
         }
         // Creative inventory edits are sent slot by slot (SetCreativeModeSlot).
         let mut creative_slots = Vec::new();
@@ -9248,21 +8999,8 @@ impl Game<'_> {
         self.touch_vibrate(super::touch::BREAK_BUZZ);
         self.tutorial_destroy(state, 1.0);
         // BlockStatePredictionHandler.retainKnownServerState.
-<<<<<<< HEAD
-        let at = self.player.as_ref().map(|p| p.position);
-||||||| 31f83499b6
-=======
         let here = self.player_position();
->>>>>>> c98a51a664
         if let Some(r) = self.remote.as_mut() {
-<<<<<<< HEAD
-            r.predictions.retain(pos, state.0 as i32, at, sequence);
-||||||| 31f83499b6
-            r.predictions
-                .entry(pos)
-                .and_modify(|p| p.0 = sequence)
-                .or_insert((sequence, state.0 as i32));
-=======
             r.predictions
                 .entry(pos)
                 .and_modify(|p| p.sequence = sequence)
@@ -9271,7 +9009,6 @@ impl Game<'_> {
                     state: state.0 as i32,
                     player_pos: here,
                 });
->>>>>>> c98a51a664
         }
         // Block.playerWillDestroy's destroy event (particles and the break
         // sound), which BaseFireBlock skips: the server's extinguish sound
@@ -10097,14 +9834,6 @@ impl Game<'_> {
             let before = self.world.block(p.x, p.y, p.z);
             let here = self.player_position();
             if let Some(r) = self.remote.as_mut() {
-<<<<<<< HEAD
-                r.predictions.retain(pos, before.0 as i32, at, seq);
-||||||| 31f83499b6
-                r.predictions
-                    .entry(pos)
-                    .and_modify(|e| e.0 = seq)
-                    .or_insert((seq, before.0 as i32));
-=======
                 r.predictions
                     .entry(pos)
                     .and_modify(|e| e.sequence = seq)
@@ -10113,7 +9842,6 @@ impl Game<'_> {
                         state: before.0 as i32,
                         player_pos: here,
                     });
->>>>>>> c98a51a664
             }
             self.set_block(pos, state.0 as i32);
         }
@@ -10123,21 +9851,13 @@ impl Game<'_> {
     /// blocks it set. The real level supplies collision shapes and
     /// building-blocking entities; random draws, scheduled ticks and events
     /// stay in the preview.
-<<<<<<< HEAD
-    fn remote_can_place(&mut self, hit: &super::Hit, stack: &ItemStack) -> Option<DryPlace> {
-        // A crank takes the use (game/kinetics.rs): nothing is predicted against it.
-        if !self.may_build() || self.kinetic_crank_at(hit.pos) {
-||||||| 31f83499b6
-    fn remote_can_place(&mut self, hit: &super::Hit, stack: &ItemStack) -> Option<DryPlace> {
-        if !self.may_build() {
-=======
     pub(super) fn remote_can_place(
         &mut self,
         hit: &super::Hit,
         stack: &ItemStack,
     ) -> Option<DryPlace> {
-        if !self.may_build() {
->>>>>>> c98a51a664
+        // A crank takes the use (game/kinetics.rs): nothing is predicted against it.
+        if !self.may_build() || self.kinetic_crank_at(hit.pos) {
             return None;
         }
         let ctx = horizon_world::level::PlaceContext {
@@ -10145,19 +9865,9 @@ impl Game<'_> {
             face: horizon_core::geometry::Direction::ALL[face_direction(hit.face) as usize],
             hit: Vec3::new(hit.point[0], hit.point[1], hit.point[2]),
             inside: hit.face == [0; 3],
-<<<<<<< HEAD
             yaw: self.interaction_rotation().0,
             pitch: self.interaction_rotation().1,
-            sneaking: self.keys.contains(&KeyCode::ShiftLeft),
-||||||| 31f83499b6
-            yaw: self.yaw,
-            pitch: self.pitch,
-            sneaking: self.keys.contains(&KeyCode::ShiftLeft),
-=======
-            yaw: self.yaw,
-            pitch: self.pitch,
             sneaking: self.remote_shift_down(),
->>>>>>> c98a51a664
             item: stack.item.to_string(),
             can_use_game_master_blocks: self.can_use_game_master_blocks(),
         };
@@ -10812,10 +10522,6 @@ impl Game<'_> {
             return;
         }
         let (attack, use_item) = (self.left, self.right);
-<<<<<<< HEAD
-        // A tick that clicks, attacks or uses acts with the slot its number
-        // keys select (`ensureHasSentCarriedItem` before the packets).
-        let acts = input.has_clicks() || attack || use_item;
         // handleKeybinds: keySwapOffhand.consumeClick, before attacking and using (an
         // anticheat's Post check wants it before the tick's move, not whenever the key went down).
         let swaps = self
@@ -10827,15 +10533,7 @@ impl Game<'_> {
                 self.remote_swap_hands();
             }
         }
-        input.tick(&mut RemoteInputWorld(self, acts), attack, use_item);
-||||||| 31f83499b6
-        // A tick that clicks, attacks or uses acts with the slot its number
-        // keys select (`ensureHasSentCarriedItem` before the packets).
-        let acts = input.has_clicks() || attack || use_item;
-        input.tick(&mut RemoteInputWorld(self, acts), attack, use_item);
-=======
         input.tick(&mut RemoteInputWorld(self), attack, use_item);
->>>>>>> c98a51a664
         self.remote_queued_keys();
         if let Some(r) = self.remote.as_mut() {
             r.input = input;
