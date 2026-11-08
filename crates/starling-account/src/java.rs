@@ -285,7 +285,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The real archive (STARLING_TEST_JRE: a downloaded jre25-android-arm64.tar.xz), timed.
+    /// A real Android runtime archive (STARLING_TEST_JRE), timed.
     #[test]
     #[ignore = "needs the downloaded runtime archive"]
     fn the_android_runtime_unpacks() {
@@ -294,14 +294,18 @@ mod tests {
         let started = std::time::Instant::now();
         unpack(&archive, &dir.join("jre")).unwrap();
         eprintln!("unpacked in {:?}", started.elapsed());
-        for file in [
-            "lib/libjli.so",
-            "lib/server/libjvm.so",
-            "lib/modules",
-            "bin/java",
-        ] {
+        for file in ["lib/libjli.so", "lib/modules", "bin/java"] {
             assert!(dir.join("jre").join(file).is_file(), "{file}");
         }
+        // JLI selects the Client VM on ARM32 and the Server VM on 64-bit.
+        assert!(
+            ["client", "server"].iter().any(|vm| dir
+                .join("jre/lib")
+                .join(vm)
+                .join("libjvm.so")
+                .is_file()),
+            "the archive must contain a JVM that JLI can load"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
