@@ -650,7 +650,7 @@ fn enter_completes_a_failing_command_word_only_when_one_completion_fits() {
         registries: &registries,
     };
     let sent = |typed: &str| {
-        let mut screen = ChatScreen::new(&m, &c, "", 0, 640, 360, full());
+        let mut screen = ChatScreen::new(&m, &c, "", false, 0, 640, 360, full());
         screen.type_text(&m, &c, typed);
         screen.key(&m, &c, &[], Enter, false, false)
     };
@@ -733,7 +733,7 @@ fn the_keyboard_editor_sets_the_whole_input_and_its_selection() {
         dispatcher: crate::command::vanilla::game_dispatcher(),
         registries: &registries,
     };
-    let mut screen = ChatScreen::new(&m, &c, "draft", 0, 640, 360, full());
+    let mut screen = ChatScreen::new(&m, &c, "draft", false, 0, 640, 360, full());
     // Refused characters go, and the positions follow the text kept.
     screen.set_text(&m, &c, "a\u{a7}b\ncd", 5, 2);
     assert_eq!(screen.value(), "abcd");

@@ -103,6 +103,7 @@ void main() {
         material_maps: None,
         lightmap: map.clone(),
         terrain: Some(Geometry {
+            prepass: false,
             buffers: &[],
             table: None,
             depth_write: true,

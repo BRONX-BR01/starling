@@ -790,7 +790,6 @@ mod tests {
         super::record_timings(false);
     }
 
-    #[test]
     /// A slow tick's notes are its slowest steps, slowest first; short steps and steps on a
     /// thread that records no spans leave none.
     #[test]

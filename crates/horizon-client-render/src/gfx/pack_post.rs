@@ -6006,6 +6006,8 @@ mod tests {
             image: pack_textures::Image::Atlas,
         }];
         let interface = horizon_shaders::Interface {
+            alpha_cut: None,
+            prepass_uv: None,
             uniform_size: 48,
             initial_values: vec![0; 48],
             uniforms: Vec::new(),
@@ -6098,6 +6100,8 @@ mod tests {
         ];
         let names = ["tp", "tr", "gaux2", "noisetex", "cp"];
         let interface = horizon_shaders::Interface {
+            alpha_cut: None,
+            prepass_uv: None,
             uniform_size: 48,
             uniforms: Vec::new(),
             samplers: names

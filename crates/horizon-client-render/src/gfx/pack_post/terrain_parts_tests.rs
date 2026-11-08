@@ -113,6 +113,7 @@ fn strips_of(
             material_maps: None,
             lightmap: color.clone(),
             terrain: Some(Geometry {
+                prepass: false,
                 buffers: &layouts,
                 table: None,
                 depth_write: true,

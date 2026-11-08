@@ -127,6 +127,7 @@ void main() {
         material_maps: Some([atlases[1].view.clone(), atlases[0].view.clone()]),
         lightmap: atlases[2].view.clone(),
         terrain: Some(Geometry {
+            prepass: false,
             buffers: &[],
             table: None,
             depth_write: true,

@@ -83,6 +83,7 @@ fn unknown_samplers_and_colortex0_to_3_in_gbuffers_terrain_read_the_atlas() {
             material_maps: None,
             lightmap: color.clone(),
             terrain: Some(Geometry {
+                prepass: false,
                 buffers: &layouts,
                 table: None,
                 depth_write: true,

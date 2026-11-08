@@ -89,6 +89,7 @@ fn translucent_draws_sample_the_color_written_by_deferred() {
                         material_maps: None,
                         lightmap: color.clone(),
                         terrain: Some(Geometry {
+                            prepass: false,
                             buffers: &layouts,
                             table: None,
                             depth_write: true,

@@ -45,6 +45,7 @@ fn pack() -> Post {
     let inputs = horizon_shaders::GameInputs {
         terrain: Some(horizon_shaders::GbuffersInputs {
             item_id_declared: false,
+            prepass_uv: false,
             far_depth: false,
             paged_maps: false,
             declarations: "layout(location=0)in vec3 fixture_position;\n".into(),
@@ -74,6 +75,7 @@ fn shadow_pass_draws_terrain_back_faces() {
     let mut post = gpu.build_with_terrain(
         pack(),
         Some(Geometry {
+            prepass: false,
             material_maps: false,
             buffers: &layouts,
             table: None,
