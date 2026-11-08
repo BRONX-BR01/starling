@@ -572,8 +572,10 @@ use key_codes::{
     container_key_clones, drop_held_behind_dialog, follow_named_keymap, gameplay_has_keyboard,
     glfw_button, glfw_modifiers, keyboard_button,
 };
+#[cfg(not(target_os = "android"))]
+use loading_screen::missing_resources;
 use loading_screen::{
-    App, Loading, event_loop, leave_fullscreen_after, missing_resources, run_event_loop, unclean_start_recovery,
+    App, Loading, event_loop, leave_fullscreen_after, run_event_loop, unclean_start_recovery,
 };
 use loading_window::{
     build_renderer, loading_frame, loading_renderer, prepare_renderer_textures, start_game,

@@ -797,6 +797,7 @@ pub(super) fn missing_resources(root: &std::path::Path) -> Option<String> {
 /// Which top-level prepared file a killed preparation or an interrupted copy
 /// left unusable. The loader parses these before it can start; naming one
 /// beats serde's bare "expected value at line 1 column 1".
+#[cfg(not(target_os = "android"))]
 pub(super) fn damaged_prepared(root: &std::path::Path) -> Option<String> {
     let manifest = root.join("horizon-resources.json");
     let bytes = std::fs::read(&manifest).ok()?;

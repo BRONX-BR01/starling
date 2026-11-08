@@ -39,7 +39,7 @@ impl Pads {
             }
         };
         self.devices.active = Some(device);
-        self.style = GlyphStyle::of_vendor(vendor);
+        self.style = GlyphStyle::of_device(vendor, None);
         state
     }
 }
