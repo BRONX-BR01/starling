@@ -2,6 +2,9 @@
 //! catalog on Android (`game/catalog.rs`). Search, compatibility, checked downloads and installs
 //! stay one implementation. What the browser asks of the rest of the launcher is answered below.
 #![allow(dead_code, unused_imports, clippy::all)]
+// The browser's own tests run in the launcher's workspace, against its real data packs and
+// registry. This crate's are integration tests, so the unit-test build is empty.
+#![cfg(not(test))]
 
 #[path = "../../../launcher/src"]
 mod launcher {
@@ -365,11 +368,7 @@ mod datapacks {
 
     const NOT_HERE: &str = "Data packs can't be installed from here.";
 
-    /// The fields the browser's own tests read; `cargo clippy --all-targets` compiles them here.
-    pub struct DataPack {
-        pub file: String,
-        pub enabled: bool,
-    }
+    pub struct DataPack;
 
     pub struct Coverage {
         pub read: Vec<String>,
@@ -377,10 +376,6 @@ mod datapacks {
 
     impl Coverage {
         pub fn not_read(&self) -> String {
-            String::new()
-        }
-
-        pub fn summary(&self) -> String {
             String::new()
         }
     }

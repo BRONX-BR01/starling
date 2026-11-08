@@ -7,10 +7,7 @@ license.workspace = true
 publish = false
 description = "The desktop launcher's mod browser without its window, for Starling's catalog on Android: search, compatibility, checked downloads and installs"
 
-# The browser's own tests run in the launcher's workspace, against its real data packs. This
-# crate's are in tests/.
 [lib]
-test = false
 doctest = false
 
 [dependencies]
