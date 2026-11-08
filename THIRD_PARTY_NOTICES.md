@@ -239,7 +239,6 @@ BlueMap is licensed under the MIT license:
 > LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 > THE SOFTWARE.
-<<<<<<< HEAD
 ## OpenJDK for Android (fetched on the phone, not shipped)
 
 To prepare the game files on a phone, Starling downloads OpenJDK 25.0.5 built for Android by
@@ -270,8 +269,6 @@ Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
 The port uses Starling's existing logger, crash hook and GPU timers and exposes
 reports through the game's Diagnostics settings and an Android launcher shortcut,
 with a renderer-independent recovery window for interrupted startup.
-||||||| 31f83499b6
-=======
 
 ## JOML
 
@@ -375,4 +372,3 @@ is preserved.
 [150a414b09a1](https://github.com/starling-client/starling/tree/150a414b09a18c900489d9462a7fc035dae744b7)
 (`android` branch), written mostly by Vasysik. Starling is licensed under the same MIT license as
 Horizon (Copyright (c) 2026 Ludovic Marie and the Horizon contributors).
->>>>>>> c98a51a664

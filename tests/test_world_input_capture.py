@@ -68,17 +68,9 @@ class WorldInputCaptureTests(unittest.TestCase):
 use std::cell::Cell;
 #[derive(Clone, Copy, PartialEq)]
 enum Screen { Playing, Paused, Inventory, Chat }
-<<<<<<< HEAD
-||||||| 31f83499b6
-enum CursorGrabMode { Locked, Confined, None }
-=======
 #[derive(Clone, Copy)]
 enum CursorGrabMode { Locked, Confined, None }
->>>>>>> c98a51a664
 mod winit {
-    pub mod window {
-        pub enum CursorGrabMode { Locked, Confined, None }
-    }
     pub mod dpi {
         #[derive(Clone, Copy)]
         pub struct PhysicalPosition<T> { pub x: T, pub y: T }
@@ -90,7 +82,6 @@ mod winit {
     }
 }
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::window::CursorGrabMode;
 struct HudBatch { scale: f32 }
 impl HudBatch { fn new(_size: [u32; 2]) -> Self { Self { scale: 2.0 } } }
 struct Config { width: u32, height: u32 }
@@ -450,9 +441,7 @@ fn main() {
 }
 '''
         fixture = fixture.replace("MOUSE_PATH", (ROOT / "crates/horizon-client-input/src/mouse.rs").as_posix())
-        # Starling's device_event hands the motion to grabbed_mouse_motion, which Android's input hook calls too.
-        fixture = fixture.replace("METHOD", method(source, "device_event") + "\n" +
-                                  method(source, "grabbed_mouse_motion"))
+        fixture = fixture.replace("METHOD", method(source, "device_event"))
         self.run_fixture(fixture, "native-mouse")
 
     @unittest.skipUnless(shutil.which("rustc"), "requires Rust")

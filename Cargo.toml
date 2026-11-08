@@ -42,12 +42,8 @@ members = [
     "crates/horizon-polytone",
     "crates/horizon-shader-api",
     "crates/horizon-release-sign",
-<<<<<<< HEAD
     "crates/starling-account",
-||||||| 31f83499b6
-=======
     "crates/horizon-mod-deps",
->>>>>>> c98a51a664
     "xtask",
 ]
 resolver = "2"

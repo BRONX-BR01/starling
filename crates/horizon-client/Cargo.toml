@@ -94,13 +94,9 @@ winit = { version = "0.30.13", features = ["android-native-activity"] }
 jni = "0.21.1"
 
 [target.'cfg(windows)'.dependencies]
-<<<<<<< HEAD
 # (Resource pack overlays' `junction` is horizon-client-render's, with packs.rs.)
-||||||| 31f83499b6
-=======
 # Resolve virtualized folders to shell-compatible physical paths.
 dunce = "1.0.5"
->>>>>>> c98a51a664
 # Use the registered URI handler without routing links through Explorer/cmd.
 open = { version = "5.4.5", features = ["shellexecute-on-windows"] }
 # DirectX 12, where Vulkan has no adapter or device, or by choice (`graphicsApi`, graphics.rs).

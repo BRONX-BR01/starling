@@ -226,7 +226,24 @@
   "Brighter-than-white output on an HDR display.": "Вывод ярче белого на HDR-дисплее.",
   "Results for \"%s\"": "Результаты для «%s»",
   "No settings match.": "Нет подходящих настроек.",
-<<<<<<< HEAD
+  "Shader Packs...": "Шейдерпаки...",
+  "Installed": "Установленные",
+  "Apply": "Применить",
+  "Reset all options": "Сбросить все настройки",
+  "A Horizon shader pack.": "Пакет шейдеров Horizon.",
+  "An OptiFine or Iris shader pack.": "Пакет шейдеров OptiFine или Iris.",
+  "In use: press to turn shaders off.": "Используется: нажмите, чтобы выключить шейдеры.",
+  "Press to use it.": "Нажмите, чтобы использовать.",
+  "Put shader pack .zip files or folders in it.": "Положите в неё файлы .zip или папки пакетов шейдеров.",
+  "Puts every option of this pack back to its default.": "Возвращает все настройки этого пакета к значениям по умолчанию.",
+  "Sets many options at once, as the pack groups them.": "Задаёт сразу много настроек так, как их группирует пакет.",
+  "No shader packs yet: open the pack folder and put some in it.": "Пакетов шейдеров пока нет: откройте папку пакетов и положите в неё несколько.",
+  "Pick a shader pack. Picking the one in use turns shaders off.": "Выберите пакет шейдеров. Выбор используемого пакета выключает шейдеры.",
+  "Changed options apply with Apply, or when you leave.": "Изменённые настройки применяются кнопкой «Применить» или при выходе.",
+  "Pack settings": "Настройки пакета",
+  "Built-in settings": "Встроенные настройки",
+  "%s settings": "Настройки %s",
+  "Settings made by the pack's author: they change only this pack.": "Настройки, созданные автором пакета: они меняют только этот пакет.",
   "starling.diagnostics.title": "Диагностика",
   "starling.diagnostics.notice": "Отчёты локальные. Проверьте перед отправкой.",
   "starling.diagnostics.export": "Экспортировать диагностический ZIP",
@@ -245,26 +262,4 @@
   "starling.diagnostics.overhead": "Запись CPU/GPU влияет на производительность.",
   "starling.diagnostics.hardware": "GPU: %s (%s)",
   "starling.diagnostics.last_error": "Последняя ошибка: %s"
-||||||| 31f83499b6
-  "No settings match.": "Нет подходящих настроек."
-=======
-  "Shader Packs...": "Шейдерпаки...",
-  "Installed": "Установленные",
-  "Apply": "Применить",
-  "Reset all options": "Сбросить все настройки",
-  "A Horizon shader pack.": "Пакет шейдеров Horizon.",
-  "An OptiFine or Iris shader pack.": "Пакет шейдеров OptiFine или Iris.",
-  "In use: press to turn shaders off.": "Используется: нажмите, чтобы выключить шейдеры.",
-  "Press to use it.": "Нажмите, чтобы использовать.",
-  "Put shader pack .zip files or folders in it.": "Положите в неё файлы .zip или папки пакетов шейдеров.",
-  "Puts every option of this pack back to its default.": "Возвращает все настройки этого пакета к значениям по умолчанию.",
-  "Sets many options at once, as the pack groups them.": "Задаёт сразу много настроек так, как их группирует пакет.",
-  "No shader packs yet: open the pack folder and put some in it.": "Пакетов шейдеров пока нет: откройте папку пакетов и положите в неё несколько.",
-  "Pick a shader pack. Picking the one in use turns shaders off.": "Выберите пакет шейдеров. Выбор используемого пакета выключает шейдеры.",
-  "Changed options apply with Apply, or when you leave.": "Изменённые настройки применяются кнопкой «Применить» или при выходе.",
-  "Pack settings": "Настройки пакета",
-  "Built-in settings": "Встроенные настройки",
-  "%s settings": "Настройки %s",
-  "Settings made by the pack's author: they change only this pack.": "Настройки, созданные автором пакета: они меняют только этот пакет."
->>>>>>> c98a51a664
 }
