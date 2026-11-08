@@ -9,7 +9,7 @@ Thanks for helping. Starling is the Android port of [Horizon](https://github.com
 
 ## Build it
 
-You need Rust (stable) with the `aarch64-linux-android` target, [cargo-ndk](https://github.com/bbqsrc/cargo-ndk), the Android SDK (build-tools 35.0.0, platform 36, NDK r28c), a JDK and Python 3.10+.
+You need Rust (stable) with the `aarch64-linux-android` target, [cargo-ndk](https://github.com/bbqsrc/cargo-ndk), the Android SDK (build-tools 35.0.0, platform 36, NDK r28c), a JDK 25 and Python 3.10+.
 
 ```sh
 python packaging/android/build_apk.py            # build the library, then the APK

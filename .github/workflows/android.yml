@@ -56,11 +56,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      # javac for the activities, and d8 and apksigner from the build-tools.
+      # JDK 25 compiles/link-checks original exporters; the build-tools supply d8/apksigner.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - name: Install the build-tools, platform and NDK build_apk.py pins
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \

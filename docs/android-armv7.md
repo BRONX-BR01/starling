@@ -79,9 +79,19 @@ Other architectures explain this limitation on imported native mods and do not
 submit builds or download incompatible libraries.
 
 On 32-bit Android, preparation runs its lanes sequentially and caps each Java
-heap at 512 MiB, including the persistent exporters, javac and data generator.
+heap at 512 MiB, including the persistent exporters and data generator.
 Smaller requested heaps stay smaller. This bounds JVM heap reservations, not
 total Java/Rust/native memory; very low-memory devices can still run out of RAM.
+
+APKs carry Horizon's original compiled exporter bundle, checked against its
+source/pin key and class hashes. A host JDK 25 compiles and link-checks it while
+building the APK; pinned Minecraft jars/libraries stay in the ignored build
+cache and are never packaged. `HORIZON_MINECRAFT_DIR` can supply those inputs;
+otherwise the build fetches and verifies them. No Minecraft assets are needed
+for building the bundle. ARM32's Java runtime has no `jdk.compiler` module, so
+preparation executes the shipped classes and does not invoke javac on the phone.
+A missing or damaged bundle fails before downloading Java, with a reinstall
+message. Updating the kit retires old sources/classes and retains its work cache.
 
 ## Relation to diagnostics
 

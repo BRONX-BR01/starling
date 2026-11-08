@@ -3,7 +3,7 @@
 NativeActivity library.
 
 The APK holds the game library, the launcher icon, Starling Visuals and what prepares the game
-files on the phone (the Java launchers in native/ and the exporters' sources), nothing of
+files on the phone (the Java launchers in native/ and original exporter classes/sources), nothing of
 Minecraft: the resources
 horizon-prepare makes from the player's own copy are made on the phone, or copied there.
 
@@ -16,10 +16,13 @@ horizon-prepare makes from the player's own copy are made on the phone, or copie
 
 Needs the Android SDK (ANDROID_HOME, else the default folder) with the build-tools, platform and
 NDK pinned below, the aarch64-linux-android Rust target, cargo-ndk and a JDK (javac, keytool,
-apksigner). Without HORIZON_ANDROID_KEYSTORE it signs with a debug key kept in target/android.
+apksigner), of the pinned Java major (currently 25). Original exporters are compiled
+on the host against checksum-pinned jars, which are never packaged. Without
+HORIZON_ANDROID_KEYSTORE it signs with a debug key kept in target/android.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -64,7 +67,8 @@ ICONS = {
     "mipmap-xxxhdpi": "256x256",
 }
 # What horizon-prepare reads from its version folder on the phone (assets/prepare-kit.zip):
-# the pins and the exporters' Java sources, which the phone compiles against the player's jars.
+# the pins, original sources and verified original exporter classes. The phone
+# runs these against the player's jars; ARM32's runtime has no javac module.
 PREPARE_KIT = (
     "research-lock.json",
     "crates/horizon-prepare/src/exporters.rs",
@@ -156,6 +160,7 @@ def assets(out):
     lowbudget.zip, the skin the setup draws the menus with (packaging/lowbudget/pack, made by its
     make.py), and StarlingVisuals.zip, the shader pack the app puts in shaderpacks/ (also left in
     `out` for the release page)."""
+    run(sys.executable, ROOT / "tools/build_android_exporters.py")
     folder = out / "assets"
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir()
@@ -169,6 +174,10 @@ def assets(out):
             files = sorted(p for p in path.rglob("*.java")) if path.is_dir() else [path]
             for file in files:
                 kit.write(file, file.relative_to(ROOT).as_posix())
+        bundle = ROOT / "exporters"
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        for name in ["manifest.json", *sorted(manifest["classes"])]:
+            kit.write(bundle / name, "exporters/" + name)
     zip_folder(HERE.parent / "lowbudget" / "pack", folder / "lowbudget.zip")
     zip_folder(HERE.parent / "shaderpacks" / "starling-visuals", folder / "StarlingVisuals.zip")
     shutil.copyfile(folder / "StarlingVisuals.zip", out / "StarlingVisuals.zip")
