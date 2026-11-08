@@ -711,8 +711,10 @@ impl PackAtlas {
         let mut after = String::new();
         let prepass_uv = super::pack_post::prepass_wanted();
         if prepass_uv {
-            after.push_str("    hz_prepass_uv = hz_MultiTexCoord0.xy;
-");
+            after.push_str(
+                "    hz_prepass_uv = hz_MultiTexCoord0.xy;
+",
+            );
         }
         let entity = if flat {
             "vec4(float(hz_block_ids[3u * hz_layer]), float(hz_block_ids[3u * hz_layer + 1u]), 0.0, 0.0)"

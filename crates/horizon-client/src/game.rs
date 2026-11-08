@@ -275,10 +275,10 @@ mod names;
 mod narrator;
 mod native_biome_colors;
 pub mod native_block_entity_draw;
-#[cfg(target_os = "android")]
-mod native_builds;
 mod native_block_sprites;
 mod native_bots;
+#[cfg(target_os = "android")]
+mod native_builds;
 mod native_chunk_snapshot;
 mod native_chunk_tickets;
 mod native_claimed_items;
@@ -360,8 +360,8 @@ mod no_resources;
 mod occlusion_culling;
 mod ominous_item_spawner;
 mod options;
-mod own_skin;
 mod ordered_tick;
+mod own_skin;
 mod packs;
 mod pad;
 mod pad_actions;

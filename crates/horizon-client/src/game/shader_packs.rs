@@ -383,7 +383,11 @@ impl Game<'_> {
                     // is with the pack still "on".
                     if let Some(making) = self.pack_making.take() {
                         if programs.is_empty() {
-                            self.shader_pack_failed(&name, dimension, "none of its programs loaded");
+                            self.shader_pack_failed(
+                                &name,
+                                dimension,
+                                "none of its programs loaded",
+                            );
                         } else {
                             self.pack_ids = Some(making.ids);
                         }

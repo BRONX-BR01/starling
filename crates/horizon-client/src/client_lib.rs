@@ -23,11 +23,11 @@ pub use horizon_client_render::{
     offline_name, options_file, options_fixes, options_ui, overlay, own_buttons, own_skin,
     pack_browser, pack_screen, packs, pad_cursor, pad_glyph, par, particles, poi_sections,
     post_chain, potent_sulfur, preedit, providers, pvp, pvp_hud, random_source, screen_draw,
-    screen_effects, sculk, section_mask, server_terrain, settings, shader_options, shader_pack_list,
-    signs, skins, social, sound_engine, sound_events, sound_preview, spans, split_layout, split_map,
-    split_profiles, sprites, streaming, structure_block, system_stats, tab_list, telemetry,
-    terrain_model, test_block, test_instance_block, testgen, title_edition, trims, ui, vault,
-    weather, widgets, world, worldborder, zip,
+    screen_effects, sculk, section_mask, server_terrain, settings, shader_options,
+    shader_pack_list, signs, skins, social, sound_engine, sound_events, sound_preview, spans,
+    split_layout, split_map, split_profiles, sprites, streaming, structure_block, system_stats,
+    tab_list, telemetry, terrain_model, test_block, test_instance_block, testgen, title_edition,
+    trims, ui, vault, weather, widgets, world, worldborder, zip,
 };
 pub mod attack_strength;
 pub mod attribute_updates;
@@ -91,8 +91,8 @@ pub mod item_activation;
 pub mod item_render;
 pub mod item_sync;
 pub mod item_tooltip;
-pub mod kinetics;
 pub mod join_seq;
+pub mod kinetics;
 pub mod lan;
 pub mod landing;
 pub mod legacy_combat;
@@ -134,8 +134,8 @@ pub mod scoreboard_cmd;
 pub mod screen_layout;
 pub mod screen_narrator;
 pub mod social_screen;
-pub mod starling_releases;
 pub mod sound_playback;
+pub mod starling_releases;
 pub use horizon_server_files as server;
 pub mod controller_notice;
 pub mod server_packs;

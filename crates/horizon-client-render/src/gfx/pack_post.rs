@@ -2243,7 +2243,12 @@ fn build_pass(
                 )
             })
         });
-        (layout, pack.render_pipeline(device, job), sky_parts, prepass)
+        (
+            layout,
+            pack.render_pipeline(device, job),
+            sky_parts,
+            prepass,
+        )
     });
     let (layout, pipeline, sky_parts, prepass) = match created {
         Ok(created) => created,
