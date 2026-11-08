@@ -11,6 +11,7 @@ use starling_catalog::{Done, Shelf, browser::Project};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 use winit::event::{Touch, TouchPhase};
 
 const SHELVES: [(Shelf, &str); 3] = [
@@ -24,12 +25,18 @@ const HEAD_H: f32 = 94.0;
 const FOOT_H: f32 = 50.0;
 const ROW_H: f32 = 60.0;
 const ROW_BUTTON_W: f32 = 110.0;
+const CLEAR_W: f32 = 56.0;
+/// The most characters a search takes.
+const QUERY_CHARS: usize = 64;
+/// The search runs once the typing has paused this long.
+const TYPING_PAUSE: Duration = Duration::from_millis(400);
 
 #[derive(Clone, PartialEq)]
 enum Act {
     Close,
     Shelf(Shelf),
     Search,
+    Clear,
     Everything,
     Back,
     More,
@@ -53,6 +60,9 @@ pub(super) struct Catalog {
     shown: bool,
     shelf: Shelf,
     query: String,
+    /// The search box has the keyboard (text_mirror.rs), and when it last changed.
+    typing: bool,
+    typed_at: Option<Instant>,
     /// Resource packs: those made for other versions too.
     everything: bool,
     offset: usize,
@@ -134,6 +144,38 @@ impl Game<'_> {
         self.catalog_search();
     }
 
+    /// Whether the keyboard types in the search box (	ext_context).
+    pub(super) fn catalog_typing(&self) -> bool {
+        self.catalog.shown && self.catalog.typing
+    }
+
+    pub(super) fn catalog_query(&self) -> &str {
+        &self.catalog.query
+    }
+
+    pub(super) fn catalog_type(&mut self, text: &str) {
+        let card = &mut self.catalog;
+        let room = QUERY_CHARS.saturating_sub(card.query.chars().count());
+        card.query
+            .extend(text.chars().filter(|c| !c.is_control()).take(room));
+        card.typed_at = Some(Instant::now());
+    }
+
+    pub(super) fn catalog_backspace(&mut self) {
+        let card = &mut self.catalog;
+        card.query.pop();
+        card.typed_at = Some(Instant::now());
+    }
+
+    /// The keyboard's action key: the search now, and the keyboard away.
+    pub(super) fn catalog_submit(&mut self) {
+        let card = &mut self.catalog;
+        card.typing = false;
+        card.typed_at = None;
+        card.offset = 0;
+        self.catalog_search();
+    }
+
     /// Asks for the page the screen is on; its answer replaces the rows when it comes.
     fn catalog_search(&mut self) {
         let [w, h] = self.touch_size();
@@ -165,12 +207,20 @@ impl Game<'_> {
             });
     }
 
-    /// What came back since the last frame: a search typed in the activity's dialog, an install
+    /// What came since the last frame: a pause in the typing, the keyboard put away, an install
     /// that ended (it goes on with the screen closed).
     pub(super) fn poll_catalog(&mut self) {
-        if let Some(text) = crate::android::take_catalog_search() {
-            self.catalog.query = text;
+        if self.catalog.typing && self.keyboard_put_away("catalog") {
+            self.catalog.typing = false;
+        }
+        if self
+            .catalog
+            .typed_at
+            .is_some_and(|at| at.elapsed() >= TYPING_PAUSE)
+        {
+            self.catalog.typed_at = None;
             self.catalog.offset = 0;
+            self.catalog.notice = None;
             self.catalog_search();
         }
         let finished = self
@@ -283,12 +333,22 @@ impl Game<'_> {
             8.0,
             color::RAISED,
         );
-        let (typed, ink) = if card.query.is_empty() {
+        if card.typing {
+            ui.border(
+                search[0],
+                search[1],
+                search[2],
+                search[3],
+                8.0,
+                color::ACCENT,
+            );
+        }
+        let (typed, ink) = if card.query.is_empty() && !card.typing {
             ("Search...", color::MUTED)
         } else {
             (card.query.as_str(), color::TEXT)
         };
-        let typed = fitted(&ui, Face::Regular, 13.0, search[2] - 24.0, typed);
+        let typed = fitted(&ui, Face::Regular, 13.0, search[2] - 24.0 - CLEAR_W, typed);
         ui.text(
             Face::Regular,
             13.0,
@@ -297,6 +357,27 @@ impl Game<'_> {
             ink,
             &typed,
         );
+        if card.typing {
+            let end = search[0] + 12.0 + ui.measure(Face::Regular, 13.0, &typed);
+            ui.fill(end + 1.0, search[1] + 8.0, 1.5, 18.0, color::ACCENT);
+        }
+        if !card.query.is_empty() {
+            let clear = [
+                search[0] + search[2] - CLEAR_W,
+                search[1],
+                CLEAR_W,
+                search[3],
+            ];
+            ui.text_centered(
+                Face::Regular,
+                12.0,
+                clear[0] + clear[2] / 2.0,
+                clear[1] + 9.0,
+                color::MUTED,
+                "Clear",
+            );
+            drawn.push((clear, Act::Clear));
+        }
         drawn.push((search, Act::Search));
 
         let row_w = w - 2.0 * MARGIN;
@@ -477,18 +558,30 @@ impl Game<'_> {
                 at[0] >= r[0] && at[0] <= r[0] + r[2] && at[1] >= r[1] && at[1] <= r[1] + r[3]
             })
             .map(|(_, act)| act.clone());
+        let card = &mut self.catalog;
+        // A tap anywhere else leaves the search box; what was typed still runs.
+        if !matches!(act, Some(Act::Search | Act::Clear)) {
+            card.typing = false;
+        }
         let Some(act) = act else {
             return true;
         };
-        let card = &mut self.catalog;
         match act {
             Act::Close => card.shown = false,
             Act::Shelf(shelf) => {
                 card.shelf = shelf;
                 card.offset = 0;
+                card.typed_at = None;
+                card.notice = None;
                 self.catalog_search();
             }
-            Act::Search => crate::android::ask_catalog_search(&card.query),
+            Act::Search => card.typing = true,
+            Act::Clear => {
+                card.query.clear();
+                card.offset = 0;
+                card.typed_at = None;
+                self.catalog_search();
+            }
             Act::Everything => {
                 card.everything = !card.everything;
                 card.offset = 0;

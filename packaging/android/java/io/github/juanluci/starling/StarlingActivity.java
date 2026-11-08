@@ -111,9 +111,6 @@ public class StarlingActivity extends NativeActivity {
     /** The keyboard's height in window pixels, 0 when it is hidden (android_lib.rs). */
     private static native void onImeHeight(int pixels);
 
-    /** What the player typed in the catalog's search dialog (android_lib.rs). */
-    private static native void onCatalogSearch(String text);
-
     /** The game folder in shared storage, or null to keep it in the app's own files. */
     private static native void onStorage(String folder);
 
@@ -617,35 +614,6 @@ public class StarlingActivity extends NativeActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
-    }
-
-    /** The catalog's search box (game/mod_catalog.rs): the answer goes to onCatalogSearch. */
-    public void askCatalogSearch(final String current) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                final EditText search = new EditText(StarlingActivity.this);
-                search.setSingleLine(true);
-                search.setText(current);
-                search.setSelection(search.getText().length());
-                FrameLayout frame = new FrameLayout(StarlingActivity.this);
-                int side = Math.round(20 * getResources().getDisplayMetrics().density);
-                frame.setPadding(side, 0, side, 0);
-                frame.addView(search);
-                new AlertDialog.Builder(StarlingActivity.this,
-                                android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setTitle("Search the catalog")
-                        .setView(frame)
-                        .setPositiveButton("Search", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                onCatalogSearch(search.getText().toString().trim());
-                            }
-                        })
-                        .setNegativeButton("Cancel", null)
-                        .show();
-            }
-        });
     }
 
     /** Mod ids as the player reads them: "voicechat" is Voicechat, two are "A and B". */
