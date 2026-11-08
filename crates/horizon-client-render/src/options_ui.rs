@@ -1237,13 +1237,17 @@ fn set_filtering(s: &mut Settings, anisotropy_bit: i32, filtering: i32) {
 
 /// `Options.preferredGraphicsBackend`'s tooltip: the restart note once the choice differs from
 /// the startup one, the description, and Vulkan's warning.
+/// Android's own rows. A constant: horizon-mixins only reads `format!`, `matches!` and `vec!` in
+/// a function it hooks.
+const ON_A_PHONE: bool = cfg!(target_os = "android");
+
 /// The Options page's entries, with Diagnostics on a phone. Apart from `OptionsUi::layout`:
 /// horizon-mixins refuses to hook a function with a `#[cfg]` in it (E_UNSUPPORTED_CFG).
 fn with_diagnostics<const N: usize>(
     entries: [(&'static str, Option<Page>); N],
 ) -> Vec<(&'static str, Option<Page>)> {
     let mut all = Vec::from(entries);
-    if cfg!(target_os = "android") {
+    if ON_A_PHONE {
         all.push(("starling.diagnostics.title", Some(Page::Diagnostics)));
     }
     all
@@ -4442,7 +4446,7 @@ impl OptionsUi {
                 };
                 if let Some((label, act)) = folder {
                     // Android's way to find mods, resource packs and shader packs.
-                    if cfg!(target_os = "android") && matches!(page, Page::Mods) {
+                    if ON_A_PHONE && matches!(page, Page::Mods) {
                         out.push(button(
                             cx - 258.0,
                             h - 27.0,
