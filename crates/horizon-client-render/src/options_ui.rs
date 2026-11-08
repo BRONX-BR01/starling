@@ -1590,6 +1590,7 @@ enum Act {
     NativeKey(usize, usize),
     NativeButton(usize, usize),
     OpenModFolder,
+    OpenCatalog,
     /// The creative screen with the inventory beside it, or as the game draws it.
     BedrockInventory,
     /// The touch layout editor (phones).
@@ -1723,6 +1724,8 @@ pub enum Event {
     /// Data Packs' Open Pack Folder: create the folder if needed and open it.
     OpenDataPackFolder(std::path::PathBuf),
     OpenModFolder,
+    /// Android: the Mods page's Catalog button (game/mod_catalog.rs).
+    OpenCatalog,
     /// The Shader Packs page opened: list `shaderpacks/` into `shader_packs`.
     ListShaderPacks,
     /// A shader pack or its profile was picked, or the pack turned off: save and apply it.
@@ -4427,6 +4430,16 @@ impl OptionsUi {
                     _ => None,
                 };
                 if let Some((label, act)) = folder {
+                    // Android's way to find mods, resource packs and shader packs.
+                    if cfg!(target_os = "android") && matches!(page, Page::Mods) {
+                        out.push(button(
+                            cx - 258.0,
+                            h - 27.0,
+                            100.0,
+                            tr("Catalog"),
+                            Act::OpenCatalog,
+                        ));
+                    }
                     out.push(button(cx - 154.0, h - 27.0, 150.0, tr(label), act));
                     out.push(button(cx + 4.0, h - 27.0, 150.0, tr("gui.done"), Act::Done));
                 } else {
@@ -5331,6 +5344,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
+                        Act::OpenCatalog => events.push(Event::OpenCatalog),
                         Act::OpenShaderPackFolder => events.push(Event::OpenShaderPackFolder),
                         Act::ShaderResolution => {
                             const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
@@ -6475,6 +6489,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
+                        Act::OpenCatalog => events.push(Event::OpenCatalog),
                         Act::PickShaderPack(i) => {
                             let pick = match i {
                                 Some(i) => s.shader_packs.get(i).map(|p| p.file.clone()),

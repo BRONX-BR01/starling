@@ -54,6 +54,19 @@ extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_onImeHeight
     horizon_client::android::set_ime_height(pixels);
 }
 
+/// `StarlingActivity.onCatalogSearch`, called on the UI thread.
+#[unsafe(no_mangle)]
+extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_onCatalogSearch(
+    mut env: jni::JNIEnv,
+    _class: jni::objects::JClass,
+    text: jni::objects::JString,
+) {
+    let Ok(text) = env.get_string(&text) else {
+        return;
+    };
+    horizon_client::android::set_catalog_search(String::from(text));
+}
+
 /// `TextMirror.onMirrorEdit`, called on the UI thread.
 #[unsafe(no_mangle)]
 extern "system" fn Java_io_github_juanluci_starling_TextMirror_onMirrorEdit(

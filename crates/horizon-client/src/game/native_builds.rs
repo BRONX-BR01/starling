@@ -140,7 +140,7 @@ fn came_from(name: &str) -> Option<String> {
 }
 
 /// `text` in lines that fit `width`.
-fn wrapped(ui: &Ui<'_>, face: Face, size: f32, width: f32, text: &str) -> Vec<String> {
+pub(super) fn wrapped(ui: &Ui<'_>, face: Face, size: f32, width: f32, text: &str) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in text.split(' ') {
@@ -284,7 +284,7 @@ fn download(build: &Build, version: &str, shared: &Mutex<Shared>) -> Result<Stri
 }
 
 /// The UI's scale for a window of `w` x `h` pixels (as `Ui::new`).
-fn density(w: f32, h: f32) -> f32 {
+pub(super) fn density(w: f32, h: f32) -> f32 {
     (w / 1040.0).min(h / 700.0).clamp(1.0, 4.0)
 }
 

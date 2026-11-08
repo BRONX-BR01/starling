@@ -828,7 +828,7 @@ impl Loading {
                     &mut self.menu.narrator_toast,
                 ),
                 // Mods' settings pages open only in a running game.
-                Event::NativeSettings(_) | Event::NativeButton(..) => {}
+                Event::NativeSettings(_) | Event::NativeButton(..) | Event::OpenCatalog => {}
                 // Options.createSoundSliderOptionInstance: the preview plays without a level,
                 // once the menu's sound output is up.
                 Event::Volume(source, volume) => {

@@ -319,6 +319,38 @@ pub fn ask_build_server(current: &str) {
     });
 }
 
+/// The dialog that asks what to search the catalog for (StarlingActivity.askCatalogSearch); its
+/// answer comes back through `set_catalog_search`.
+pub fn ask_catalog_search(current: &str) {
+    with_activity(|env, activity| {
+        let current = env.new_string(current)?;
+        env.call_method(
+            activity,
+            "askCatalogSearch",
+            "(Ljava/lang/String;)V",
+            &[jni::objects::JValue::Object(&current)],
+        )
+        .map(drop)
+    });
+}
+
+static CATALOG_SEARCH: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// `StarlingActivity.onCatalogSearch`, called on the UI thread.
+pub fn set_catalog_search(text: String) {
+    *CATALOG_SEARCH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(text);
+}
+
+/// What the player typed in the catalog's search dialog since the last look.
+pub fn take_catalog_search() -> Option<String> {
+    CATALOG_SEARCH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+}
+
 /// Put the on-screen keyboard away, however it was shown.
 pub fn hide_keyboard() {
     with_activity(|env, activity| {

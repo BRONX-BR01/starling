@@ -442,6 +442,16 @@ const STOPPED: &str = "Doesn't run any more: needs a native port";
 const NOTICE_SEEN: &str = ".native-notice";
 
 impl Game<'_> {
+    /// A native mod the catalog just put in the folder: its row on the Mods page, with Compile.
+    #[cfg(target_os = "android")]
+    pub(super) fn list_new_native_mods(&mut self) {
+        let built = super::native_builds::running_build_info().unwrap_or_default();
+        let native_dir = Self::game_dir().join(mod_list::NATIVE_DIR);
+        let unbuilt = not_built(&native_dir, &built, &self.settings.mods.installed);
+        self.settings.mods.installed.extend(unbuilt);
+        self.offer_compile();
+    }
+
     /// Lists the installed mods on the Mods page. Content mods load with the resources
     /// (`content_root`); native ones are built into the game (`native_hooks.rs`). WebAssembly code
     /// mods don't run any more: their rows say so, and the player hears it once in the chat

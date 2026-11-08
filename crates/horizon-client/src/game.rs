@@ -210,6 +210,8 @@ mod mob_looting;
 mod mob_sounds;
 mod mod_api_host;
 mod mod_assets;
+#[cfg(target_os = "android")]
+mod mod_catalog;
 mod mods;
 mod mount_menu;
 mod mounts;
@@ -2947,6 +2949,8 @@ struct Game<'a> {
     update_offer: update_offer::UpdateOffer,
     #[cfg(target_os = "android")]
     native_builds: native_builds::NativeBuilds,
+    #[cfg(target_os = "android")]
+    catalog: mod_catalog::Catalog,
     /// Bedrock Inventory with the pointer on its inventory window: the item tab the other window
     /// shows (the creative screen's selected tab is then the Survival Inventory, so every click
     /// works as it does there).
@@ -8253,6 +8257,7 @@ impl Game<'_> {
     fn draw_phone_offers(&mut self, batch: &mut HudBatch) {
         self.draw_files_offer(batch);
         self.draw_update_offer(batch);
+        self.draw_catalog(batch);
         self.draw_native_builds(batch);
     }
     #[cfg(not(target_os = "android"))]
@@ -18795,6 +18800,7 @@ impl Game<'_> {
             self.poll_files_offer();
             self.poll_update_offer();
             self.poll_native_builds();
+            self.poll_catalog();
         }
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
         self.pause_if_inactive();
@@ -19296,6 +19302,8 @@ impl<'a> Game<'a> {
             update_offer: Default::default(),
             #[cfg(target_os = "android")]
             native_builds: Default::default(),
+            #[cfg(target_os = "android")]
+            catalog: Default::default(),
             bedrock_items: None,
             bedrock_held: false,
             creative_hovered: None,
