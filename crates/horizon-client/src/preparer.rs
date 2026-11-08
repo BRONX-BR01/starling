@@ -148,6 +148,9 @@ fn run(resources: &Path) -> Result<(), String> {
             ),
         ],
     });
+    if let Some(limit) = horizon_prepare::java::max_heap_mib() {
+        log::info!("Horizon: 32-bit preparation Java heap limit: {limit} MiB");
+    }
     *shared() = Stage::Preparing("Starting Java".into());
     let made = horizon_prepare::prepare(
         &horizon_prepare::Options {

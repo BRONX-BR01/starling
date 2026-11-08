@@ -80,6 +80,9 @@ submit builds or download incompatible libraries.
 
 On 32-bit Android, preparation runs its lanes sequentially and caps each Java
 heap at 512 MiB, including the persistent exporters and data generator.
+Devices below 1.5 GiB of RAM use 384 MiB, also the fallback when total RAM cannot
+be read. The selected limit is logged; it leaves more room for Android and the
+installer's renderer.
 Smaller requested heaps stay smaller. This bounds JVM heap reservations, not
 total Java/Rust/native memory; very low-memory devices can still run out of RAM.
 
