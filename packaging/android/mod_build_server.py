@@ -175,9 +175,12 @@ def submit(version, body, client):
 def why_failed(log):
     """What a player can read of a failed build: the first errors, without the paths."""
     text = log.read_text(errors="replace")
-    codes = re.findall(r'"code": "(E_[A-Z_]+)",\s*"message": "([^"]*)"', text)
-    if codes:
-        return f"The mod does not fit this game ({codes[0][0]}): {codes[0][1]}"[:600]
+    code = re.search(r'"code": "(E_[A-Z_]+)",\s*"message": "([^"]*)"', text)
+    if code:
+        # All of a player's mods build together: the name says which to take out.
+        named = re.match(r'(?:,\s*"file": "[^"]*")?,\s*"mod_id": "([a-z0-9_-]+)"', text[code.end() :])
+        who = f"The mod {named[1]}" if named else "The mod"
+        return f"{who} does not fit this game ({code[1]}): {code[2]}"[:600]
     errors = [l for l in text.splitlines() if l.startswith("error")]
     if errors:
         lines = [l[:160] for l in errors[:4]]
