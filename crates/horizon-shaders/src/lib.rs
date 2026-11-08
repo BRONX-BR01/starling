@@ -36,10 +36,15 @@ mod textures;
 mod translate;
 mod values;
 
-pub use biomes::{category as biome_category, precipitation as biome_precipitation};
+pub use biomes::{
+    category as biome_category, pack_id as biome_pack_id, precipitation as biome_precipitation,
+};
 pub use block_ids::BlockIds;
 pub use condition::eval_condition;
-pub use config::{BUFFERS, Buffer, Config, Format, Kind, Shadow, buffer_index, draw_buffers};
+pub use config::{
+    BUFFERS, Buffer, Config, Format, HALF_LIVES, Kind, SHADOW_COLORS, Shadow, buffer_index,
+    draw_buffers, shadow_color,
+};
 pub use core_shader::{BLOCKS, CoreProgram, Glue, SAMPLERS, translate_core};
 pub use custom::{Custom, Val};
 pub use discover::{Found, discover};
@@ -47,13 +52,20 @@ pub use lang::Lang;
 pub use macros::{MC_VERSION, Macros, RENDER_STAGES, render_stage};
 pub use options::{
     PackOption, apply as apply_options, chosen_file, chosen_text, options, parse_chosen,
-    read_properties, switches_on, value_options, with_options,
+    properties_macros, read_properties, switches_on, value_options, with_options,
 };
 pub use pack::{Pack, PackError};
 pub use post::{
     Blend, BufferObject, BufferSize, CELESTIAL_BLEND, CustomImage, Factor, GameInputs, Group,
+<<<<<<< HEAD
     ImageSize, Post, PostProgram, ShadowCulling, Skipped, TRANSLUCENT_BLEND, dimension_folder,
     load_post,
+||||||| 31f83499b6
+    ImageSize, Post, PostProgram, ShadowCulling, TRANSLUCENT_BLEND, dimension_folder, load_post,
+=======
+    ImageSize, Post, PostProgram, STARS_BLEND, ShadowCulling, TRANSLUCENT_BLEND, dimension_folder,
+    dimension_folder_named, load_post,
+>>>>>>> c98a51a664
 };
 pub use preprocess::{Diagnostic, Origin, Preprocessed, preprocess};
 pub use properties::{Entry, Note, Properties};

@@ -3,8 +3,11 @@
 //! options. horizon-client re-exports each module under its old path
 //! (`horizon_client::keybinds`, ...).
 #![forbid(unsafe_code)]
+pub mod actions;
 pub mod clipboard;
 pub mod gamepad;
+pub mod gameplay_guide;
+pub mod held;
 pub mod input;
 pub mod input_mode;
 pub mod interaction_input;
@@ -13,4 +16,5 @@ pub mod keybinds;
 pub mod keymapping;
 pub mod modifiers;
 pub mod mouse;
+pub mod snap;
 pub mod window;

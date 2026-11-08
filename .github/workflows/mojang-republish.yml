@@ -21,12 +21,19 @@ concurrency:
 
 jobs:
   check:
+<<<<<<< HEAD
     # Horizon's own repository files these issues; a fork would only repeat them.
     if: github.repository == 'horizon-rust/horizon'
     runs-on: ubuntu-latest
+||||||| 31f83499b6
+    runs-on: ubuntu-latest
+=======
+    # One of our small runners (label horizon-light, docs/ci-runners.md): main's script, Mojang's public manifest.
+    runs-on: ${{ vars.SELF_HOSTED_CI != 'off' && fromJSON('["self-hosted", "linux", "horizon-light"]') || 'ubuntu-latest' }}
+>>>>>>> c98a51a664
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check the manifest
         env:
           GH_TOKEN: ${{ github.token }}

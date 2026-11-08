@@ -94,6 +94,18 @@ pub(super) enum BlockInteraction {
     DestroyWithDecay,
 }
 
+/// Properties of the direct entity passed to `ServerLevel.explode`.
+#[derive(Clone, Copy, Default)]
+pub(super) struct ExplosionSource {
+    silent: bool,
+}
+impl ExplosionSource {
+    pub(super) fn with_silence(mut self, silent: bool) -> Self {
+        self.silent = silent;
+        self
+    }
+}
+
 /// `ServerExplosion.hurtEntities`: an entity is hurt when its position is
 /// within the blast's diameter of the centre.
 pub(super) fn blast_reaches(center: [f64; 3], diameter: f64, at: [f64; 3]) -> bool {
@@ -244,6 +256,7 @@ impl Game<'_> {
             context: CollisionContext::for_entity(
                 CollisionEntity {
                     identity: EntityIdentity(0),
+                    kind: horizon_world::collision_context::EntityContextKind::None,
                     y: min[1],
                     descending: false,
                     main_hand: Some(CollisionItem::EMPTY),
@@ -454,14 +467,14 @@ impl Game<'_> {
             self.note_named_attacker(damage_type, *id, name.clone());
         }
         if let Some(p) = self.player.as_mut()
-            && let Some(id) = self.motion.health.damage.id(damage_type)
+            && let Some(id) = self.health_resources.damage.id(damage_type)
         {
             // Creative players are invulnerable to explosions.
             if !creative
                 && !spectator
                 && hurtable
                 && let Ok(o) = p.hurt_caused_by(
-                    &self.motion.health,
+                    &self.health_resources,
                     self.world.health_rules,
                     id,
                     amount,
@@ -490,7 +503,9 @@ impl Game<'_> {
                     p.velocity.z + push[2],
                 );
                 if !(creative && flying) {
-                    pushed = (!p.health.sync_velocity).then_some(push);
+                    // ServerExplosion.hitPlayers: the packet carries the push even when the hurt
+                    // also marks the velocity (its motion packet follows).
+                    pushed = Some(push);
                 }
             }
         }
@@ -631,6 +646,7 @@ impl Game<'_> {
         let (items_len, orbs_len) = (self.dropped.len(), self.orbs.len());
         let (mut items_kept, mut orbs_kept) = (0, 0);
         let (mut boats_gone, mut carts_gone) = (0, 0);
+        let mut destroyed_contents = Vec::new();
         for handle in self.entity_handles() {
             let handle = match handle {
                 EntityHandle::Boat(i) => EntityHandle::Boat(i - boats_gone),
@@ -664,16 +680,41 @@ impl Game<'_> {
                                 .filter(|&o| o != m.id)
                                 .map(horizon_client::mobs::Who::Mob),
                             from: Some(center),
+                            attacker_species: cause,
                         };
                         // `EXPLOSION_KNOCKBACK_RESISTANCE`, not `KNOCKBACK_RESISTANCE`:
                         // its base is 0 for every mob type, so iron golems and
                         // ravagers are pushed.
                         hurt_mob(m, hurtable, cause, (amount, source));
+                        // Enderman.hurtServer teleports inside the hurt, before
+                        // the push (the mob order stays as it was).
+                        if let Err(e) = self.settle_hurt_teleports() {
+                            log::warn!("Horizon: explosion: enderman teleport: {e}");
+                        }
                     }
-                    // 5 health, destroyed by the explosion damage (nether stars resist).
+                    // `ItemEntity.hurtServer`: the damage comes off `Health`
+                    // (5 to start) in f32 and the item is destroyed at zero, so
+                    // a survivor keeps the health the blast left it. The nether
+                    // star is `ItemStack.canBeHurtBy`'s explosion exception, and
+                    // a blast with a source entity under `mobGriefing` off never
+                    // reaches here (`items_ignore`).
                     EntityHandle::Item(i) => {
-                        destroyed = &*self.dropped[i].stack.item != "minecraft:nether_star"
-                            && amount >= 5.0;
+                        let item = &mut self.dropped[i];
+                        if &*item.stack.item != "minecraft:nether_star" {
+                            item.health = (item.health as f32 - amount) as i32;
+                            destroyed = item.health <= 0;
+                            if destroyed {
+                                let at = item.position;
+                                // Health was already reduced above. Run the shared
+                                // onDestroyed path without applying damage twice.
+                                destroyed_contents.extend(
+                                    item.hurt(0)
+                                        .unwrap_or_default()
+                                        .into_iter()
+                                        .map(|stack| (stack, at)),
+                                );
+                            }
+                        }
                     }
                     // `ExperienceOrb.hurtServer` takes the damage off their 5 health.
                     EntityHandle::Orb(i) => {
@@ -733,6 +774,9 @@ impl Game<'_> {
         }
         self.dropped.drain(items_kept..items_len);
         self.orbs.drain(orbs_kept..orbs_len);
+        // The original target walk is finished: released contents cannot be
+        // hurt or pushed by the explosion that destroyed their container.
+        self.spawn_destroyed_contents(destroyed_contents);
         self.native_leaves_flush();
         // Frames, paintings, cushions and armour stands last: vanilla lists
         // the entities in reach before hurting any, so the items they drop
@@ -848,11 +892,29 @@ impl Game<'_> {
         interaction: BlockInteraction,
         fire: bool,
     ) -> Result<()> {
+        self.server_explode_from(
+            center,
+            radius,
+            interaction,
+            fire,
+            ExplosionSource::default(),
+        )
+    }
+    /// `ServerLevel.explode`: only the direct source's `isSilent` suppresses
+    /// the sound; terrain, entity damage and the visual packet are unchanged.
+    pub(super) fn server_explode_from(
+        &mut self,
+        center: [f64; 3],
+        radius: f32,
+        interaction: BlockInteraction,
+        fire: bool,
+        source: ExplosionSource,
+    ) -> Result<()> {
         let damage_type = super::creatures::damage_type(
             horizon_client::mobs::DamageKind::Explosion,
             self.blast_attacker().is_some(),
         );
-        self.server_explode_as(center, radius, interaction, fire, damage_type, None)
+        self.server_explode_as_source(center, radius, interaction, fire, damage_type, None, source)
     }
     /// `server_explode` with the damage type the player takes and a block
     /// whose explosion resistance the damage calculator overrides.
@@ -864,6 +926,26 @@ impl Game<'_> {
         fire: bool,
         damage_type: &str,
         resists: Option<([i32; 3], f32)>,
+    ) -> Result<()> {
+        self.server_explode_as_source(
+            center,
+            radius,
+            interaction,
+            fire,
+            damage_type,
+            resists,
+            ExplosionSource::default(),
+        )
+    }
+    fn server_explode_as_source(
+        &mut self,
+        center: [f64; 3],
+        radius: f32,
+        interaction: BlockInteraction,
+        fire: bool,
+        damage_type: &str,
+        resists: Option<([i32; 3], f32)>,
+        source: ExplosionSource,
     ) -> Result<()> {
         if self.serving.is_some() || self.options.dedicated.is_some() {
             self.native_explosion_prime(center, radius);
@@ -921,9 +1003,11 @@ impl Game<'_> {
                 }
             }
         }
-        let pitch = (1.0 + (client_float() - client_float()) * 0.2) * 0.7;
-        self.audio
-            .play("minecraft:entity.generic.explode", Some(center), 4.0, pitch);
+        if !source.silent {
+            let pitch = (1.0 + (client_float() - client_float()) * 0.2) * 0.7;
+            self.audio
+                .play("minecraft:entity.generic.explode", Some(center), 4.0, pitch);
+        }
         // ServerLevel.explode sends toBlow.size() whatever the interaction, and
         // `ServerExplosion.isSmall` also covers an explosion that keeps blocks.
         let block_count = targets.len();
@@ -1044,6 +1128,70 @@ impl Game<'_> {
     }
 }
 
+#[cfg(test)]
+impl Game<'_> {
+    /// Exercise the real explosion entity walk on an empty, headless world.
+    pub(super) fn run_explosion_items_fixture(
+        &mut self,
+        directory: &std::path::Path,
+    ) -> Result<()> {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            stack: String,
+            health: i32,
+            distances: Vec<f64>,
+            #[serde(default)]
+            sibling: bool,
+        }
+        let cases: Vec<Case> =
+            serde_json::from_str(&std::fs::read_to_string(directory.join("inputs.json"))?)?;
+        let mut output = Vec::new();
+        for case in cases {
+            self.dropped.clear();
+            let stack = horizon_client::item_data::parse_stack(&case.stack)?
+                .ok_or("empty fixture stack")?;
+            self.spawn_item(stack, [0.0, 100.0, 0.0], [0.0; 3], 0);
+            self.dropped[0].health = case.health;
+            let original = self.dropped[0].id;
+            if case.sibling {
+                self.spawn_item(
+                    ItemStack::new("minecraft:dirt", 1),
+                    [0.0, 100.0, 0.0],
+                    [0.0; 3],
+                    0,
+                );
+            }
+            let mut steps = Vec::new();
+            for distance in case.distances {
+                for item in &mut self.dropped {
+                    item.position = Vec3::new(distance, 100.0, 0.0);
+                }
+                self.explosion_hurt_entities(
+                    [0.0, 100.0, 0.0],
+                    1.0,
+                    "minecraft:explosion",
+                    BlockInteraction::Destroy,
+                    &[],
+                );
+                let mut remaining: Vec<_> = self
+                    .dropped
+                    .iter()
+                    .map(|item| (item.stack.item.to_string(), item.stack.count, item.health))
+                    .collect();
+                remaining.sort();
+                steps.push(serde_json::json!(remaining));
+                if !self.dropped.iter().any(|item| item.id == original) {
+                    break;
+                }
+            }
+            output.push(serde_json::json!({"name": case.name, "steps": steps}));
+        }
+        std::fs::write(directory.join("rust.json"), serde_json::to_vec(&output)?)?;
+        Ok(())
+    }
+}
+
 /// `ServerExplosion.addOrAppendStack`: `ItemEntity.areMergable` (same item and
 /// components, combined count within the item's max stack size), then
 /// `ItemEntity.merge(.., 16)`.
@@ -1084,6 +1232,16 @@ fn blast_resistance(base: f32, cap: Option<f32>, wither_immune: bool) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires prepared resources; tools/test_explosion_items_parity.py"]
+    fn explosion_items_parity_fixture() {
+        let directory = std::env::var_os("HORIZON_EXPLOSION_ITEMS_FIXTURE")
+            .expect("set HORIZON_EXPLOSION_ITEMS_FIXTURE to the fixture directory");
+        let mut game = crate::game::native_machines::tests::server_game();
+        game.run_explosion_items_fixture(std::path::Path::new(&directory))
+            .unwrap();
+    }
 
     /// A dangerous wither skull's blast treats a block as at most 0.8 harder to
     /// break, but a `#wither_immune` block keeps its own resistance and any
@@ -1141,6 +1299,7 @@ mod tests {
             knockback_resistance: 0.0,
             jump_strength: 0.42,
             attributes: Default::default(),
+            item_stack_limits: Default::default(),
             gravity: 0.08,
             safe_fall_distance: 3.0,
             fall_damage_multiplier: 1.0,
