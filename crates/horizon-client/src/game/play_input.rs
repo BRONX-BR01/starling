@@ -52,7 +52,8 @@ impl Game<'_> {
     }
     pub(super) fn sync_toggle(&mut self, slot: usize) {
         let key = [KeyCode::ShiftLeft, KeyCode::ControlLeft][slot];
-        if self.toggles.is_down(slot) {
+        let touch = slot == 0 && self.touch_sneaking();
+        if self.toggles.is_down(slot) || touch {
             self.keys.insert(key);
         } else {
             self.keys.remove(&key);

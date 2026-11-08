@@ -23,16 +23,37 @@ impl Game<'_> {
     pub(super) fn apply_mouse_look(&mut self) {
         let look = self.look_options();
         let time = self.started.elapsed().as_secs_f64();
-        let pointer = self.captured || self.agent_pointer;
+        // The touch controls turn the view as a grabbed pointer does (game/touch.rs).
+        let pointer = self.captured || self.agent_pointer || self.touch_turns();
         let grabbed = pointer
             && self.screen == Screen::Playing
             && (self.player.is_some() || self.studio_freecam.active);
-        let active = self.focused || self.agent_pointer;
+        let active = self.focused || self.agent_pointer || self.touch_turns();
         if let Some((xo, yo)) = self
             .mouse
             .handle_accumulated_movement(time, active, grabbed, look)
         {
             self.look_turn(xo, yo);
+        }
+    }
+    /// The mouse's raw motion (`DeviceEvent::MouseMotion`, or Android's from the input hook):
+    /// MouseHandler.onMove with the pointer grabbed, applied once per frame.
+    pub(super) fn grabbed_mouse_motion(&mut self, x: f64, y: f64) {
+        // A composited view renders offscreen but its keyboard/mouse owner still
+        // controls a visible native window. A headless offscreen run never does.
+        if self.pending_save.is_none()
+            && self.captured
+            && self.focused
+            && self.keyboard_mouse
+            && (!self.options.offscreen || self.split_window)
+            && self.screen == Screen::Playing
+        {
+            self.note_input(
+                input_trace::InputOrigin::User,
+                input_trace::TraceKind::Motion { x, y },
+            );
+            self.mouse.on_move(0.0, 0.0, x, y, true, true);
+            self.last_input = Instant::now();
         }
     }
     /// A look from any device, in `Entity.turn` units: the tutorial's "look
@@ -185,16 +206,35 @@ impl Game<'_> {
             || window.inner_size().into(),
             |r| [r.config.width, r.config.height],
         );
+        let scale = HudBatch::new(size).scale;
+        let was_grabbed = self.captured;
+        // Android grabs the mouse as the activity's pointer capture, which comes a moment later
+        // (a loss the system makes comes back: game/input_mode.rs). Only a mouse player asks:
+        // a finger or a controller plays without it.
+        #[cfg(target_os = "android")]
+        {
+            if capture {
+                self.mouse.set_ignore_first_move();
+            }
+            self.captured =
+                capture && self.input_mode == horizon_client::input_mode::InputMode::KeyboardMouse;
+            self.capture_mode = None;
+            if self.captured != was_grabbed {
+                crate::android::capture_pointer(self.captured);
+            }
+        }
+        #[cfg(not(target_os = "android"))]
         let [vx, vy] = self.view_at.map(f64::from);
+        #[cfg(not(target_os = "android"))]
         let centre = winit::dpi::PhysicalPosition::new(
             vx + f64::from(size[0]) / 2.0,
             vy + f64::from(size[1]) / 2.0,
         );
+        #[cfg(not(target_os = "android"))]
         let warp = |window: &Window| {
             let _ = window.set_cursor_position(centre);
         };
-        let scale = HudBatch::new(size).scale;
-        let was_grabbed = self.captured;
+        #[cfg(not(target_os = "android"))]
         if self.options.offscreen && !self.split_window {
             // A genuinely hidden `--offscreen` run leaves the system pointer where
             // the person at the computer has it. Its grab is internal (an

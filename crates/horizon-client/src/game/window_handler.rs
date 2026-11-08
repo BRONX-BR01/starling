@@ -21,6 +21,25 @@ impl Game<'_> {
         if !ours {
             return;
         }
+        // The focus goes first when the game leaves the screen (home, the recent apps, a call),
+        // before the window, and the system may end the process from then on: the world is saved
+        // at once, as Bedrock does.
+        #[cfg(target_os = "android")]
+        if let WindowEvent::Focused(focused) = &event {
+            if *focused {
+                self.saved_for_background = false;
+            } else {
+                self.save_for_background();
+            }
+        }
+        if self.touch_event(event_loop, id, &event) {
+            return;
+        }
+        if let WindowEvent::KeyboardInput { event, .. } = &event
+            && self.touch_back_key(event)
+        {
+            return;
+        }
         follow_keymap(&mut event);
         // MacosUtil.setCtrlClickEmulatesRightClick: Control + left click is a right click.
         if let WindowEvent::MouseInput { state, button, .. } = &mut event
@@ -157,11 +176,35 @@ impl Game<'_> {
         if self.pending_save.is_some() {
             return;
         }
+        // The mouse and the keyboard as Android's input hook saw them (game/input_mode.rs).
+        #[cfg(target_os = "android")]
+        self.android_input_frame(event_loop);
+        self.touch_frame(event_loop);
+        self.poll_imports();
+        if let Some(folder) = &self.content_record
+            && world_content::record(folder, &world_content::running())
+        {
+            self.content_record = None;
+        }
+        #[cfg(target_os = "android")]
+        {
+            self.poll_files_offer();
+            self.poll_update_offer();
+            self.poll_native_builds();
+        }
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
         self.pause_if_inactive();
         if self.options.frames.is_some() && self.started.elapsed() > self.options.timeout {
             self.error = Some("frame-limited run timed out".into());
             event_loop.exit();
+            return;
+        }
+        if self.renderer.as_ref().is_some_and(|r| r.detached) {
+            // No window to draw in (Android in the background): wake now and then for the
+            // control socket instead of spinning.
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(100),
+            ));
             return;
         }
         if let Some(w) = &self.window {
@@ -200,7 +243,18 @@ impl Game<'_> {
 
 impl ApplicationHandler for Game<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if let Some(window) = &self.window {
+            // Back from the background (Android): the same window, a new native surface.
+            let size = window.inner_size();
+            if let Some(r) = &mut self.renderer
+                && let Err(e) = r.resume(size.width, size.height)
+            {
+                log::warn!("Horizon: the window's surface did not come back: {e}");
+            }
+            self.audio.resume_output();
+            window.request_redraw();
+            // The next time it goes, it saves again.
+            self.saved_for_background = false;
             return;
         }
         debug_keys::warm_debug_cpu();
@@ -282,17 +336,28 @@ impl ApplicationHandler for Game<'_> {
             if x != 0.0 || y != 0.0 {
                 self.pad_yield_input(event_loop);
             }
-            // MouseHandler.onMove with the pointer grabbed; applied once per frame.
-            self.note_input(
-                input_trace::InputOrigin::User,
-                input_trace::TraceKind::Motion { x, y },
-            );
-            self.mouse.on_move(0.0, 0.0, x, y, true, true);
-            self.last_input = Instant::now();
+            self.grabbed_mouse_motion(x, y);
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.idle(event_loop);
+    }
+    /// Android took the window away (the app went to the background, the screen went off): its
+    /// surface goes now, the sound stops, and the world is saved unless losing the focus saved it
+    /// already, since the system may end the process at any time from here on. Android's UI
+    /// thread waits for this to return, so nothing here waits for the world's writes.
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        #[cfg(target_os = "android")]
+        {
+            crate::diagnostics::heartbeat("suspended", || serde_json::json!({}));
+            crate::diagnostics::request_flush();
+        }
+        if let Some(r) = &mut self.renderer {
+            r.suspend();
+        }
+        self.audio.suspend_output();
+        self.touch_release_all();
+        self.save_for_background();
     }
     /// The application is ending. On macOS, Quit (Cmd+Q) ends it through
     /// applicationWillTerminate without a CloseRequested; vanilla's GLFW

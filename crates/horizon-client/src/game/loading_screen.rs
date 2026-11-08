@@ -3,6 +3,19 @@
 //! an unclean last exit, a fullscreen the window system could not show.
 use super::*;
 
+/// The event loop; on Android, the activity's (horizon-android).
+pub(super) fn event_loop() -> Result<EventLoop<()>> {
+    #[cfg(target_os = "android")]
+    {
+        use winit::platform::android::EventLoopBuilderExtAndroid;
+        Ok(EventLoop::builder()
+            .with_android_app(crate::android::android_app())
+            .build()?)
+    }
+    #[cfg(not(target_os = "android"))]
+    Ok(EventLoop::new()?)
+}
+
 /// The window system ended the event loop with a failure (on Linux, a compositor dropping the
 /// connection after a protocol error) while fullscreen was on: the next start opens windowed, so a
 /// fullscreen the system can't show doesn't crash every launch (#2904).
@@ -29,7 +42,7 @@ pub(super) fn run_event_loop(mut game: Game<'_>) -> Result<()> {
         return game.error.take().map_or(Ok(()), Err);
     }
     let mut split = split::Split::new(game);
-    let result = EventLoop::new()?.run_app(&mut split);
+    let result = event_loop()?.run_app(&mut split);
     game = split.host;
     narrator::stop();
     leave_fullscreen_after(&result, &mut game.settings);
@@ -71,6 +84,24 @@ pub(super) struct Loading {
     pub(super) ui_at: Option<Instant>,
     pub(super) title_drawn: bool,
     pub(super) menu: startup_menu::StartupMenu,
+    /// Why the resources did not load, kept on screen instead of quitting where no terminal
+    /// shows the error (Android).
+    pub(super) failure: Option<String>,
+    /// Android: the game set up on the phone in place of that failure (game/setup.rs).
+    pub(super) setup: setup::Setup,
+    /// The finger acting as the mouse (horizon_client::touch::TouchPointer).
+    pub(super) touch_pointer: horizon_client::touch::TouchPointer,
+    /// Files handed to the game from outside: prepared resources end the failure.
+    pub(super) imports: imports::Imports,
+    /// The sound output, opened once the first frame is up so the menu clicks before the game
+    /// loads (Game takes it over at the handoff).
+    pub(super) audio: Option<Audio>,
+    /// The sound events, read on a thread of their own from the start.
+    pub(super) sound_registry: Option<JoinHandle<horizon_client::sound_events::SoundRegistry>>,
+    /// The window is in the background (Android): the game waits for it to take over, since
+    /// its renderer needs the window's surface (one asked for meanwhile, as a screen recorder's
+    /// prompt over the app, ended the start).
+    pub(super) suspended: bool,
     pub(super) error: Option<Box<dyn std::error::Error>>,
 }
 /// How long the handoff waits for the first title frame before building the
@@ -86,7 +117,16 @@ impl Loading {
             || self.ui_at.is_none_or(|at| at.elapsed() >= TITLE_FRAME_WAIT)
     }
     pub(super) fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        self.suspended = false;
+        if let Some(window) = &self.window {
+            // Back from the background (Android), as Game::resumed.
+            let size = window.inner_size();
+            if let Some(r) = &mut self.renderer
+                && let Err(e) = r.resume(size.width, size.height)
+            {
+                log::warn!("Horizon: the window's surface did not come back: {e}");
+            }
+            window.request_redraw();
             return;
         }
         // The Window constructor: created fullscreen when options.txt or --fullscreen says so.
@@ -177,6 +217,20 @@ impl Loading {
         horizon_client::hud::GUI_SCALE.store(self.settings.gui_scale, Ordering::Relaxed);
         self.window = Some(window);
     }
+    /// The window is going away (Android): its surface goes with it, and the log is flushed
+    /// before the system may end the process.
+    fn suspended(&mut self) {
+        #[cfg(target_os = "android")]
+        {
+            crate::diagnostics::heartbeat("suspended", || serde_json::json!({}));
+            crate::diagnostics::request_flush();
+        }
+        self.suspended = true;
+        if let Some(r) = &mut self.renderer {
+            r.suspend();
+        }
+        horizon_client::logging::flush();
+    }
     pub(super) fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -186,10 +240,52 @@ impl Loading {
         if self.window.as_ref().is_none_or(|w| w.id() != id) {
             return;
         }
+        if self.menu_touch_editor_event(&event) {
+            return;
+        }
+        if let WindowEvent::Touch(touch) = &event
+            && self.credits_touch(touch)
+        {
+            return;
+        }
+        // The failure screen: the setup's buttons (Android; its settings are the menu's), else a
+        // tap picks the prepared resources to import.
+        if self.failure.is_some()
+            && !self.menu.options_open
+            && let WindowEvent::Touch(touch) = &event
+        {
+            if horizon_client::platform::registered() {
+                self.setup_touch(touch);
+            } else if touch.phase == winit::event::TouchPhase::Ended
+                && !horizon_client::platform::pick_file()
+            {
+                log::warn!("Horizon: no file picker to import resources with");
+            }
+            return;
+        }
         follow_keymap(&mut event);
-        if let Err(error) = self.menu_event(event_loop, event) {
-            self.error = Some(error);
-            event_loop.exit();
+        let events = match &event {
+            WindowEvent::Touch(touch) => {
+                let size = self.window.as_ref().map_or([1, 1], |w| {
+                    let s = w.inner_size();
+                    [s.width, s.height]
+                });
+                let slop = horizon_client::touch::slop(size[0] as f32, size[1] as f32);
+                // Lists follow the finger one to one at this GUI scale.
+                self.touch_pointer.set_gui_scale(
+                    HudBatch::new(size).scale,
+                    self.settings.mouse_wheel_sensitivity,
+                );
+                self.touch_pointer.event(touch, slop, Instant::now())
+            }
+            _ => vec![event],
+        };
+        for event in events {
+            if let Err(error) = self.menu_event(event_loop, event) {
+                self.error = Some(error);
+                event_loop.exit();
+                return;
+            }
         }
     }
     /// The menu bundle arrived: rebuild the loading screen with the real atlas
@@ -201,6 +297,7 @@ impl Loading {
         );
         self.menu.set_root(root, &self.settings);
         self.gui = Some(gui);
+        self.setup.starting = false;
         self.title_drawn = false;
         horizon_client::ui_theme::reset_atlas();
         self.apply_menu_settings();
@@ -242,9 +339,41 @@ impl Loading {
             event_loop.exit();
             return;
         }
+        if self.failure.is_some() {
+            // Prepared resources handed in (Android's "Open with" or the picker): load again.
+            if self.imports.poll(&self.vanilla_root)
+                == Some(horizon_client::import::Kind::Resources)
+                && let Err(e) = self.retry()
+            {
+                self.failure = Some(e.to_string());
+            }
+            self.play_import_sounds();
+            if self.failure.is_some() && horizon_client::platform::registered() {
+                self.poll_setup();
+            }
+            if let Some(w) = &self.window {
+                w.request_redraw();
+            }
+            // The import banner moves: every frame while it shows.
+            let frame = if self.imports.animating() {
+                Duration::from_millis(16)
+            } else {
+                self.setup
+                    .frame(self.menu.options_open || self.menu_touch_editing())
+            };
+            event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + frame));
+            return;
+        }
         if let Err(error) = self.poll_menu_resources() {
             self.error = Some(error);
             event_loop.exit();
+            return;
+        }
+        if self.renderer.as_ref().is_some_and(|r| r.detached) {
+            // In the background (Android), as Game::about_to_wait.
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + Duration::from_millis(100),
+            ));
             return;
         }
         self.poll_menu_realms(event_loop);
@@ -257,6 +386,12 @@ impl Loading {
         }
         event_loop.set_control_flow(ControlFlow::Poll);
     }
+        let diagnostic_started = Instant::now();
+        let diagnostic_elapsed = self
+            .menu
+            .diagnostic_frame
+            .replace(diagnostic_started)
+            .map(|at| diagnostic_started.duration_since(at).as_secs_f32() * 1000.0);
     pub(super) fn draw(&mut self) {
         let Some(size) = self
             .renderer
@@ -266,13 +401,29 @@ impl Loading {
             return;
         };
         let mut batch = HudBatch::new(size);
-        self.draw_menu(&mut batch);
+        if self.failure.is_some() && self.menu.options_open {
+            // The setup's settings: the menu's own screens, in the skin it put on.
+            self.draw_menu(&mut batch);
+        } else if let Some(failure) = &self.failure {
+            if horizon_client::platform::registered() {
+                self.draw_setup(&mut batch, failure);
+            } else {
+                self.draw_failure(&mut batch, failure);
+            }
+        } else if self.setup.starting {
+            // Prepared: the setup stays until the menu's own font has come.
+            self.draw_setup(&mut batch, "");
+        } else {
+            self.draw_menu(&mut batch);
+        }
+        self.draw_menu_touch_editor(&mut batch, size);
         self.menu.frame_drawn((batch.width, batch.height));
         let mut frame = loading_frame(&batch);
         frame.yaw = self.panorama_rotation.update(
             self.started.elapsed().as_secs_f32(),
             self.settings.file.double("panoramaScrollSpeed") as f32,
         );
+        let diagnostic_prepared = diagnostic_started.elapsed();
         if let Some(renderer) = &mut self.renderer {
             match renderer.render(&frame) {
                 Ok(true) if self.gui.is_some() && self.menu.pending.is_none() => {
@@ -283,6 +434,48 @@ impl Loading {
                 Err(e) => log::warn!("Horizon: loading screen frame failed: {e}"),
             }
         }
+        let diagnostic_spans = if horizon_client::spans::recording_here() {
+            horizon_client::spans::take_raw()
+        } else {
+            Vec::new()
+        };
+        #[cfg(target_os = "android")]
+        crate::diagnostics::heartbeat(
+            if self.failure.is_some() {
+                "setup_failure"
+            } else {
+                "startup_menu"
+            },
+            || serde_json::json!({"gpu":self.renderer.as_ref().map(|r| &r.info.name), "backend":self.renderer.as_ref().map(|r|format!("{:?}",r.info.backend))}),
+        );
+        if let Some(renderer) = &mut self.renderer {
+            renderer.set_pass_timing(crate::performance::gpu_profile());
+            if crate::performance::active() {
+                if let Some(elapsed) = diagnostic_elapsed {
+                    let cpu = diagnostic_started
+                        .elapsed()
+                        .saturating_sub(renderer.last_wait)
+                        .as_secs_f32()
+                        * 1000.0;
+                    let prepared = diagnostic_prepared.as_secs_f32() * 1000.0;
+                    crate::performance::slow_frame(cpu, &diagnostic_spans);
+                    if let Some(mut row) = crate::performance::record(
+                        elapsed,
+                        cpu,
+                        &renderer.gpu_times,
+                        [0.0, 0.0, prepared, (cpu - prepared).max(0.0)],
+                    ) {
+                        row["gpu_passes"] = renderer.diagnostic_pass_times();
+                        crate::performance::submit(
+                            row,
+                            serde_json::json!({"phase":"startup_menu", "gpu":renderer.info.name,
+                            "backend":format!("{:?}",renderer.info.backend), "resolution":size}),
+                        );
+                    }
+                }
+                renderer.gpu_times.clear();
+            }
+        }
         if !self.shown {
             self.shown = true;
             startup::mark("loading_screen.shown");
@@ -290,7 +483,98 @@ impl Loading {
                 "Horizon: loading screen shown after {} ms",
                 self.started.elapsed().as_millis()
             );
+            // The system's starting window stayed over the app until now (StarlingActivity).
+            #[cfg(target_os = "android")]
+            crate::android::first_frame_shown();
+            // Not before the first frame: opening the output takes a moment.
+            if self.audio.is_none()
+                && self.failure.is_none()
+                && let Some(registry) = self.sound_registry.take()
+            {
+                let registry = registry.join().unwrap_or_default();
+                let mut audio = Audio::with_registry(&self.vanilla_root, registry);
+                audio.master = self.settings.master_volume;
+                // As Game::apply_ui_settings: the master volume is the engine's own.
+                let mut volumes = self.settings.volumes;
+                volumes[0] = 1.0;
+                horizon_client::settings::set_source_volumes(volumes);
+                audio.sync_volumes();
+                self.audio = Some(audio);
+            }
         }
+    }
+    /// Load the resources again (they were imported after a failure): a fresh loader, as at start.
+    fn retry(&mut self) -> Result<()> {
+        let options = self.options.as_ref().ok_or("loading already finished")?;
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        let (receiver, handle) = startup_menu::spawn_loader(
+            options,
+            &self.settings,
+            &self.vanilla_root,
+            self.started,
+            &self.progress,
+        )?;
+        // Follow the new generation after the failed startup's result was delivered.
+        self.follow_loader(receiver, handle);
+        self.failure = None;
+        log::info!("Horizon: resources imported, loading again");
+        Ok(())
+    }
+    /// The loading failure and where the resources were looked for, in the embedded Horizon
+    /// font: the vanilla one is part of the resources that did not load.
+    fn draw_failure(&self, batch: &mut HudBatch, failure: &str) {
+        use horizon_client::ui_theme::{Face, Ui, color};
+        let Some(gui) = &self.gui else { return };
+        let mut ui = Ui::new(&gui.atlas, batch, (0.0, 0.0));
+        let (w, h) = (ui.w, ui.h);
+        ui.fill(0.0, 0.0, w, h, color::BG);
+        let (left, max) = (32.0, w - 64.0);
+        let mut y = h * 0.25;
+        ui.text(
+            Face::Semibold,
+            22.0,
+            left,
+            y,
+            color::TEXT,
+            "Horizon could not start",
+        );
+        y += 40.0;
+        let detail = if horizon_client::platform::registered() {
+            // Android: the prepared folder, zipped, comes in through "Open with" or the picker.
+            format!(
+                "{failure}\n\nStarling needs the Minecraft resources horizon-prepare makes from your \
+                 own copy of the game. Zip that folder, then open the zip with Starling from your \
+                 file manager, or tap anywhere here to pick it."
+            )
+        } else {
+            format!(
+                "{failure}\n\nResources are read from {}: copy the folder horizon-prepare made there.",
+                self.vanilla_root.display()
+            )
+        };
+        for paragraph in detail.lines() {
+            let mut line = String::new();
+            for word in paragraph.split(' ') {
+                let next = if line.is_empty() {
+                    word.to_owned()
+                } else {
+                    format!("{line} {word}")
+                };
+                if !line.is_empty() && ui.measure(Face::Regular, 14.0, &next) > max {
+                    ui.text(Face::Regular, 14.0, left, y, color::MUTED, &line);
+                    y += 20.0;
+                    line = word.to_owned();
+                } else {
+                    line = next;
+                }
+            }
+            ui.text(Face::Regular, 14.0, left, y, color::MUTED, &line);
+            y += 20.0;
+        }
+        ui.finish();
+        self.imports.draw(&gui.atlas, batch);
     }
     pub(super) fn finish(&mut self, loaded: Loaded) -> Result<Option<split::Split<'static>>> {
         let handoff_at = Instant::now();
@@ -329,11 +613,20 @@ impl Loading {
             self.started.elapsed().as_millis()
         );
         let renderer_ms = renderer_at.elapsed().as_millis();
-        // Audio is created on the main thread, after the core is ready.
+        // Audio is made on the main thread: the menu's since its first frame, read again from the
+        // resource packs' root where they change it, else made now.
         let audio = if !options.execution_role.is_client() {
             Audio::silent(&options.resources)
         } else {
-            Audio::with_device(&options.resources, &self.settings.sound_device)
+            match self.audio.take() {
+                Some(mut audio) => {
+                    if options.resources != self.vanilla_root {
+                        audio.reload(&options.resources);
+                    }
+                    audio
+                }
+                None => Audio::with_device(&options.resources, &self.settings.sound_device),
+            }
         };
         let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
         // The game borrows its shared resources for the process's lifetime,
@@ -426,7 +719,12 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                     return;
                 }
-                match if loading.menu.reload_packs || !loading.ready_for_handoff() {
+                // A window in the background has no surface for the game's renderer: the
+                // loaded resources wait for it to come back.
+                match if loading.menu.reload_packs
+                    || loading.suspended
+                    || !loading.ready_for_handoff()
+                {
                     None
                 } else {
                     loading.loaded.take()
@@ -447,10 +745,21 @@ impl ApplicationHandler for App {
             Step::Done => event_loop.exit(),
             Step::Failed(e) => {
                 if let App::Loading(loading) = self {
+                    if cfg!(target_os = "android") {
+                        log::error!("Horizon: {e}");
+                        loading.failure = Some(e.to_string());
+                        return;
+                    }
                     loading.error = Some(e);
                 }
                 event_loop.exit();
             }
+        }
+    }
+    fn suspended(&mut self, event_loop: &ActiveEventLoop) {
+        match self {
+            App::Loading(loading) => loading.suspended(),
+            App::Ready(game) => game.suspended(event_loop),
         }
     }
     fn exiting(&mut self, event_loop: &ActiveEventLoop) {
@@ -463,6 +772,7 @@ impl ApplicationHandler for App {
 /// Every launch reads the prepared game files (`horizon-prepare`'s output, whose
 /// manifest is `horizon-resources.json`): without them, say where they were
 /// looked for and how to get them, before a window or a loader starts.
+#[cfg(not(target_os = "android"))]
 pub(super) fn missing_resources(root: &std::path::Path) -> Option<String> {
     let shown = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
     if !root.join("horizon-resources.json").is_file() {

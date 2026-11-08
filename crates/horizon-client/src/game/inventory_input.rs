@@ -354,6 +354,11 @@ impl Game<'_> {
             height,
         }
     }
+    /// The open screen's window (`leftPos`, `topPos`, `imageWidth`, `imageHeight`): the touch
+    /// slots' and the mods' name for `container_image`.
+    pub(super) fn window_image(&self, batch: &HudBatch) -> horizon_client::container_screen::Image {
+        self.container_image(batch)
+    }
     /// A click outside the window (slot id -999): `THROW` does nothing; a
     /// `PICKUP` drops the carried stack (left) or one of it (right), thrown
     /// from the hand (`AbstractContainerMenu.doClick`, `LivingEntity.drop`).

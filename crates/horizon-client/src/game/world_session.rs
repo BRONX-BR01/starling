@@ -88,6 +88,90 @@ impl Game<'_> {
         {
             return Ok(());
         }
+        // A world plays with the mods it was made with (world_content.rs): another set starts the
+        // game again with it; a new world takes the set running now.
+        if create.is_none() {
+            match world_content::entry(folder) {
+                // The next start the player makes loads this set: no restart to come back.
+                world_content::Entry::Open => world_content::remember_running(),
+                world_content::Entry::Restart(set) => {
+                    log::info!(
+                        "Horizon: {folder} plays with mods {set:?}, not the {:?} running: starting again",
+                        world_content::running()
+                    );
+                    world_content::request_restart(folder, &set)?;
+                    world_content::restart();
+                    return Ok(());
+                }
+                world_content::Entry::Missing(missing) => {
+                    // Not opened (a save would turn their blocks into air): the title says why.
+                    let message = format!(
+                        "This world plays with {}, which did not load. Put it back in the mods \
+                         folder or turn it on in Options > Mods, then open the world again.",
+                        world_content::names(&missing)
+                    );
+                    log::warn!("Horizon: {folder}: {message}");
+                    let saves = std::env::current_dir()?.join("saves");
+                    let title = self
+                        .title
+                        .get_or_insert_with(|| Title::new(saves, &self.options.resources));
+                    title.mode = horizon_client::title::Mode::Error {
+                        message,
+                        alert: None,
+                        return_to: Box::new(horizon_client::title::Mode::Main),
+                    };
+                    return Ok(());
+                }
+            }
+        } else {
+            // Made with other mods than the ones running: the game starts again with them and
+            // creates it then (once: a second time they did not load, and the title says so).
+            let running = world_content::running();
+            let chosen = create
+                .and_then(|o| o.mods.as_ref())
+                .filter(|chosen| **chosen != running);
+            let again = world_content::next_start().is_some_and(|n| n.world == folder);
+            let missing: std::collections::BTreeSet<String> = chosen
+                .map(|chosen| chosen.difference(&running).cloned().collect())
+                .unwrap_or_default();
+            if let Some(chosen) = chosen
+                && (!again || !missing.is_empty())
+            {
+                if !again {
+                    log::info!(
+                        "Horizon: {folder} is made with mods {chosen:?}, not the {running:?} \
+                         running: starting again"
+                    );
+                    let created = world_content::Created {
+                        name: name.unwrap_or(folder).to_owned(),
+                        seed,
+                        creative,
+                        options: create.cloned().unwrap_or_default(),
+                    };
+                    world_content::request_create(folder, chosen, &created)?;
+                    world_content::restart();
+                    return Ok(());
+                }
+                let message = format!(
+                    "This world was to be made with {}, which did not load. Look at it in \
+                     Options > Mods, then create the world again.",
+                    world_content::names(&missing)
+                );
+                log::warn!("Horizon: {folder}: {message}");
+                let saves = std::env::current_dir()?.join("saves");
+                let title = self
+                    .title
+                    .get_or_insert_with(|| Title::new(saves, &self.options.resources));
+                title.mode = horizon_client::title::Mode::Error {
+                    message,
+                    alert: None,
+                    return_to: Box::new(horizon_client::title::Mode::Main),
+                };
+                return Ok(());
+            }
+            self.content_record = Some(folder.to_owned());
+            world_content::remember_running();
+        }
         world_loading::world_data_used();
         if self.defer_world_entry(PendingWorldEntry::Local {
             folder: folder.to_owned(),

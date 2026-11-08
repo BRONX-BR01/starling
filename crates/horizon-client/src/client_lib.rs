@@ -11,55 +11,23 @@ pub mod bed_geometry;
 pub mod block_contact;
 pub mod powder_snow;
 pub use horizon_client_render::{
-<<<<<<< HEAD
-    assets, atlas_sources, audio, auth, ban_notice, bidi, biome, block_edit, block_entities,
-    block_entity_anim, block_entity_render, bluemap, bluemap_detect, border_render, breaking,
-    brewing, camera, chat, chunk, chunk_map, cit, cit_armor, cit_assets, cit_glint, clouds,
-    collisions, command_block, containers, crash, datapack, dynamic_light, effects, elyby,
-    environment, extras, fast_hash, fog, font, gfx, graphics, graphics_style, graphics_ui,
-    hdr_calibration, hud, hud_layout, hud_overlays, inventory_effects, java_text, jigsaw_block,
-    json_folder, level_loading, light, lod, logging, menu_blur, mesher, minimap, mipmap, mod_list,
-    model_library, models, multiline_edit, native_emissive, offline_name, options_file,
-    options_fixes, options_ui, overlay, own_buttons, own_skin, pack_screen, packs, par, particles,
-    poi_sections, post_chain, potent_sulfur, preedit, providers, screen_draw, screen_effects,
-    sculk, section_mask, server_terrain, settings, shader_options, shader_pack_list, signs, skins,
-    sound_engine, sound_events, sound_preview, spans, split_layout, split_map, split_profiles,
-    sprites, streaming, structure_block, system_stats, tab_list, telemetry, test_block,
-    test_instance_block, testgen, title_edition, trims, ui, vault, weather, widgets, world,
-    worldborder, zip,
-||||||| 31f83499b6
-    assets, atlas_sources, audio, auth, ban_notice, bidi, biome, block_edit, block_entities,
-    block_entity_anim, block_entity_render, bluemap, bluemap_detect, border_render, breaking,
-    brewing, camera, chat, chunk, chunk_map, cit, cit_armor, cit_assets, cit_glint, clouds,
-    collisions, command_block, containers, crash, datapack, dynamic_light, effects, environment,
-    extras, fast_hash, fog, font, gfx, graphics, graphics_style, graphics_ui, hdr_calibration, hud,
-    hud_layout, hud_overlays, inventory_effects, java_text, jigsaw_block, json_folder,
-    level_loading, light, lod, logging, menu_blur, mesher, minimap, mipmap, mod_list,
-    model_library, models, multiline_edit, native_emissive, options_file, options_fixes,
-    options_ui, overlay, pack_screen, packs, par, particles, poi_sections, post_chain,
-    potent_sulfur, preedit, providers, screen_draw, screen_effects, sculk, section_mask,
-    server_terrain, settings, shader_options, shader_pack_list, signs, skins, sound_engine,
-    sound_events, sound_preview, spans, split_layout, split_map, split_profiles, sprites,
-    streaming, structure_block, tab_list, telemetry, test_block, test_instance_block, testgen,
-    title_edition, trims, ui, vault, weather, widgets, world, worldborder, zip,
-=======
     assets, atlas_sources, audio, auth, autotune, ban_notice, bidi, biome, block_edit,
     block_entities, block_entity_anim, block_entity_render, block_sprites, block_states, bluemap,
     bluemap_detect, border_render, breaking, brewing, camera, chat, chunk, chunk_map, cit,
     cit_armor, cit_assets, cit_glint, client_resources, clouds, collisions, command_block,
-    containers, controller_ui, crash, custom_sky, datapack, dynamic_light, effects, environment,
-    extras, fast_hash, fluid_render, fog, font, gfx, graphics, graphics_style, graphics_ui,
-    hdr_calibration, hud, hud_kit, hud_layout, hud_overlays, inventory_effects, java_text,
-    jigsaw_block, json_folder, level_loading, light, lod, logging, menu_blur, mesher, minimap,
-    mipmap, mod_browser, mod_list, model_library, models, multiline_edit, native_emissive,
-    options_file, options_fixes, options_ui, overlay, pack_browser, pack_screen, packs, pad_cursor,
-    pad_glyph, par, particles, poi_sections, post_chain, potent_sulfur, preedit, providers, pvp,
-    pvp_hud, random_source, screen_draw, screen_effects, sculk, section_mask, server_terrain,
-    settings, shader_options, shader_pack_list, signs, skins, social, sound_engine, sound_events,
-    sound_preview, spans, split_layout, split_map, split_profiles, sprites, streaming,
-    structure_block, tab_list, telemetry, terrain_model, test_block, test_instance_block, testgen,
-    title_edition, trims, ui, vault, weather, widgets, world, worldborder, zip,
->>>>>>> c98a51a664
+    containers, controller_ui, crash, custom_sky, datapack, dynamic_light, effects, elyby,
+    environment, extras, fast_hash, fluid_render, fog, font, gfx, graphics, graphics_style,
+    graphics_ui, hdr_calibration, hud, hud_kit, hud_layout, hud_overlays, inventory_effects,
+    java_text, jigsaw_block, json_folder, level_loading, light, lod, logging, menu_blur, mesher,
+    minimap, mipmap, mod_browser, mod_list, model_library, models, multiline_edit, native_emissive,
+    offline_name, options_file, options_fixes, options_ui, overlay, own_buttons, own_skin,
+    pack_browser, pack_screen, packs, pad_cursor, pad_glyph, par, particles, poi_sections,
+    post_chain, potent_sulfur, preedit, providers, pvp, pvp_hud, random_source, screen_draw,
+    screen_effects, sculk, section_mask, server_terrain, settings, shader_options, shader_pack_list,
+    signs, skins, social, sound_engine, sound_events, sound_preview, spans, split_layout, split_map,
+    split_profiles, sprites, streaming, structure_block, system_stats, tab_list, telemetry,
+    terrain_model, test_block, test_instance_block, testgen, title_edition, trims, ui, vault,
+    weather, widgets, world, worldborder, zip,
 };
 pub mod attack_strength;
 pub mod attribute_updates;
@@ -70,7 +38,6 @@ pub mod beehive;
 pub mod benchmark;
 pub mod block_entity_item;
 pub mod block_pattern;
-pub mod block_predictions;
 pub mod block_transform;
 pub mod boss_overlay;
 pub mod breathing;
@@ -124,12 +91,8 @@ pub mod item_activation;
 pub mod item_render;
 pub mod item_sync;
 pub mod item_tooltip;
-<<<<<<< HEAD
 pub mod kinetics;
-||||||| 31f83499b6
-=======
 pub mod join_seq;
->>>>>>> c98a51a664
 pub mod lan;
 pub mod landing;
 pub mod legacy_combat;
@@ -171,12 +134,8 @@ pub mod scoreboard_cmd;
 pub mod screen_layout;
 pub mod screen_narrator;
 pub mod social_screen;
-<<<<<<< HEAD
 pub mod starling_releases;
-||||||| 31f83499b6
-=======
 pub mod sound_playback;
->>>>>>> c98a51a664
 pub use horizon_server_files as server;
 pub mod controller_notice;
 pub mod server_packs;

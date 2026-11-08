@@ -21,6 +21,9 @@ pub(super) const STAGE_LINES: [&str; 10] = [
 pub(super) struct Progress {
     pub(super) value: Arc<AtomicU32>,
     pub(super) lines: &'static [&'static str],
+    /// A line in place of the stage's, while a step outside the stages runs (a content mods'
+    /// build).
+    note: Arc<std::sync::Mutex<Option<String>>>,
 }
 impl Progress {
     pub(super) fn new() -> Self {
@@ -30,16 +33,32 @@ impl Progress {
         Self {
             value: Arc::new(AtomicU32::new(0)),
             lines,
+            note: Default::default(),
         }
     }
     pub(super) fn set(&self, stage: u32) {
         self.value.store(stage, Ordering::Relaxed);
     }
+    pub(super) fn note(&self, line: Option<String>) {
+        *self
+            .note
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = line;
+    }
+    pub(super) fn noted(&self) -> Option<String> {
+        self.note
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
     pub(super) fn fraction(&self) -> f32 {
         self.value.load(Ordering::Relaxed) as f32 / (self.lines.len() - 1) as f32
     }
-    pub(super) fn line(&self) -> &'static str {
-        self.lines[(self.value.load(Ordering::Relaxed) as usize).min(self.lines.len() - 1)]
+    pub(super) fn line(&self) -> String {
+        self.noted().unwrap_or_else(|| {
+            self.lines[(self.value.load(Ordering::Relaxed) as usize).min(self.lines.len() - 1)]
+                .to_owned()
+        })
     }
 }
 

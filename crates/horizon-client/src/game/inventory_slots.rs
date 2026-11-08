@@ -151,7 +151,10 @@ impl Game<'_> {
     /// InventoryMenu / CraftingMenu slot layouts.
     pub(super) fn slot_position(&self, i: usize) -> (f32, f32) {
         if self.creative_inventory_open()
-            && let Some(position) = Creative::inventory_slot_position(i)
+            && let Some(position) = Creative::inventory_slot_position(i).or_else(|| {
+                self.bedrock_items
+                    .and_then(|_| Creative::bedrock_craft_position(i))
+            })
         {
             return position;
         }

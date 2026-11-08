@@ -8,6 +8,19 @@ impl Resources {
             .get()
             .expect("world resources joined before entry")
     }
+    /// Whether the world's resources (items, mobs...) have loaded: menus show before they do.
+    pub(super) fn rest_ready(&self) -> bool {
+        self.rest.get().is_some()
+    }
+    pub(super) fn kinetics(&self) -> &horizon_client::kinetics::KineticTable {
+        &self.rest().kinetics
+    }
+    pub(super) fn create_recipes(&self) -> &kinetic_machines::Recipes {
+        &self.rest().create_recipes
+    }
+    pub(super) fn basin_recipes(&self) -> &basins::BasinRecipes {
+        &self.rest().basin_recipes
+    }
     pub(super) fn facts(&self) -> &BlockFacts {
         &self.core.facts
     }

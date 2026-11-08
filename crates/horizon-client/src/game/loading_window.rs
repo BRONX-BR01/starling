@@ -51,6 +51,11 @@ pub(super) fn build_renderer(
     // Made here when the worker did not: the renderer's own fallback has no LabPBR maps.
     let prepared = Some(prepared.unwrap_or_else(|| prepare_renderer_textures(pack)));
     let atlas_pixels = atlas.pixels();
+    #[cfg(target_os = "android")]
+    crate::diagnostics::checkpoint(
+        "renderer_init",
+        || serde_json::json!({"api":format!("{:?}",api)}),
+    );
     let mut renderer = pollster::block_on(Renderer::new(
         window,
         offscreen,
@@ -129,6 +134,11 @@ pub(super) fn loading_renderer(
     if let Some(atlas) = atlas {
         atlas.font.reset_cache();
     }
+    #[cfg(target_os = "android")]
+    crate::diagnostics::checkpoint(
+        "renderer_init",
+        || serde_json::json!({"api":format!("{:?}",api)}),
+    );
     let mut renderer = pollster::block_on(Renderer::new(
         window,
         offscreen,
@@ -410,11 +420,15 @@ pub(super) fn start_game<'a>(
             .with_user(|| game.options.player_name());
             title.last_server = game.settings.file.string("lastServer");
             title.skip_multiplayer_warning = game.settings.file.bool("skipMultiplayerWarning");
-            // Gui.addInitialScreens: the accessibility onboarding comes first.
-            if game.settings.file.bool("onboardAccessibility") {
+            // Gui.addInitialScreens: the accessibility onboarding comes first. Not on Android,
+            // which has no narrator, and whose players' options all still ask for it.
+            if !cfg!(target_os = "android") && game.settings.file.bool("onboardAccessibility") {
                 title.start_onboarding();
             }
             game.title = Some(title);
+            // Started again for a world's own mods (the start without a loading screen: the
+            // menu's takes it in startup_menu.rs).
+            game.pending_entry = world_content::next_entry();
         }
     }
     if std::env::var_os("HORIZON_COMMAND_SCRIPT").is_some()

@@ -26,12 +26,8 @@ pub fn start(mods: crate::mod_api::Mods, after_log: impl FnOnce()) {
     }
     horizon_client::telemetry::mark_start();
     horizon_client::spans::startup::init(std::time::Instant::now());
-<<<<<<< HEAD
-    #[cfg(not(target_os = "android"))]
-||||||| 31f83499b6
-=======
     horizon_client::spans::trace::start_from_env();
->>>>>>> c98a51a664
+    #[cfg(not(target_os = "android"))]
     let args: Vec<String> = std::env::args().skip(1).collect();
     // The process has no command line: `horizon-args.txt`'s, read by `android::main`.
     #[cfg(target_os = "android")]

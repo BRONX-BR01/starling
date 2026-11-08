@@ -257,11 +257,7 @@ impl Game<'_> {
             // key.swapOffhand: on a server, ServerboundPlayerActionPacket SWAP_ITEM_WITH_OFFHAND
             // (the server swaps the hands and sends both slots back; spectators can't).
             KeyCode::KeyF if self.screen == Screen::Playing && self.remote.is_some() => {
-                if !self.spectator()
-                    && let Some(r) = self.remote.as_mut()
-                {
-                    r.pending_keys.push(key);
-                }
+                self.remote_swap_pressed();
             }
             KeyCode::KeyF if self.screen == Screen::Playing => {
                 // handleKeybinds: the number keys select before key.swapOffhand.
