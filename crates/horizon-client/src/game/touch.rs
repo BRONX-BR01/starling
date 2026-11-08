@@ -1167,7 +1167,7 @@ impl Game<'_> {
         }
         let sneaking = self.touch_playing() && self.touch.controls.sneaking();
         // Also when something let go of the keys under it (the window losing focus).
-        let lost = sneaking && !self.keys.contains(&KeyCode::ShiftLeft);
+        let lost = sneaking && !self.keys.held(horizon_client::actions::Action::Sneak);
         if sneaking != self.touch.sneaking || lost {
             let pressed = sneaking && !self.touch.sneaking;
             self.touch.sneaking = sneaking;

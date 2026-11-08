@@ -394,7 +394,7 @@ impl Game<'_> {
             } else {
                 "humanoid"
             };
-            if let Some(t) = assets.trim_texture(&asset, kind, stack)
+            if let Some(t) = assets.trim_texture(asset, kind, stack)
                 && !wanted.contains(&t)
             {
                 wanted.push(t);

@@ -2045,10 +2045,10 @@ impl Game<'_> {
     fn stick_steer(&self, stick: Option<[f32; 2]>) -> Option<f32> {
         let r = self.remote.as_ref()?;
         let [left, forward] = stick?;
-        let keys = [KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD];
+        let keys = [Action::Forward, Action::Left, Action::Back, Action::Right];
         let p = self.player.as_ref()?;
         if left.hypot(forward) <= 0.3
-            || keys.iter().any(|k| self.keys.contains(k))
+            || keys.iter().any(|k| self.keys.held(*k))
             || self.mining.is_some()
             || self.using.is_some()
             || self.riding.is_some()

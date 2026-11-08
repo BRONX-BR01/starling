@@ -14,7 +14,6 @@ use horizon_world::registry::BlockStateId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use winit::keyboard::KeyCode;
 
 /// How many chunks from the player's the parts are looked for (at most the render distance).
 const REACH: i32 = 8;
@@ -223,7 +222,7 @@ impl Game<'_> {
         if let Some((p, part)) = target {
             // Its back turns about the face outwards: counter-clockwise from the front is the
             // other way about it.
-            let sneaking = self.keys.contains(&KeyCode::ShiftLeft);
+            let sneaking = self.keys.held(horizon_client::actions::Action::Sneak);
             let speed = if sneaking { part.rpm } else { -part.rpm };
             let turning = self
                 .kinetics
