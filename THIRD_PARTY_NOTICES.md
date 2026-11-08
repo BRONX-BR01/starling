@@ -192,13 +192,19 @@ BlueMap is licensed under the MIT license:
 > THE SOFTWARE.
 ## OpenJDK for Android (fetched on the phone, not shipped)
 
-To prepare the game files on a phone, Starling downloads OpenJDK 25.0.5 built for Android by
+To prepare the game files on a phone, Starling downloads OpenJDK 25 built for Android.
+ARM64 and x86_64 use OpenJDK 25.0.5 from
 AngelAuraMC ([angelauramc-openjdk-build](https://github.com/AngelAuraMC/angelauramc-openjdk-build),
-release `download_jre25`, checked against the SHA-256 in `crates/starling-account/src/java.rs`),
-runs it for the preparing and deletes it after. OpenJDK is licensed under the GNU General Public
+release `download_jre25`). ARM32 uses OpenJDK 25.0.4 from
+[EclipseJRE](https://github.com/SouhardyaMaybe/EclipseJRE/releases/tag/jres-v1.0.0),
+release `jres-v1.0.0`, archive `jre25-arm-20261009-release.tar.xz`.
+Each archive is checked against the SHA-256 in `crates/starling-account/src/java.rs`;
+Starling runs it for preparation and deletes it after. OpenJDK is licensed under the GNU General Public
 License version 2 with the Classpath Exception; its sources are at
-[openjdk/jdk](https://github.com/openjdk/jdk), the build's scripts and patches in that
-repository. Starling's launcher for it (`packaging/android/native/java_launcher.c`) is MIT.
+[openjdk/jdk](https://github.com/openjdk/jdk), with build scripts and patches in the
+respective publisher's repository. Only the published runtimes are executed;
+no JDK source is copied into Starling. Starling's launcher for it
+(`packaging/android/native/java_launcher.c`) is MIT.
 
 ## Bedrock's touch buttons (fetched on the phone, not shipped)
 

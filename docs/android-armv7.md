@@ -95,9 +95,13 @@ for building the bundle. ARM32's Java runtime has no `jdk.compiler` module, so
 preparation executes the shipped classes and does not invoke javac on the phone.
 A missing or damaged bundle fails before downloading Java, with a reinstall
 message. Updating the kit retires old sources/classes and retains its work cache.
-The isolated command-registry exporter uses `-Xint` on ARM32 to avoid an
-observed stall in the pinned JVM's compiled mode. Its registry JSON was checked
-byte-for-byte against the full x86_64 preparation. Other exporter JVMs keep JIT.
+ARM32 uses the checksum-pinned EclipseJRE Java 25.0.4 runtime. The previously
+tested AngelAuraMC ARM32 25.0.5 runtime produced incorrect floating-point results
+and stalled or failed while loading registries and generating reports; disabling
+JIT did not fix it. The replacement passes those stages with the normal batch
+JIT policy. Command registries and data-generator command/registry reports match
+the x86_64 output byte-for-byte; creative inventory matches after normalizing
+the iteration order within item tag sets.
 
 ## Relation to diagnostics
 

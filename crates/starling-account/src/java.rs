@@ -1,6 +1,6 @@
 //! The Java runtime that prepares the game files on the device, where none is installed (a
-//! phone): OpenJDK 25 built for Android by AngelAuraMC, the build Amethyst runs (GPLv2 with the
-//! Classpath Exception; sources and build scripts at github.com/AngelAuraMC/angelauramc-openjdk-build).
+//! phone): OpenJDK 25 built for Android (GPLv2 with the Classpath Exception; publisher/source
+//! references are recorded in THIRD_PARTY_NOTICES.md).
 //! It is fetched once, checked against the hash pinned here, and unpacked in a folder of its own;
 //! the preparer runs Mojang's code in it (horizon-prepare's exporters), and it can go afterwards.
 use crate::files::Failure;
@@ -22,11 +22,13 @@ pub const JRE25_ANDROID_ARM64: Runtime = Runtime {
     size: 38_031_580,
 };
 
-/// OpenJDK 25.0.5 for Android ARMv7, pinned to the published release's SHA-256.
+/// OpenJDK 25.0.4 for Android ARMv7, pinned to EclipseJRE's published release.
+/// The AngelAuraMC ARM32 25.0.5 build returned incorrect floating-point results
+/// in on-device tests, including Math.pow(2, -1), and could not generate reports.
 pub const JRE25_ANDROID_ARM: Runtime = Runtime {
-    url: "https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre25/jre25-android-arm.tar.xz",
-    sha256: "9ae13aee9cba7b2d2d8f40965061667e876d7380d866f37a992db3eff296ffb5",
-    size: 28_252_088,
+    url: "https://github.com/SouhardyaMaybe/EclipseJRE/releases/download/jres-v1.0.0/jre25-arm-20261009-release.tar.xz",
+    sha256: "528457305c073128b0e0e2478e2b0c41af1c92a0621061cce7ecccd66bdd103d",
+    size: 26_646_332,
 };
 
 /// OpenJDK 25 for Android x86_64, pinned to the publisher's release digest.
@@ -332,13 +334,12 @@ mod architecture_tests {
 
     #[test]
     fn runtime_downloads_match_the_process_and_never_substitute_another_cpu() {
-        for (arch, suffix) in [("arm", "arm"), ("aarch64", "arm64"), ("x86_64", "x86_64")] {
-            assert!(
-                android_runtime(arch)
-                    .unwrap()
-                    .url
-                    .ends_with(&format!("jre25-android-{suffix}.tar.xz"))
-            );
+        for (arch, archive) in [
+            ("arm", "jre25-arm-20261009-release.tar.xz"),
+            ("aarch64", "jre25-android-arm64.tar.xz"),
+            ("x86_64", "jre25-android-x86_64.tar.xz"),
+        ] {
+            assert!(android_runtime(arch).unwrap().url.ends_with(archive));
         }
         assert!(android_runtime("x86").is_none());
         assert!(android_runtime("unknown").is_none());
