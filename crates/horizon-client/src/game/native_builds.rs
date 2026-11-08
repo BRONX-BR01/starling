@@ -184,7 +184,10 @@ fn download(build: &Build, version: &str, shared: &Mutex<Shared>) -> Result<Stri
     let about: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     // Old metadata predates `abi` and describes the same ARM64-only service.
     if !releases::native_build_matches(&about, releases::process_abi()) {
-        return Err("That native build is for another architecture.".into());
+        return Err(horizon_client::lang::tr(
+            "starling.native_builds.wrong_architecture",
+            &[],
+        ));
     }
     if about["version"].as_str() != Some(version) {
         return Err(format!("That build is not for Starling {version}."));
@@ -442,7 +445,10 @@ fn compile(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
     };
     let want = finished["sha256"].as_str().unwrap_or_default().to_owned();
     if !releases::native_build_matches(&finished["build"], releases::process_abi()) {
-        return Err("That native build is for another architecture.".into());
+        return Err(horizon_client::lang::tr(
+            "starling.native_builds.wrong_architecture",
+            &[],
+        ));
     }
     let size = finished["size"].as_u64().unwrap_or(0);
     if want.len() != 64 || size == 0 {

@@ -513,5 +513,6 @@
   "starling.diagnostics.overhead": "Performance and GPU recording add overhead.",
   "starling.diagnostics.hardware": "GPU: %s (%s)",
   "starling.diagnostics.last_error": "Last error: %s",
-  "starling.native_builds.arm64_only": "The native mod build service currently supports ARM64 only. This app architecture cannot use its builds."
+  "starling.native_builds.arm64_only": "The native mod build service currently supports ARM64 only. This app architecture cannot use its builds.",
+  "starling.native_builds.wrong_architecture": "That native build is for another architecture."
 }

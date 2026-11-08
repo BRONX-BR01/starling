@@ -31,5 +31,6 @@
   "starling.diagnostics.overhead": "A gravação de desempenho e da GPU adiciona sobrecarga.",
   "starling.diagnostics.hardware": "GPU: %s (%s)",
   "starling.diagnostics.last_error": "Último erro: %s",
-  "starling.native_builds.arm64_only": "O serviço de compilação de mods nativos oferece suporte apenas a ARM64 no momento. A arquitetura deste aplicativo não pode usar essas compilações."
+  "starling.native_builds.arm64_only": "O serviço de compilação de mods nativos oferece suporte apenas a ARM64 no momento. A arquitetura deste aplicativo não pode usar essas compilações.",
+  "starling.native_builds.wrong_architecture": "Essa compilação nativa é para outra arquitetura."
 }
