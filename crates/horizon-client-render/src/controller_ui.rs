@@ -136,7 +136,7 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
             text: BIND_TEXT,
         })
         .collect();
-    vec![
+    let mut pages = vec![
         (
             Page::General,
             vec![
@@ -181,6 +181,14 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                         option(
                             Opt::PadMoveDeadzone,
                             "How far the left stick moves before you walk. Raise it if you drift.",
+                        ),
+                        option(
+                            Opt::PadServerStick,
+                            "How the stick moves on a server: a server's anticheat may pull you back for the stick's own speed and angle.",
+                        ),
+                        option(
+                            Opt::PadStickPrompt,
+                            "When a server keeps pulling you back while the stick moves you, ask how the stick should move there.",
                         ),
                     ],
                 ),
@@ -295,7 +303,28 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                 ),
             ],
         ),
-    ]
+    ];
+    // A phone reads its controllers through Android (game/pad/android.rs): the DualSense's own
+    // output, Steam's keyboard and a window out of focus are the computer's only.
+    if cfg!(target_os = "android") {
+        for (_, groups) in &mut pages {
+            for (_, settings) in groups.iter_mut() {
+                settings.retain(|s| {
+                    !matches!(
+                        s.item,
+                        Item::Option(
+                            Opt::PadAdaptiveTriggers
+                                | Opt::PadLightbar
+                                | Opt::PadKeyboard
+                                | Opt::PadPlayInBackground
+                        )
+                    )
+                });
+            }
+            groups.retain(|(_, settings)| !settings.is_empty());
+        }
+    }
+    pages
 }
 
 /// The controller a player's game sees, from its own reader or the splitscreen router.
@@ -349,6 +378,7 @@ impl Item {
             Item::Option(Opt::PadInvertX) => Some(c.invert_x),
             Item::Option(Opt::PadInvertY) => Some(c.invert_y),
             Item::Option(Opt::PadCraftOnServers) => Some(c.craft_on_servers),
+            Item::Option(Opt::PadStickPrompt) => Some(c.stick_prompt),
             _ => None,
         }
     }

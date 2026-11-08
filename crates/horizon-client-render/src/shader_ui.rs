@@ -43,6 +43,12 @@ pub enum Item {
     Reset,
     /// Horizon's own Shadow Cache (`Graphics::shadow_cache`), for every pack: not the pack's.
     ShadowCache,
+    /// The next of the resolutions a pack can run at: packs cost by the pixel.
+    Resolution,
+    /// The next of the frame limits, so a pack can hold its speed on a phone that heats up.
+    FpsLimit,
+    /// Which profile of a `shaders/` pack runs: Auto, the pack's own defaults or one it lists.
+    PackProfile,
 }
 
 /// What the strip says of a pack's own screens: they are the pack's, not Horizon's.
@@ -205,6 +211,30 @@ fn native_screens(pack: &crate::shader_pack_list::Entry) -> Vec<Screen> {
         .collect()
 }
 
+/// The resolution a pack runs at: Auto holds a heavy pack below what the player chose.
+fn resolution_value(s: &Settings) -> String {
+    let scale = s.horizon.resolution_scale;
+    let limit = (crate::graphics::auto_shader_scale() * 100.0).round() as u32;
+    let limited = s.horizon.shader_choice().is_some_and(|(pack, profile)| {
+        profile == crate::graphics::AUTO_PROFILE && !crate::graphics::light_shader_pack(&pack)
+    }) && scale > limit;
+    if limited {
+        format!("{limit}% (Auto)")
+    } else {
+        format!("{scale}%")
+    }
+}
+
+/// The profile of the picked pack that runs, as the row shows it.
+fn pack_profile_value(s: &Settings) -> String {
+    let profile = s.horizon.shader_choice().map(|c| c.1).unwrap_or_default();
+    match profile.as_str() {
+        "" => lang::get("Pack Default"),
+        crate::graphics::AUTO_PROFILE => lang::get("Auto"),
+        profile => profile.to_owned(),
+    }
+}
+
 /// What the options screen must do after an interaction here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -218,6 +248,10 @@ pub enum Action {
     Apply,
     /// The options of the Horizon pack `s.shader_packs[.0]` changed: save them.
     NativeChanged(usize),
+    /// Load the picked pack again: what it runs with changed.
+    Reload,
+    /// The next of the picked pack's profiles, which the options screen keeps.
+    NextPackProfile,
     Done,
 }
 
@@ -331,6 +365,15 @@ impl ShaderUi {
             ),
             Item::Reset => (lang::get("Reset all options"), None),
             Item::ShadowCache => (lang::get("Shadow Cache"), Some(String::new())),
+            Item::Resolution => (lang::get("Resolution"), Some(resolution_value(s))),
+            Item::FpsLimit => {
+                let fps = match s.max_fps {
+                    fps if fps >= 260 => lang::get("Off"),
+                    fps => fps.to_string(),
+                };
+                (lang::get("FPS Limit"), Some(fps))
+            }
+            Item::PackProfile => (lang::get("Profile"), Some(pack_profile_value(s))),
             Item::Profile => match classic(s) {
                 Some(o) => shell::name_and_value(&plain(o.profile_label())),
                 None => (String::new(), None),
@@ -413,10 +456,23 @@ impl ShaderUi {
                 });
                 format!("{kind} {what} ({})", pack.file)
             }
-            Item::Folder => lang::get("Put shader pack .zip files or folders in it."),
+            Item::Folder => format!(
+                "{} {}",
+                lang::get("Put shader pack .zip files or folders in it."),
+                crate::options_ui::shader_folder_note()
+            ),
             Item::Reset => lang::get("Puts every option of this pack back to its default."),
             Item::ShadowCache => lang::get(
                 "Reuses the pack shadow map when sun, view and world match. Off by default.",
+            ),
+            Item::Resolution => {
+                lang::get("Packs cost by the pixel: fewer run faster, and the world looks softer.")
+            }
+            Item::FpsLimit => lang::get(
+                "A pack heats a phone up: a limit it can hold stays smoother than one it can't.",
+            ),
+            Item::PackProfile => lang::get(
+                "Auto picks the pack's light settings for this device. Pack Default runs it as it comes.",
             ),
             Item::Profile => classic(s)
                 .and_then(|o| o.comment("profile"))
@@ -444,10 +500,19 @@ impl ShaderUi {
     /// The rows of a tab.
     fn items(tab: Tab, s: &Settings, screens: &[Screen]) -> Vec<Item> {
         match tab {
-            Tab::Packs => (0..s.shader_packs.len())
-                .map(|i| Item::Pack(i as u16))
-                .chain([Item::Folder, Item::ShadowCache])
-                .collect(),
+            Tab::Packs => {
+                let mut rows: Vec<Item> = (0..s.shader_packs.len())
+                    .map(|i| Item::Pack(i as u16))
+                    .chain([Item::Folder, Item::ShadowCache])
+                    .collect();
+                if s.horizon.shader_choice().is_some() {
+                    rows.extend([Item::Resolution, Item::FpsLimit]);
+                    if picked(s).is_some_and(|p| p.1 == Kind::Classic) {
+                        rows.push(Item::PackProfile);
+                    }
+                }
+                rows
+            }
             Tab::Screen(i) => screens
                 .get(usize::from(i))
                 .map(|s| s.items.clone())
@@ -486,15 +551,24 @@ impl ShaderUi {
             }
             // The plate's heading names the open page; results go under their page's name.
             // Horizon's own settings stand apart from the packs, and the packs' from Horizon's.
-            let (built_in, rows): (Vec<Item>, Vec<Item>) =
-                rows.into_iter().partition(|&i| i == Item::ShadowCache);
+            let (built_in, rows): (Vec<Item>, Vec<Item>) = rows.into_iter().partition(|&i| {
+                matches!(
+                    i,
+                    Item::ShadowCache | Item::Resolution | Item::FpsLimit | Item::PackProfile
+                )
+            });
+            // On a phone what a pack costs goes above however many packs there are.
+            let first = cfg!(target_os = "android");
+            if first && !built_in.is_empty() {
+                lines.group(tab, "Built-in settings", built_in.clone());
+            }
             match (query.is_empty(), tab) {
                 (true, Tab::Packs) => lines.group(tab, "Installed", rows),
                 (true, Tab::Screen(_)) => lines.group(tab, "Pack settings", rows),
                 (false, _) if !rows.is_empty() => lines.titled(tab, rows),
                 (false, _) => {}
             }
-            if !built_in.is_empty() {
+            if !first && !built_in.is_empty() {
                 lines.group(tab, "Built-in settings", built_in);
             }
         }
@@ -873,6 +947,23 @@ impl ShaderUi {
                 s.horizon.shadow_cache = !s.horizon.shadow_cache;
                 changed
             }
+            Item::Resolution => {
+                const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
+                let now = s.horizon.resolution_scale;
+                let next = STEPS.iter().position(|&v| v == now).map_or(2, |i| i + 1);
+                s.horizon.resolution_scale = STEPS[next % STEPS.len()];
+                vec![Action::ButtonClick, Action::Reload, Action::Changed]
+            }
+            Item::FpsLimit => {
+                const STEPS: [u32; 4] = [30, 40, 60, 260];
+                let next = STEPS
+                    .iter()
+                    .position(|&v| v == s.max_fps)
+                    .map_or(0, |i| i + 1);
+                s.max_fps = STEPS[next % STEPS.len()];
+                changed
+            }
+            Item::PackProfile => vec![Action::ButtonClick, Action::NextPackProfile],
             Item::Link(i) => {
                 if let Tab::Screen(from) = self.tab {
                     self.path.push(from);
@@ -1257,7 +1348,10 @@ mod tests {
                 Item::Pack(0),
                 Item::Pack(1),
                 Item::Folder,
-                Item::ShadowCache
+                Item::ShadowCache,
+                Item::Resolution,
+                Item::FpsLimit,
+                Item::PackProfile
             ]
         );
     }
@@ -1295,6 +1389,40 @@ mod tests {
     }
 
     #[test]
+    fn what_a_pack_costs_is_set_only_with_a_pack_on() {
+        let mut s = settings();
+        s.horizon.resolution_scale = 50;
+        s.max_fps = 60;
+        let mut ui = ShaderUi::default();
+        let packs = |s: &Settings| ShaderUi::items(Tab::Packs, s, &screens(s));
+        assert!(packs(&s).contains(&Item::PackProfile));
+
+        // A `shaders/` pack starts again at the new resolution; a frame limit needs no start.
+        assert_eq!(
+            ui.activate(&mut s, Item::Resolution, false, None),
+            [Action::ButtonClick, Action::Reload, Action::Changed]
+        );
+        assert_eq!(s.horizon.resolution_scale, 40);
+        assert_eq!(
+            ui.activate(&mut s, Item::FpsLimit, false, None),
+            [Action::ButtonClick, Action::Changed]
+        );
+        assert_eq!(s.max_fps, 260);
+        assert_eq!(
+            ui.activate(&mut s, Item::FpsLimit, false, None),
+            [Action::ButtonClick, Action::Changed]
+        );
+        assert_eq!(s.max_fps, 30);
+
+        // A Horizon pack has no profiles, and with no pack there is nothing to set.
+        s.shader_packs[0].kind = Kind::Horizon;
+        assert!(!packs(&s).contains(&Item::PackProfile));
+        assert!(packs(&s).contains(&Item::Resolution));
+        s.horizon.shader_pack.clear();
+        assert!(!packs(&s).contains(&Item::Resolution));
+    }
+
+    #[test]
     fn every_text_is_in_the_language_table() {
         let mut s = settings();
         let (_, missed) = lang::scoped(lang::Language::load(&[], "de_de"), || {
@@ -1323,6 +1451,15 @@ mod tests {
                 "No shader packs yet: open the pack folder and put some in it.",
                 "Pick a shader pack. Picking the one in use turns shaders off.",
                 "Changed options apply with Apply, or when you leave.",
+                "Resolution",
+                "FPS Limit",
+                "Profile",
+                "Pack Default",
+                "Auto",
+                "Off",
+                "Packs cost by the pixel: fewer run faster, and the world looks softer.",
+                "A pack heats a phone up: a limit it can hold stays smoother than one it can't.",
+                "Auto picks the pack's light settings for this device. Pack Default runs it as it comes.",
             ] {
                 lang::get(text);
             }

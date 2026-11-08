@@ -32,8 +32,7 @@ fn clipped(text: &str, chars: usize) -> String {
 /// Where the Shader Packs page's folder is, as a player finds it: on a phone, from the storage's
 /// root (`Starling/shaderpacks`), or in the app's own files, which Open Pack Folder sets up a
 /// reachable folder for.
-#[expect(dead_code, reason = "the Shader Packs rows return on shader_ui.rs")]
-fn shader_folder_note() -> String {
+pub(crate) fn shader_folder_note() -> String {
     let dir = std::env::current_dir()
         .unwrap_or_default()
         .join("shaderpacks");
@@ -1631,15 +1630,6 @@ enum Act {
     ResetKey(&'static str),
     ResetKeys,
     ToggleMod(usize),
-    /// The next profile of the chosen pack, on the Shader Packs page.
-    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
-    PackProfile,
-    /// The next of the resolutions the Shader Packs page offers.
-    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
-    ShaderResolution,
-    /// The next of the frame limits the Shader Packs page offers.
-    #[expect(dead_code, reason = "emitted again once the rows return on shader_ui.rs")]
-    ShaderFpsLimit,
     /// The Custom Buttons page, a new button there, one to change or take away, a control or a
     /// keyboard key for it, and its icon.
     CustomButtons,
@@ -2788,8 +2778,26 @@ impl OptionsUi {
                     if s.shader_options.as_ref().is_some_and(|o| o.changed) {
                         events.push(Event::ShaderOptions);
                     }
+                    s.horizon.shader_profile.clear();
+                    self.refresh_shader_profiles(s);
                     events.push(Event::ShaderPack);
                     events.push(Event::OpenShaderOptions);
+                }
+                Action::Reload => events.push(Event::ShaderPack),
+                Action::NextPackProfile => {
+                    let now = s.horizon.shader_choice().map(|c| c.1).unwrap_or_default();
+                    let list = &self.shader_profiles;
+                    let at = list.iter().position(|p| *p == now).unwrap_or(0);
+                    if let Some(next) = list.get((at + 1) % list.len().max(1)) {
+                        // Empty would fall back to the variable's: the pack's own
+                        // defaults are `default`, and empty is what means Auto.
+                        s.horizon.shader_profile = match next.as_str() {
+                            "" => "default".into(),
+                            crate::graphics::AUTO_PROFILE => String::new(),
+                            next => next.to_owned(),
+                        };
+                    }
+                    events.push(Event::ShaderPack);
                 }
                 Action::OpenFolder => events.push(Event::OpenShaderPackFolder),
                 Action::Apply => {
@@ -5305,21 +5313,6 @@ impl OptionsUi {
                             }
                             self.push(p)
                         }
-                        Act::PackProfile => {
-                            let now = s.horizon.shader_choice().map(|c| c.1).unwrap_or_default();
-                            let list = &self.shader_profiles;
-                            let at = list.iter().position(|p| *p == now).unwrap_or(0);
-                            if let Some(next) = list.get((at + 1) % list.len().max(1)) {
-                                // Empty would fall back to the variable's: the pack's own
-                                // defaults are `default`, and empty is what means Auto.
-                                s.horizon.shader_profile = match next.as_str() {
-                                    "" => "default".into(),
-                                    crate::graphics::AUTO_PROFILE => String::new(),
-                                    next => next.to_owned(),
-                                };
-                            }
-                            events.push(Event::ShaderPack);
-                        }
                         Act::Done => events.extend(self.back(s)),
                         Act::Cycle(opt) => {
                             events.extend(self.cycle_option(s, opt, self.shift, framebuffer));
@@ -5373,23 +5366,6 @@ impl OptionsUi {
                                 self.mod_project = listing.id.clone();
                                 self.push(Page::ModProject);
                             }
-                        }
-                        Act::ShaderResolution => {
-                            const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
-                            let now = s.horizon.resolution_scale;
-                            let next = STEPS.iter().position(|&v| v == now).map_or(2, |i| i + 1);
-                            s.horizon.resolution_scale = STEPS[next % STEPS.len()];
-                            events.push(Event::ShaderPack);
-                            events.push(Event::Changed);
-                        }
-                        Act::ShaderFpsLimit => {
-                            const STEPS: [u32; 4] = [30, 40, 60, 260];
-                            let next = STEPS
-                                .iter()
-                                .position(|&v| v == s.max_fps)
-                                .map_or(0, |i| i + 1);
-                            s.max_fps = STEPS[next % STEPS.len()];
-                            events.push(Event::Changed);
                         }
                         Act::CustomButtons => {
                             self.push(Page::CustomButtons);
@@ -6558,10 +6534,7 @@ impl OptionsUi {
                         Act::DiagnosticsGpu => events.push(Event::DiagnosticsGpu),
                         Act::ExportRepro => events.push(Event::ExportRepro),
                         // Starling's pages answer taps only.
-                        Act::PackProfile
-                        | Act::ShaderResolution
-                        | Act::ShaderFpsLimit
-                        | Act::CustomButtons
+                        Act::CustomButtons
                         | Act::CustomAdd
                         | Act::CustomEdit(_)
                         | Act::CustomDelete(_)
