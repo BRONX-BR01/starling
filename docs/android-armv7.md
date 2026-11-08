@@ -95,6 +95,9 @@ for building the bundle. ARM32's Java runtime has no `jdk.compiler` module, so
 preparation executes the shipped classes and does not invoke javac on the phone.
 A missing or damaged bundle fails before downloading Java, with a reinstall
 message. Updating the kit retires old sources/classes and retains its work cache.
+The isolated command-registry exporter uses `-Xint` on ARM32 to avoid an
+observed stall in the pinned JVM's compiled mode. Its registry JSON was checked
+byte-for-byte against the full x86_64 preparation. Other exporter JVMs keep JIT.
 
 ## Relation to diagnostics
 

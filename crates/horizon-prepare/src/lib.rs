@@ -569,6 +569,14 @@ impl Run<'_> {
             format!("{}{separator}{classpath}", classes.display()),
             format!("dev.horizonlab.parity.{main}"),
         ];
+        // The pinned ARM32 VM spins while this standalone exporter loads the
+        // command registries with the batch JIT policy. Its interpreted output
+        // matches the 64-bit JSON. Leave other exporters/workers JIT-enabled.
+        if cfg!(all(target_os = "android", target_arch = "arm"))
+            && main == "VanillaCommandParseOracle"
+        {
+            all.insert(0, "-Xint".into());
+        }
         all.extend_from_slice(args);
         // Vanilla's code in the exporters logs relative to the working directory (logs/): keep
         // that in the scratch, not where the preparer was started.
