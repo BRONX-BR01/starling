@@ -108,6 +108,32 @@ pub fn newest(updates: impl IntoIterator<Item = Update>) -> Option<Update> {
         })
 }
 
+/// Where Starling's own build service is: a file on the organisation's protected branch, so the
+/// service can move without an update.
+pub const BUILD_SERVER_URL: &str = "https://raw.githubusercontent.com/starling-client/starling/starling/packaging/android/build-server.txt";
+
+/// `text` as a build server's address, when it is one: HTTPS to a host, maybe with a port, and
+/// nothing else (no account, path or query to hide where it really goes).
+pub fn build_server_address(text: &str) -> Option<String> {
+    let address = text.trim().trim_end_matches('/').to_ascii_lowercase();
+    let rest = address.strip_prefix("https://")?;
+    let (host, port) = rest.split_once(':').unwrap_or((rest, ""));
+    let host_is_plain = !host.is_empty()
+        && host.len() <= 253
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
+        && !host.starts_with(['.', '-'])
+        && !host.ends_with(['.', '-']);
+    let port_is_plain = rest.len() == host.len() || port.parse::<u16>().is_ok_and(|port| port != 0);
+    (host_is_plain && port_is_plain).then_some(address)
+}
+
+/// A checked build server address as a player reads it: without `https://`.
+pub fn build_server_host(address: &str) -> &str {
+    address.strip_prefix("https://").unwrap_or(address)
+}
+
 /// A build of version's game with native mods, in a native-builds release.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NativeBuild {
@@ -233,6 +259,56 @@ mod tests {
         let arm64_only =
             json!({"tag_name":"v0.3.0", "assets":[asset("starling-0.3.0-arm64-v8a.apk")]});
         assert!(update_for_abi(&arm64_only, "0.2.3", "armeabi-v7a").is_none());
+    }
+
+    #[test]
+    fn a_build_server_is_https_to_a_host_and_nothing_else() {
+        for (text, address) in [
+            ("https://builds.example.com", "https://builds.example.com"),
+            (
+                " HTTPS://Builds.Example.com/\n",
+                "https://builds.example.com",
+            ),
+            (
+                "https://203-0-113-7.sslip.io:8443",
+                "https://203-0-113-7.sslip.io:8443",
+            ),
+        ] {
+            assert_eq!(build_server_address(text).as_deref(), Some(address));
+        }
+        for text in [
+            "",
+            "https://",
+            "builds.example.com",
+            "http://builds.example.com",
+            "https://user:secret@builds.example.com",
+            "https://builds.example.com/path",
+            "https://builds.example.com?to=elsewhere",
+            "https://builds.example.com#elsewhere",
+            "https://builds example.com",
+            "https://.example.com",
+            "https://example.com-",
+            "https://example.com:",
+            "https://example.com:0",
+            "https://example.com:99999",
+            "https://example.com:80:80",
+        ] {
+            assert_eq!(build_server_address(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn the_published_build_server_is_a_good_address() {
+        let published = include_str!("../../../packaging/android/build-server.txt");
+        assert!(build_server_address(published).is_some());
+    }
+
+    #[test]
+    fn a_build_server_reads_without_its_scheme() {
+        assert_eq!(
+            build_server_host("https://example.com:8443"),
+            "example.com:8443"
+        );
     }
 
     #[test]

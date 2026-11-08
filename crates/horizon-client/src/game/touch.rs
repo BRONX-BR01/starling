@@ -669,7 +669,11 @@ impl Game<'_> {
         self.last_input = Instant::now();
         // The offer of the Starling folder, over the title, takes the touches while it shows.
         #[cfg(target_os = "android")]
-        if self.files_offer_touch(t) || self.update_offer_touch(t) || self.native_builds_touch(t) {
+        if self.files_offer_touch(t)
+            || self.update_offer_touch(t)
+            || self.native_builds_touch(t)
+            || self.catalog_touch(t)
+        {
             return true;
         }
         let p = [t.location.x as f32, t.location.y as f32];
@@ -860,8 +864,10 @@ impl Game<'_> {
         let context = self.text_context();
         if context != self.touch.context {
             self.touch.context = context;
-            self.touch.wanted =
-                matches!(context, Some("chat" | "sign" | "book" | "command" | "mod"));
+            self.touch.wanted = matches!(
+                context,
+                Some("chat" | "sign" | "book" | "command" | "mod" | "catalog")
+            );
             // The finger that opened it lifts on the new screen: that is not a tap beside its field.
             if self.touch.wanted {
                 self.touch.tap_from = None;
@@ -944,7 +950,17 @@ impl Game<'_> {
     /// The text field shown now, by name: the chat, a sign, a book, a command block, the anvil's
     /// name, the creative and recipe searches, the title's forms, the options' searches, the
     /// world options' number boxes.
+    /// Whether the keyboard opened for context was put away with its field still up.
+    #[cfg(target_os = "android")]
+    pub(super) fn keyboard_put_away(&self, context: &str) -> bool {
+        self.touch.context == Some(context) && !self.touch.wanted
+    }
+
     fn text_context(&mut self) -> Option<&'static str> {
+        #[cfg(target_os = "android")]
+        if self.catalog_typing() {
+            return Some("catalog");
+        }
         if self.screen == Screen::Chat {
             Some("chat")
         } else if self.sign_edit.is_some() {

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -26,6 +27,8 @@ final class NativeMods {
     static final String LIBRARY = "libhorizon_android.so";
     /** Starts that ended before the first frame, after which the build is set aside. */
     private static final int TRIES = 2;
+    private static final Pattern BUILD_SERVER_ADDRESS = Pattern.compile(
+            "https://[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:[0-9]{1,5})?/?", Pattern.CASE_INSENSITIVE);
 
     private static File dir(Context context) {
         return new File(context.getFilesDir(), "native");
@@ -110,6 +113,24 @@ final class NativeMods {
     static void failed(Context context, String why) {
         setAside(dir(context), "The build with native mods could not be loaded (" + why
                 + "), so Starling started without it.");
+    }
+
+    /**
+     * Whether `text` is a build server's address, as game/native_builds.rs takes one: HTTPS to a
+     * host, maybe with a port, and nothing else.
+     */
+    static boolean isBuildServer(String text) {
+        return BUILD_SERVER_ADDRESS.matcher(text.trim()).matches();
+    }
+
+    /** Native mods compile on the build server at `address`, or on Starling's with null. */
+    static void chooseBuildServer(Context context, String address) {
+        File file = new File(dir(context), "build-server");
+        if (address == null) {
+            file.delete();
+        } else {
+            write(file, address.trim());
+        }
     }
 
     private static void setAside(File dir, String notice) {

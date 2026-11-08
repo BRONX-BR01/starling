@@ -20,8 +20,17 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 use winit::event::{Touch, TouchPhase};
 
-/// The mod build service (packaging/android/mod_build_server.py).
+/// The mod build service (packaging/android/mod_build_server.py), while the file that says where it
+/// is now (`releases::BUILD_SERVER_URL`) has never been read.
 const BUILD_SERVER: &str = "https://191-234-193-205.sslip.io";
+/// Beside the builds: the player's own build server (StarlingActivity.askBuildServer), and the last
+/// address the project published.
+const CUSTOM_SERVER: &str = "build-server";
+const PUBLISHED_SERVER: &str = "published-build-server";
+/// In the folder of a build from the player's own server: which one.
+const CAME_FROM: &str = "server";
+/// What the service takes in one request (`MAX_BODY`).
+const LARGEST_REQUEST: usize = 32 << 20;
 /// A build's folder here starts with this, and a new one takes the place of the last.
 const COMPILED: &str = "compiled-";
 /// The service's waits: between looks at the job, and how long it may go on at all.
@@ -84,6 +93,8 @@ pub(super) struct NativeBuilds {
     mining: super::build_mining::BuildMining,
     /// Under a build: digging, not fishing.
     digging: bool,
+    /// What failed last was a compile: Try again compiles, and doesn't show the published builds.
+    compile_failed: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -96,10 +107,64 @@ enum Act {
     Compile,
     /// Under a build: from the water to the rock and back.
     Switch,
+    /// The activity's dialog that chooses another build server.
+    Server,
 }
 
 fn dir() -> PathBuf {
     horizon_client::logging::private_home().join("native")
+}
+
+/// The build server the player chose in place of Starling's, if any.
+fn custom_server() -> Option<String> {
+    let text = std::fs::read_to_string(dir().join(CUSTOM_SERVER)).ok()?;
+    releases::build_server_address(&text)
+}
+
+/// Where Starling's own build service is: what the project publishes now, or the last it published
+/// when that can't be read.
+fn published_server(version: &str) -> String {
+    let file = dir().join(PUBLISHED_SERVER);
+    let published = get(releases::BUILD_SERVER_URL, version)
+        .and_then(|r| r.into_string().map_err(|e| e.to_string()))
+        .ok()
+        .and_then(|text| releases::build_server_address(&text));
+    if let Some(address) = published {
+        let _ = std::fs::create_dir_all(dir());
+        let _ = std::fs::write(&file, &address);
+        return address;
+    }
+    std::fs::read_to_string(&file)
+        .ok()
+        .and_then(|text| releases::build_server_address(&text))
+        .unwrap_or_else(|| BUILD_SERVER.to_owned())
+}
+
+/// The other server the build `name` came from, if it did.
+fn came_from(name: &str) -> Option<String> {
+    let host = std::fs::read_to_string(dir().join(name).join(CAME_FROM)).ok()?;
+    let host = host.trim();
+    (!host.is_empty()).then(|| host.to_owned())
+}
+
+/// `text` in lines that fit `width`.
+pub(super) fn wrapped(ui: &Ui<'_>, face: Face, size: f32, width: f32, text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split(' ') {
+        let next = if line.is_empty() {
+            word.to_owned()
+        } else {
+            format!("{line} {word}")
+        };
+        if !line.is_empty() && ui.measure(face, size, &next) > width {
+            lines.push(std::mem::replace(&mut line, word.to_owned()));
+        } else {
+            line = next;
+        }
+    }
+    lines.push(line);
+    lines
 }
 
 /// The build chosen for the next start (files/native/current), if any.
@@ -237,7 +302,7 @@ fn download(build: &Build, version: &str, shared: &Mutex<Shared>) -> Result<Stri
 }
 
 /// The UI's scale for a window of `w` x `h` pixels (as `Ui::new`).
-fn density(w: f32, h: f32) -> f32 {
+pub(super) fn density(w: f32, h: f32) -> f32 {
     (w / 1040.0).min(h / 700.0).clamp(1.0, 4.0)
 }
 
@@ -246,25 +311,41 @@ pub(super) fn running_build_info() -> Option<String> {
     std::fs::read_to_string(dir().join(running()?).join("build.json")).ok()
 }
 
-/// The `horizon-native-mods` folder's mods, each a length and its file, for the service.
+/// The `horizon-native-mods` folder's mods, each a length and what the service needs of it: nothing
+/// else on the phone goes with them. In an order of their own, not their files' names, so the same
+/// mods always make the same request.
 fn bundles_body() -> Result<Vec<u8>, String> {
     let folder = Game::game_dir().join(horizon_client::mod_list::NATIVE_DIR);
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&folder)
         .map(|d| d.flatten().map(|e| e.path()).collect())
         .unwrap_or_default();
     paths.retain(|p| p.extension().is_some_and(|e| e == "hnmod"));
-    paths.sort();
-    let mut body = Vec::new();
+    let mut mods = Vec::new();
     for path in paths {
-        if horizon_mods::index::native::Bundle::read(&path).is_err() {
+        let Ok(bundle) = horizon_mods::index::native::Bundle::read(&path) else {
             continue;
-        }
-        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        };
+        mods.push(
+            bundle
+                .for_build()
+                .map_err(|e| format!("{}: {e}", path.display()))?,
+        );
+    }
+    if mods.is_empty() {
+        return Err("There is no native mod to compile.".into());
+    }
+    mods.sort();
+    let mut body = Vec::new();
+    for bytes in mods {
         body.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
         body.extend_from_slice(&bytes);
     }
-    if body.is_empty() {
-        return Err("There is no native mod to compile.".into());
+    if body.len() > LARGEST_REQUEST {
+        return Err(
+            "Your native mods are too big to compile together. Take some out of the folder and \
+             try again."
+                .into(),
+        );
     }
     Ok(body)
 }
@@ -321,6 +402,9 @@ fn fetch_library(
                 file.write_all(&buffer[..n])
                     .map_err(|e| format!("{}: {e}", part.display()))?;
                 done += n as u64;
+                if done > size {
+                    return Err("The build server sent more than it said.".into());
+                }
                 shared.lock().unwrap_or_else(PoisonError::into_inner).status = format!(
                     "Downloading: {:.0} of {:.0} MB",
                     done as f64 / 1e6,
@@ -366,7 +450,11 @@ fn compile(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
         s.status = text;
         s.building_since = None;
     };
-    let server = std::env::var("HORIZON_BUILD_SERVER").unwrap_or_else(|_| BUILD_SERVER.into());
+    let for_development = std::env::var("HORIZON_BUILD_SERVER").ok();
+    let custom = for_development.is_none().then(custom_server).flatten();
+    let server = for_development
+        .or_else(|| custom.clone())
+        .unwrap_or_else(|| published_server(version));
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(20))
         .timeout_read(Duration::from_secs(40))
@@ -469,6 +557,10 @@ fn compile(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
         finished["build"].to_string().as_bytes(),
     )
     .map_err(|e| e.to_string())?;
+    if let Some(address) = &custom {
+        std::fs::write(folder.join(CAME_FROM), releases::build_server_host(address))
+            .map_err(|e| e.to_string())?;
+    }
     std::fs::write(dir().join("current"), &name).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(dir().join("starts"));
     // The compiled builds before it: 60 MB each.
@@ -558,6 +650,7 @@ impl Game<'_> {
         if !SERVICE_SUPPORTED {
             return;
         }
+        self.native_builds.compile_failed = false;
         let Some((version, _)) = crate::android::app_version() else {
             return;
         };
@@ -613,6 +706,7 @@ impl Game<'_> {
         if (matches!(card.stage, Some(Stage::Downloading(_))) || shared.compiling)
             && let Some(result) = shared.downloaded.take()
         {
+            card.compile_failed = shared.compiling && result.is_err();
             shared.compiling = false;
             card.stage = Some(match result {
                 Ok(name) => Stage::Chosen(name),
@@ -648,19 +742,21 @@ impl Game<'_> {
         };
         let label = |name: &str| {
             builds.iter().find(|b| b.name == name).map_or_else(
-                || {
-                    if name.starts_with(COMPILED) {
-                        "your native mods".to_owned()
-                    } else {
-                        name.to_owned()
-                    }
+                || match (name.starts_with(COMPILED), came_from(name)) {
+                    (true, Some(host)) => format!("your native mods (from {host})"),
+                    (true, None) => "your native mods".to_owned(),
+                    (false, _) => name.to_owned(),
                 },
                 |b| mods_label(&b.mods),
             )
         };
         let current = chosen();
         let now = running();
+        let custom = custom_server();
+        let custom_host = custom.as_deref().map(releases::build_server_host);
         let mut acts: Vec<(String, Act)> = Vec::new();
+        // Said in red, above the rest.
+        let mut danger = None;
         let (title, body) = match &stage {
             Stage::Loading => ("Native mods".to_owned(), "Looking for builds...".to_owned()),
             Stage::List => {
@@ -675,6 +771,13 @@ impl Game<'_> {
                 if current.is_some() {
                     acts.push(("Play without native mods".into(), Act::StopUsing));
                 }
+                acts.push(("Build server...".into(), Act::Server));
+                danger = custom_host.map(|host| {
+                    format!(
+                        "Compiling uses another build server: {host}. We take no responsibility \
+                         for it."
+                    )
+                });
                 let playing = match now {
                     Some(n) => format!("This game has {}. ", label(&n)),
                     None => String::new(),
@@ -702,6 +805,9 @@ impl Game<'_> {
             ),
             Stage::Chosen(name) => {
                 acts.push(("Restart now".into(), Act::Restart));
+                danger = came_from(name).map(|host| {
+                    format!("This build came from {host}, not from Starling's server.")
+                });
                 (
                     if name.starts_with(COMPILED) {
                         "Your native mods are ready".to_owned()
@@ -719,14 +825,27 @@ impl Game<'_> {
             }
             Stage::Warn(id) => {
                 acts.push(("Compile".into(), Act::Compile));
+                acts.push(("Build server...".into(), Act::Server));
+                danger = custom_host.map(|host| {
+                    format!(
+                        "{host} is not Starling's server. The game it sends back runs with full \
+                         access, including your worlds and your signed-in account. We take no \
+                         responsibility for it."
+                    )
+                });
+                let server = custom_host.map_or_else(
+                    || "Starling's build server".to_owned(),
+                    |host| format!("the build server at {host}"),
+                );
                 (
                     format!("Compile {id}?"),
-                    "A native mod runs with the game's full access: it can do anything the game \
-                     can on this phone, so only compile mods you trust. It is sent to Starling's \
-                     build server, which compiles the game with your native mods in a few \
-                     minutes; then the game restarts with them. If it closes before it shows, \
-                     Starling starts without it the time after."
-                        .to_owned(),
+                    format!(
+                        "A native mod runs with the game's full access: it can do anything the \
+                         game can on this phone, so only compile mods you trust. It is sent to \
+                         {server}, which compiles the game with your native mods in a few \
+                         minutes; then the game restarts with them. If it closes before it shows, \
+                         Starling starts without it the time after."
+                    ),
                 )
             }
             Stage::Compiling => unreachable!("drawn by draw_compiling"),
@@ -737,26 +856,21 @@ impl Game<'_> {
         ui.fill(0.0, 0.0, w, h, color::with_alpha(color::BG, 0.72));
         let card_w = (w - 48.0).min(470.0);
         let pad = 20.0;
-        let mut lines = Vec::new();
-        let mut line = String::new();
-        for word in body.split(' ') {
-            let next = if line.is_empty() {
-                word.to_owned()
-            } else {
-                format!("{line} {word}")
-            };
-            if !line.is_empty() && ui.measure(Face::Regular, 13.0, &next) > card_w - 2.0 * pad {
-                lines.push(std::mem::replace(&mut line, word.to_owned()));
-            } else {
-                line = next;
-            }
-        }
-        lines.push(line);
+        let lines = wrapped(&ui, Face::Regular, 13.0, card_w - 2.0 * pad, &body);
+        let danger_lines = danger.as_deref().map_or_else(Vec::new, |text| {
+            wrapped(&ui, Face::Semibold, 14.0, card_w - 2.0 * pad, text)
+        });
+        let danger_h = if danger_lines.is_empty() {
+            0.0
+        } else {
+            danger_lines.len() as f32 * 20.0 + 8.0
+        };
         let bar = matches!(stage, Stage::Downloading(_));
         let (button_h, gap) = (34.0, 8.0);
         let card_h = pad
             + 24.0
             + 10.0
+            + danger_h
             + lines.len() as f32 * 19.0
             + if bar { 20.0 } else { 0.0 }
             + 14.0
@@ -768,6 +882,13 @@ impl Game<'_> {
         ui.border(x, y, card_w, card_h, 14.0, color::BORDER);
         ui.text(Face::Semibold, 17.0, x + pad, y + pad, color::TEXT, &title);
         let mut ty = y + pad + 24.0 + 10.0;
+        for line in &danger_lines {
+            ui.text(Face::Semibold, 14.0, x + pad, ty, color::DANGER, line);
+            ty += 20.0;
+        }
+        if !danger_lines.is_empty() {
+            ty += 8.0;
+        }
         for line in &lines {
             ui.text(Face::Regular, 13.0, x + pad, ty, color::MUTED, line);
             ty += 19.0;
@@ -794,7 +915,7 @@ impl Game<'_> {
         let mut drawn = Vec::new();
         for (i, (text, act)) in acts.into_iter().enumerate() {
             let rect = [x + pad, by, card_w - 2.0 * pad, button_h];
-            let (fill, ink) = if i == 0 && act != Act::Close {
+            let (fill, ink) = if i == 0 && !matches!(act, Act::Close | Act::Server) {
                 (color::ACCENT, color::ON_ACCENT)
             } else {
                 (color::RAISED, color::TEXT)
@@ -934,6 +1055,10 @@ impl Game<'_> {
         let Some((version, _)) = crate::android::app_version() else {
             return;
         };
+        let act = match act {
+            Act::Retry if self.native_builds.compile_failed => Act::Compile,
+            other => other,
+        };
         match act {
             Act::Use(build) => {
                 let card = &mut self.native_builds;
@@ -966,6 +1091,9 @@ impl Game<'_> {
             Act::Retry => self.open_native_builds(),
             Act::Close => self.native_builds.stage = None,
             Act::Switch => self.native_builds.digging = !self.native_builds.digging,
+            Act::Server => {
+                crate::android::ask_build_server(custom_server().as_deref().unwrap_or(""));
+            }
             Act::Compile => {
                 let card = &mut self.native_builds;
                 card.stage = Some(Stage::Compiling);

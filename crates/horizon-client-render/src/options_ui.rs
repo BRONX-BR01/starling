@@ -1237,6 +1237,22 @@ fn set_filtering(s: &mut Settings, anisotropy_bit: i32, filtering: i32) {
 
 /// `Options.preferredGraphicsBackend`'s tooltip: the restart note once the choice differs from
 /// the startup one, the description, and Vulkan's warning.
+/// Android's own rows. A constant: horizon-mixins only reads `format!`, `matches!` and `vec!` in
+/// a function it hooks.
+const ON_A_PHONE: bool = cfg!(target_os = "android");
+
+/// The Options page's entries, with Diagnostics on a phone. Apart from `OptionsUi::layout`:
+/// horizon-mixins refuses to hook a function with a `#[cfg]` in it (E_UNSUPPORTED_CFG).
+fn with_diagnostics<const N: usize>(
+    entries: [(&'static str, Option<Page>); N],
+) -> Vec<(&'static str, Option<Page>)> {
+    let mut all = Vec::from(entries);
+    if ON_A_PHONE {
+        all.push(("starling.diagnostics.title", Some(Page::Diagnostics)));
+    }
+    all
+}
+
 fn graphics_api_tooltip(s: &Settings) -> Text {
     let line = |key: &str| lang::get_or(key, key);
     let mut lines = Vec::new();
@@ -1590,6 +1606,7 @@ enum Act {
     NativeKey(usize, usize),
     NativeButton(usize, usize),
     OpenModFolder,
+    OpenCatalog,
     /// The creative screen with the inventory beside it, or as the game draws it.
     BedrockInventory,
     /// The touch layout editor (phones).
@@ -1723,6 +1740,8 @@ pub enum Event {
     /// Data Packs' Open Pack Folder: create the folder if needed and open it.
     OpenDataPackFolder(std::path::PathBuf),
     OpenModFolder,
+    /// Android: the Mods page's Catalog button (game/mod_catalog.rs).
+    OpenCatalog,
     /// The Shader Packs page opened: list `shaderpacks/` into `shader_packs`.
     ListShaderPacks,
     /// A shader pack or its profile was picked, or the pack turned off: save and apply it.
@@ -3881,9 +3900,8 @@ impl OptionsUi {
                     ("horizon.pages.open.horizon_settings", Some(Page::Horizon)),
                     ("horizon.pages.open.mods", Some(Page::Mods)),
                     ("options.credits_and_attribution", Some(Page::Credits)),
-                    #[cfg(target_os = "android")]
-                    ("starling.diagnostics.title", Some(Page::Diagnostics)),
                 ];
+                let entries = with_diagnostics(entries);
                 let rows = entries.len().div_ceil(2) as f32;
                 let gy = (61.0 + 30.0f32).min(h - 33.0 - rows * 24.0);
                 for (i, (key, page)) in entries.iter().enumerate() {
@@ -4427,6 +4445,16 @@ impl OptionsUi {
                     _ => None,
                 };
                 if let Some((label, act)) = folder {
+                    // Android's way to find mods, resource packs and shader packs.
+                    if ON_A_PHONE && matches!(page, Page::Mods) {
+                        out.push(button(
+                            cx - 258.0,
+                            h - 27.0,
+                            100.0,
+                            tr("Catalog"),
+                            Act::OpenCatalog,
+                        ));
+                    }
                     out.push(button(cx - 154.0, h - 27.0, 150.0, tr(label), act));
                     out.push(button(cx + 4.0, h - 27.0, 150.0, tr("gui.done"), Act::Done));
                 } else {
@@ -5331,6 +5359,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
+                        Act::OpenCatalog => events.push(Event::OpenCatalog),
                         Act::OpenShaderPackFolder => events.push(Event::OpenShaderPackFolder),
                         Act::ShaderResolution => {
                             const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
@@ -6475,6 +6504,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
+                        Act::OpenCatalog => events.push(Event::OpenCatalog),
                         Act::PickShaderPack(i) => {
                             let pick = match i {
                                 Some(i) => s.shader_packs.get(i).map(|p| p.file.clone()),

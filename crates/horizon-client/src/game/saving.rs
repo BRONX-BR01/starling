@@ -87,6 +87,23 @@ impl Game<'_> {
         Ok(())
     }
 
+    /// The focus goes first when the game leaves the screen on a phone (home, the recent apps, a
+    /// call), before the window, and the system may end the process from then on: the world is
+    /// saved at once, as Bedrock does. Apart from `handle_window_event`: horizon-mixins refuses to
+    /// hook a function with a `#[cfg]` in it (E_UNSUPPORTED_CFG).
+    pub(super) fn save_when_focus_leaves(&mut self, event: &winit::event::WindowEvent) {
+        if !cfg!(target_os = "android") {
+            return;
+        }
+        if let winit::event::WindowEvent::Focused(focused) = event {
+            if *focused {
+                self.saved_for_background = false;
+            } else {
+                self.save_for_background();
+            }
+        }
+    }
+
     /// The game left the screen (Android: the focus went, or the window), and from now on the
     /// system may end the process without a word: the world is saved where it stands, once each
     /// time the game goes, as Bedrock does, and the log is flushed. It is the autosave's save

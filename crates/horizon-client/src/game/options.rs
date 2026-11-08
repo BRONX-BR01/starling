@@ -442,6 +442,10 @@ impl Game<'_> {
                 Event::OpenModFolder => {
                     self.open_game_folder(&Self::game_dir().join(horizon_client::mod_list::DIR))
                 }
+                #[cfg(target_os = "android")]
+                Event::OpenCatalog => self.open_catalog(),
+                #[cfg(not(target_os = "android"))]
+                Event::OpenCatalog => {}
                 Event::DataPacks(ids) => {
                     let resources = self.vanilla_root();
                     if let Some(title) = &mut self.title {

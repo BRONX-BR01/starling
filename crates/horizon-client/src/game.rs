@@ -105,6 +105,7 @@ mod copper_golems;
 mod cosmetics;
 mod creaking;
 mod creative_hotbar;
+mod creative_shift;
 mod creatures;
 mod crossbow;
 pub(crate) mod cushions;
@@ -210,6 +211,8 @@ mod mob_looting;
 mod mob_sounds;
 mod mod_api_host;
 mod mod_assets;
+#[cfg(target_os = "android")]
+mod mod_catalog;
 mod mods;
 mod mount_menu;
 mod mounts;
@@ -2299,10 +2302,7 @@ fn glfw_button(button: MouseButton) -> i32 {
 /// crafting grid and its result it adds to the inventory's.
 const BEDROCK_SHIFT: f32 = 100.0;
 const BEDROCK_CRAFT: [usize; 5] = [100, 101, 102, 103, 200];
-thread_local! {
-    /// Where the creative window is from the middle of the screen (`creative_origin`).
-    static CREATIVE_SHIFT: std::cell::Cell<f32> = const { std::cell::Cell::new(0.0) };
-}
+use creative_shift::CREATIVE_SHIFT;
 
 fn select_creative_tab(
     creative: &mut Creative,
@@ -2947,6 +2947,8 @@ struct Game<'a> {
     update_offer: update_offer::UpdateOffer,
     #[cfg(target_os = "android")]
     native_builds: native_builds::NativeBuilds,
+    #[cfg(target_os = "android")]
+    catalog: mod_catalog::Catalog,
     /// Bedrock Inventory with the pointer on its inventory window: the item tab the other window
     /// shows (the creative screen's selected tab is then the Survival Inventory, so every click
     /// works as it does there).
@@ -8253,6 +8255,7 @@ impl Game<'_> {
     fn draw_phone_offers(&mut self, batch: &mut HudBatch) {
         self.draw_files_offer(batch);
         self.draw_update_offer(batch);
+        self.draw_catalog(batch);
         self.draw_native_builds(batch);
     }
     #[cfg(not(target_os = "android"))]
@@ -17177,17 +17180,7 @@ impl Game<'_> {
         if !ours {
             return;
         }
-        // The focus goes first when the game leaves the screen (home, the recent apps, a call),
-        // before the window, and the system may end the process from then on: the world is saved
-        // at once, as Bedrock does.
-        #[cfg(target_os = "android")]
-        if let WindowEvent::Focused(focused) = &event {
-            if *focused {
-                self.saved_for_background = false;
-            } else {
-                self.save_for_background();
-            }
-        }
+        self.save_when_focus_leaves(&event);
         if self.touch_event(event_loop, id, &event) {
             return;
         }
@@ -18795,6 +18788,7 @@ impl Game<'_> {
             self.poll_files_offer();
             self.poll_update_offer();
             self.poll_native_builds();
+            self.poll_catalog();
         }
         horizon_client::spans::time("pads", || self.poll_pads(event_loop));
         self.pause_if_inactive();
@@ -19296,6 +19290,8 @@ impl<'a> Game<'a> {
             update_offer: Default::default(),
             #[cfg(target_os = "android")]
             native_builds: Default::default(),
+            #[cfg(target_os = "android")]
+            catalog: Default::default(),
             bedrock_items: None,
             bedrock_held: false,
             creative_hovered: None,

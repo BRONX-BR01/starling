@@ -220,6 +220,8 @@ impl Game<'_> {
                 super::super::clipboard::CREATIVE_SEARCH_CHARS,
                 SEARCH,
             ),
+            #[cfg(target_os = "android")]
+            "catalog" => field(("catalog", 0), self.catalog_query(), None, 0, SEARCH),
             "title" => {
                 let (id, value, max) = self.title.as_mut()?.focused_field()?;
                 let value = value.clone();
@@ -283,6 +285,8 @@ impl Game<'_> {
             Some("anvil") => self.station_text(Some(text), false),
             Some("creative") => self.creative_search_edit(Some(text)),
             Some("title") => self.title_edit(Some(text), false),
+            #[cfg(target_os = "android")]
+            Some("catalog") => self.catalog_type(text),
             _ => {}
         }
     }
@@ -300,6 +304,12 @@ impl Game<'_> {
             },
             Some("anvil") if key == KeyCode::Backspace => self.station_text(None, true),
             Some("creative") if key == KeyCode::Backspace => self.creative_search_backspace(false),
+            #[cfg(target_os = "android")]
+            Some("catalog") => match key {
+                KeyCode::Enter | KeyCode::NumpadEnter => self.catalog_submit(),
+                KeyCode::Backspace => self.catalog_backspace(),
+                _ => {}
+            },
             Some("title") => match key {
                 KeyCode::Enter | KeyCode::NumpadEnter => {
                     if let Some(t) = self.title.as_mut() {
@@ -353,6 +363,10 @@ impl Game<'_> {
                 } => self.mirror_edit(&text, cursor, anchor, generation),
                 _ if self.touch.mirror.shown.is_none() => {}
                 crate::android::MirrorEvent::Action => self.mirror_action(),
+                // Back closes the keyboard, not the page under the catalog.
+                crate::android::MirrorEvent::Key(111) if self.catalog_typing() => {
+                    self.touch.wanted = false;
+                }
                 crate::android::MirrorEvent::Key(111) => {
                     let _ = self.touch_key_tap(KeyCode::Escape);
                 }
