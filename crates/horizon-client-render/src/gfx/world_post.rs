@@ -55,12 +55,9 @@ pub struct Post {
     sampler: wgpu::Sampler,
     copy: wgpu::RenderPipeline,
     fxaa: wgpu::RenderPipeline,
-<<<<<<< HEAD
     /// The world drawn below the screen's size, sharper than the bilinear copy.
     /// `HORIZON_WORLD_UPSCALE=off` keeps the copy.
     sharp: Option<wgpu::RenderPipeline>,
-||||||| 31f83499b6
-=======
     /// Contrast-adaptive sharpening of TAA's upscaled picture: the jittered frames are
     /// spread over more output pixels, and the blend softens edges.
     sharpen: wgpu::RenderPipeline,
@@ -68,7 +65,6 @@ pub struct Post {
     sharpness: f32,
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
->>>>>>> c98a51a664
     format: wgpu::TextureFormat,
     /// World resolution relative to the window (0.5..=2.0).
     pub scale: f32,
@@ -251,14 +247,10 @@ impl Post {
             pipeline_layout: pipeline_layout.clone(),
             copy: pipeline("fs_copy", &pipeline_layout, format),
             fxaa: pipeline("fs_fxaa", &pipeline_layout, format),
-<<<<<<< HEAD
             sharp: (std::env::var("HORIZON_WORLD_UPSCALE").as_deref() != Ok("off"))
                 .then(|| pipeline("fs_upscale", &pipeline_layout, format)),
-||||||| 31f83499b6
-=======
             sharpen: sharpen_pipeline(device, &shader, &pipeline_layout, format, 0.85),
             sharpness: 0.85,
->>>>>>> c98a51a664
             layout,
             sampler,
             format,
@@ -618,7 +610,7 @@ impl Post {
         timing: Option<&mut super::pack_timing::PassTiming>,
     ) {
         if let (Some(target), Some(sharp)) = (&self.target, &self.sharp) {
-            self.draw(encoder, screen, &target.group, sharp, timing);
+            self.draw_onto(encoder, screen, &target.group, sharp, timing);
         }
     }
 
@@ -633,26 +625,16 @@ impl Post {
         let pipeline = if self.antialias {
             &self.fxaa
         } else {
-<<<<<<< HEAD
             self.sharp
                 .as_ref()
                 .filter(|_| self.scale < 1.0)
                 .unwrap_or(&self.copy)
-        };
-        self.draw(encoder, screen, group, pipeline, timing);
-    }
-
-    fn draw(
-||||||| 31f83499b6
-=======
-            &self.copy
         };
         self.draw_onto(encoder, screen, group, pipeline, timing);
     }
 
     /// Draw what `group` binds onto `screen` through `pipeline`.
     fn draw_onto(
->>>>>>> c98a51a664
         &self,
         encoder: &mut wgpu::CommandEncoder,
         screen: &wgpu::TextureView,

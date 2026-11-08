@@ -476,22 +476,17 @@ impl StateModels {
             baked.push((variant, model));
         }
         // Every variant of every definition was baked above.
-<<<<<<< HEAD
-        let choices = choices.iter().map(|c| c.map(|v| index[&key(v)])).collect();
+        let choices: Vec<_> = choices.iter().map(|c| c.map(|v| index[&key(v)])).collect();
         let partials = index
             .into_iter()
             .filter(|((name, ..), _)| partials.contains(name))
-||||||| 31f83499b6
-        let choices = choices.iter().map(|c| c.map(|v| index[&key(v)])).collect();
-=======
-        let choices: Vec<_> = choices.iter().map(|c| c.map(|v| index[&key(v)])).collect();
+            .collect();
         let single_models = states
             .iter()
             .map(|state| {
                 let (choice, selected) = state.as_ref()?;
                 choices[*choice].single_variant(selected).copied()
             })
->>>>>>> c98a51a664
             .collect();
         Ok(Self {
             choices,

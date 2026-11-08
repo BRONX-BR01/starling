@@ -287,15 +287,9 @@ fn translate(
     let flat = |pp: &Preprocessed| {
         let named = anonymous_structs::name(&pp.code);
         let code = named.as_deref().unwrap_or(&pp.code);
-<<<<<<< HEAD
         let named = shadowed_types::rename(code).or(named);
         let code = named.as_deref().unwrap_or(&pp.code);
-        interface_blocks::flatten(code)
-||||||| 31f83499b6
-        interface_blocks::flatten(code)
-=======
         let flat = interface_blocks::flatten(code)
->>>>>>> c98a51a664
             .or(named)
             .map(|code| Preprocessed { code, ..pp.clone() });
         let split = atomic_vectors::rewrite(flat.as_ref().unwrap_or(pp));
@@ -481,20 +475,16 @@ fn translate(
         }
     }
 
-<<<<<<< HEAD
     let prepass_uv = gbuffers
         .filter(|g| g.prepass_uv)
         .map(|_| locations.len() as u32);
 
-||||||| 31f83499b6
-=======
     // Terrain's fade input is supplied without a pack declaration. Inject it only when
     // the renderer provides the actual value; other geometry and authored globals keep
     // their existing behavior.
     let chunk_fade = gbuffers
         .and_then(|g| g.attributes.iter().find(|(n, _)| n == "mc_chunkFade"))
         .filter(|_| uses_name(&vertex.code, "mc_chunkFade") && !v.globals.contains("mc_chunkFade"));
->>>>>>> c98a51a664
     let header = |stage: &Stage| {
         let mut h = resources(&uniforms, &samplers, &images);
         if let Some(reference) = alpha_test_ref {
@@ -525,14 +515,11 @@ fn translate(
         if let (Some(inputs), ShaderStage::Vertex) = (gbuffers, stage.kind) {
             h.push_str(&inputs.declarations);
             h.push('\n');
-<<<<<<< HEAD
             if let Some(at) = prepass_uv {
                 writeln!(h, "layout(location = {at}) out vec2 hz_prepass_uv;").unwrap();
-||||||| 31f83499b6
-=======
+            }
             if chunk_fade.is_some() {
                 h.push_str("float mc_chunkFade;\n");
->>>>>>> c98a51a664
             }
         }
         h.push_str(&stage.prelude());
@@ -2579,7 +2566,6 @@ in VertexData {{ {member} }} vIn;
     }
 
     #[test]
-<<<<<<< HEAD
     fn the_cut_of_a_cutout_texture_is_read_from_its_discard() {
         let cut = |code: &str| scan::alpha_cut(&crate::macros::lex(code));
         assert_eq!(cut("if (color.a <= 0.5) discard;"), Some(0.5));
@@ -2591,8 +2577,9 @@ in VertexData {{ {member} }} vIn;
             cut("if (fog < dither) discard; if (c.a < cut) discard;"),
             None
         );
-||||||| 31f83499b6
-=======
+    }
+
+    #[test]
     fn paged_maps_read_through_their_page_table() {
         let vsh = "#version 120\nvarying vec2 uv;\nvoid main() { gl_Position = ftransform(); uv = gl_MultiTexCoord0.st; }\n";
         // A read with a bias, at a level, with gradients; a local named like a map is not one.
@@ -2640,7 +2627,6 @@ in VertexData {{ {member} }} vIn;
             let n = if paged_maps { 3 } else { 0 };
             assert_eq!((calls("hz_pagedTexture"), calls("hz_pagedRead")), (n, n));
         }
->>>>>>> c98a51a664
     }
 
     #[test]

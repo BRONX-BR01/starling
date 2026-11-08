@@ -439,7 +439,7 @@ struct Pass {
     /// Reads `mc_Entity`'s table (`PackPost::block_ids`).
     ids: bool,
     /// The depth-only pipeline drawn first (`Geometry::prepass`) and the alpha it keeps above.
-    prepass: Option<(wgpu::RenderPipeline, f32)>,
+    prepass: Option<(Slot<wgpu::RenderPipeline>, f32)>,
     /// Bind groups by the sides read (bits 0–15), the buffers whose mip chain is current (bits
     /// 16–31) and the shadowcolor sides read (bits 32–33).
     groups: HashMap<u64, wgpu::BindGroup>,
@@ -1335,17 +1335,6 @@ struct Resources<'a> {
     released: std::cell::Cell<(&'static str, u16)>,
     /// The formats and dimensions of the images no `image.*` gives, for their stand-ins.
     stand_ins: &'a std::cell::RefCell<Vec<(wgpu::TextureFormat, wgpu::TextureViewDimension)>>,
-<<<<<<< HEAD
-    /// The stage being built and the buffers its passes wrote so far (`overridden`).
-    stage_written: &'a std::cell::Cell<(Group, u16)>,
-}
-
-/// `texture.<stage>.colortex<n>` stands in for the buffer until a pass of the stage writes it, as
-/// in Iris: then the buffer is read. superDuperVanilla's clouds and bloom share `colortex0`.
-fn overridden(src: Source, written_before: u16) -> bool {
-    !matches!(src, Source::Color(n) if written_before & 1 << n != 0)
-||||||| 31f83499b6
-=======
     /// Bit n: shadowtex n read through a plain sampler filters linearly (`shadowtexNNearest`
     /// unset): the translator's helpers blend a gather of it (`hz_depth_linear`).
     shadow_linear: u8,
@@ -1520,7 +1509,6 @@ fn owned_buffers(
                 .map(|b| (b.array_stride, b.step_mode, b.attributes.to_vec()))
         })
         .collect()
->>>>>>> c98a51a664
 }
 
 /// A program's bind group layout (its uniform block, samplers and images) and how each sampler
@@ -1591,17 +1579,6 @@ fn bindings(
             ));
             return None;
         }
-<<<<<<< HEAD
-        let written_before = match pack.stage_written.get() {
-            (stage, written) if stage == group => written,
-            _ => 0,
-        };
-        let custom = pack_textures::find(textures, group, &s.ty, &s.name).filter(|_| {
-            let buffer = source(&s.name, group.shadow(), shadow.is_some(), watershadow);
-            overridden(buffer, written_before)
-||||||| 31f83499b6
-        let custom = pack_textures::find(textures, group, &s.ty, &s.name);
-=======
         let released = pack.released.get();
         let custom = pack_textures::find(textures, group, &s.ty, &s.name).filter(|&i| {
             let t = &textures[i];
@@ -1617,7 +1594,6 @@ fn bindings(
                     || released.0 != t.stage
                     || horizon_shaders::buffer_index(&t.name)
                         .is_none_or(|b| released.1 & 1 << b == 0))
->>>>>>> c98a51a664
         });
         let image = pack
             .images
@@ -2127,31 +2103,11 @@ fn build_pass(
             draw.then_some(draws),
             geometry.and_then(|g| g.ids),
             (!interface.buffers.is_empty()).then_some(&pack.buffers.layout),
-            pack.indices.filter(|_| p.geometry_triangles > 0),
+            pack.indices.filter(|_| reads_indices),
         ];
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&p.name),
-<<<<<<< HEAD
             bind_group_layouts: used_groups(&groups),
-||||||| 31f83499b6
-            bind_group_layouts: &[
-                Some(&layout),
-                geometry.and_then(|g| g.table),
-                draw.then_some(draws),
-                geometry.and_then(|g| g.ids),
-                (!interface.buffers.is_empty()).then_some(&pack.buffers.layout),
-                pack.indices.filter(|_| p.geometry_triangles > 0),
-            ],
-=======
-            bind_group_layouts: &[
-                Some(&layout),
-                geometry.and_then(|g| g.table),
-                draw.then_some(draws),
-                geometry.and_then(|g| g.ids),
-                (!interface.buffers.is_empty()).then_some(&pack.buffers.layout),
-                pack.indices.filter(|_| reads_indices),
-            ],
->>>>>>> c98a51a664
             ..Default::default()
         });
         let module = |mut m: naga::Module| {
@@ -2162,11 +2118,13 @@ fn build_pass(
                 source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(m)),
             })
         };
-<<<<<<< HEAD
         // The depth pass keeps a little less than the program's own cut (Complementary's is 0.5,
         // vanilla's 0.1): a texel it kept and the program threw away would leave a hole.
         let cut = program.interface.alpha_cut.unwrap_or(0.0).max(0.5) + 0.01;
-        let (vs, fs) = (module(program.vertex), module(program.fragment));
+        let mut fragment = program.fragment;
+        packed::quantise_outputs(&mut fragment, &packed_outputs);
+        packed::bitcast_outputs(&mut fragment, &int_outputs);
+        let (vs, fs) = (module(program.vertex), module(fragment));
         // The depth pass: the atlas' alpha test at the texture's own binding and sampler. A
         // program with a geometry stage or storage writes of its own is drawn once.
         let atlas = samplers.iter().find(|b| b.source == Source::Atlas);
@@ -2192,77 +2150,39 @@ fn build_pass(
                     label: Some("Shader pack terrain depth"),
                     source: wgpu::ShaderSource::Wgsl(source.into()),
                 });
-                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Shader pack terrain depth"),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &vs,
-                        entry_point: Some("main"),
-                        compilation_options: Default::default(),
-                        buffers: geometry.map_or(&[], |g| g.buffers),
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        front_face: wgpu::FrontFace::Cw,
-                        cull_mode: geometry.filter(|g| g.cull).map(|_| wgpu::Face::Back),
-                        unclipped_depth,
-                        ..Default::default()
-                    },
-                    // A hair farther than the program's own draw lands: the two pipelines may
-                    // round the same vertex differently, and the program's draw must still pass.
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: wgpu::TextureFormat::Depth32Float,
-                        depth_write_enabled: Some(true),
-                        depth_compare: Some(wgpu::CompareFunction::LessEqual),
-                        stencil: Default::default(),
-                        bias: wgpu::DepthBiasState {
-                            constant: 2,
-                            slope_scale: 1.0,
-                            clamp: 0.0,
+                pack.render_pipeline(
+                    device,
+                    RenderJob {
+                        label: "Shader pack terrain depth".to_owned(),
+                        layout: pipeline_layout.clone(),
+                        vs: vs.clone(),
+                        fs: depth_fs,
+                        buffers: geometry.map_or_else(Vec::new, |g| owned_buffers(g.buffers)),
+                        primitive: wgpu::PrimitiveState {
+                            front_face: wgpu::FrontFace::Cw,
+                            cull_mode: geometry.filter(|g| g.cull).map(|_| wgpu::Face::Back),
+                            unclipped_depth,
+                            ..Default::default()
                         },
-                    }),
-                    multisample: Default::default(),
-                    fragment: Some(wgpu::FragmentState {
-                        module: &depth_fs,
-                        entry_point: Some("main"),
-                        compilation_options: Default::default(),
-                        targets: &[],
-                    }),
-                    multiview_mask: None,
-                    cache: None,
-                })
+                        // A hair farther than the program's own draw lands: the two pipelines
+                        // may round the same vertex differently, and the program's draw must
+                        // still pass.
+                        depth_stencil: Some(wgpu::DepthStencilState {
+                            format: wgpu::TextureFormat::Depth32Float,
+                            depth_write_enabled: Some(true),
+                            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                            stencil: Default::default(),
+                            bias: wgpu::DepthBiasState {
+                                constant: 2,
+                                slope_scale: 1.0,
+                                clamp: 0.0,
+                            },
+                        }),
+                        targets: Vec::new(),
+                    },
+                )
             })
             .map(|depth| (depth, cut));
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&p.name),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vs,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                // A geometry stage reads its vertices itself.
-                buffers: geometry
-                    .filter(|_| p.geometry_triangles == 0)
-                    .map_or(&[], |g| g.buffers),
-            },
-||||||| 31f83499b6
-        let (vs, fs) = (module(program.vertex), module(program.fragment));
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(&p.name),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vs,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                // A geometry stage reads its vertices itself.
-                buffers: geometry
-                    .filter(|_| p.geometry_triangles == 0)
-                    .map_or(&[], |g| g.buffers),
-            },
-=======
-        let mut fragment = program.fragment;
-        packed::quantise_outputs(&mut fragment, &packed_outputs);
-        packed::bitcast_outputs(&mut fragment, &int_outputs);
-        let (vs, fs) = (module(program.vertex), module(fragment));
         let job = RenderJob {
             label: p.name.clone(),
             layout: pipeline_layout,
@@ -2272,7 +2192,6 @@ fn build_pass(
             buffers: geometry
                 .filter(|_| p.geometry_triangles == 0)
                 .map_or_else(Vec::new, |g| owned_buffers(g.buffers)),
->>>>>>> c98a51a664
             // Rows flipped to GL's turn front faces clockwise.
             primitive: wgpu::PrimitiveState {
                 front_face: wgpu::FrontFace::Cw,
@@ -2324,21 +2243,9 @@ fn build_pass(
                 )
             })
         });
-<<<<<<< HEAD
-        (layout, pipeline, prepass)
-||||||| 31f83499b6
-        (layout, pipeline)
-=======
-        (layout, pack.render_pipeline(device, job), sky_parts)
->>>>>>> c98a51a664
+        (layout, pack.render_pipeline(device, job), sky_parts, prepass)
     });
-<<<<<<< HEAD
-    let (layout, pipeline, prepass) = match created {
-||||||| 31f83499b6
-    let (layout, pipeline) = match created {
-=======
-    let (layout, pipeline, sky_parts) = match created {
->>>>>>> c98a51a664
+    let (layout, pipeline, sky_parts, prepass) = match created {
         Ok(created) => created,
         Err(e) => {
             notes.push(format!("{}: skipped: {e}", p.name));
@@ -2771,7 +2678,6 @@ impl PackPost {
             })
         });
         let stand_ins = std::cell::RefCell::new(Vec::new());
-        let stage_written = std::cell::Cell::new((Group::Final, 0u16));
         let pack = Resources {
             textures: &textures,
             images: &images,
@@ -2784,15 +2690,10 @@ impl PackPost {
             packed,
             released: std::cell::Cell::new(("", 0)),
             stand_ins: &stand_ins,
-<<<<<<< HEAD
-            stage_written: &stage_written,
-||||||| 31f83499b6
-=======
             shadow_linear: (0..2)
                 .filter(|&n| !shadow_config.nearest[n])
                 .fold(0, |m, n| m | 1 << n),
             jobs: defer.then(Default::default),
->>>>>>> c98a51a664
         };
         let mut build = |mut p: horizon_shaders::PostProgram, geometry: Option<&Geometry<'_>>| {
             // Not wanted any more: the rest is skipped and the build refused below.
@@ -2847,11 +2748,6 @@ impl PackPost {
                 )?
             };
             pass.compute.append(&mut computes);
-            let before = match stage_written.get() {
-                (stage, written) if stage == group => written,
-                _ => 0,
-            };
-            stage_written.set((group, before | pass.written));
             // A pass's attachments share a size: the depth buffer's, for the passes that draw
             // the world.
             let size =
@@ -3180,17 +3076,6 @@ impl PackPost {
             return Err(Refused::cancelled(notes));
         }
         let stand_ins = pack_images::stand_ins(device, stand_ins.take());
-<<<<<<< HEAD
-        if let Some(t) = &terrain {
-            let first = match &t.prepass {
-                Some((_, cut)) => format!(", its depth first (alpha above {cut})"),
-                None => String::new(),
-            };
-            notes.push(format!("terrain draws with {}{first}", t.name));
-||||||| 31f83499b6
-        if let Some(t) = &terrain {
-            notes.push(format!("terrain draws with {}", t.name));
-=======
         // Terrain in two parts draws both or neither: one alone would leave the other part's
         // terrain undrawn. Without either, the game draws all terrain, as when the terrain
         // program of a pack that doesn't split can't draw.
@@ -3204,7 +3089,13 @@ impl PackPost {
             ));
         }
         match (&terrain, &mut terrain_cutout) {
-            (Some(t), None) => notes.push(format!("terrain draws with {}", t.name)),
+            (Some(t), None) => {
+                let first = match &t.prepass {
+                    Some((_, cut)) => format!(", its depth first (alpha above {cut})"),
+                    None => String::new(),
+                };
+                notes.push(format!("terrain draws with {}{first}", t.name));
+            }
             (t, Some(c)) => {
                 if let Some(t) = t {
                     notes.push(format!("solid terrain draws with {}", t.name));
@@ -3216,7 +3107,6 @@ impl PackPost {
                 }
             }
             (None, None) => {}
->>>>>>> c98a51a664
         }
         for (part, pass) in [
             ("terrain", &shadow_terrain),
@@ -3687,15 +3577,11 @@ impl PackPost {
             }),
             blit,
             copy,
-<<<<<<< HEAD
             shadow_every: shadow_every(),
             shadow_wait: 0,
-||||||| 31f83499b6
-=======
             upscale,
             final_target: None,
             screen,
->>>>>>> c98a51a664
             uniforms: {
                 let mut u = FrameUniforms::default();
                 u.atlas = world.atlas.map_or([0; 2], |a| a.1);
@@ -4170,7 +4056,9 @@ impl PackPost {
         };
         let translucent = list.translucent();
         let group = self.bind(device, queue, encoder, &mut pass, size);
-        if let Some((prepass, _)) = &pass.prepass {
+        if let Some((slot, _)) = &pass.prepass
+            && let Some(prepass) = slot.get()
+        {
             let targets = self.targets.as_ref().expect("resized");
             let timestamp_writes = self.timing.as_mut().and_then(|t| t.writes("terrain depth"));
             let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -6327,13 +6215,8 @@ mod tests {
             packed: [None; BUFFERS],
             released: std::cell::Cell::new(("", 0)),
             stand_ins: &stand_ins,
-<<<<<<< HEAD
-            stage_written: &std::cell::Cell::new((Group::Final, 0)),
-||||||| 31f83499b6
-=======
             shadow_linear: 0,
             jobs: None,
->>>>>>> c98a51a664
         };
         let mut notes = Vec::new();
         let (.., images) = bindings(
@@ -6599,14 +6482,6 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
-    fn a_written_buffer_takes_back_its_name_from_a_custom_texture() {
-        assert!(overridden(Source::Color(0), 0));
-        assert!(overridden(Source::Color(0), 1 << 4));
-        assert!(!overridden(Source::Color(0), 1));
-        assert!(overridden(Source::Noise, 1));
-||||||| 31f83499b6
-=======
     fn float_targets_fall_back_when_not_renderable() {
         let all = |_| true;
         assert_eq!(renderable_float(T::Rgba32Float, all), T::Rgba32Float);
@@ -6653,7 +6528,6 @@ mod tests {
             let def = Format::parse(q).unwrap();
             assert_eq!(Some(pack_images::format(def, true)), image_format(q), "{q}");
         }
->>>>>>> c98a51a664
     }
 
     #[test]

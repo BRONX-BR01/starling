@@ -204,12 +204,10 @@ pub(super) struct PackIds {
     pub(super) separate_ao: bool,
 }
 
-/// A pack the renderer is making on its own thread (`Renderer::start_shader_pack`): its ids,
-/// which entity spans use once it draws, and what the log says of it then.
+/// A pack the renderer is making on its own thread (`Renderer::load_shader_pack`): its ids,
+/// which entity spans use once it draws.
 pub(super) struct Making {
     ids: PackIds,
-    folder: String,
-    started: std::time::Instant,
 }
 
 /// What the Auto profile does to a pack on this device. Packs written for a PC spend most of a
@@ -330,23 +328,6 @@ impl Game<'_> {
             self.streaming.separate_ao = separate_ao;
             self.all_sections_changed();
         }
-<<<<<<< HEAD
-        // A new choice, once the options close (each load takes seconds): what ran for the old
-        // one goes, of either kind.
-        let choice = self
-            .settings
-            .horizon
-            .shader_choice()
-            .filter(|(name, _)| !active_pack(name, &self.settings.mods).is_empty());
-        if choice != self.shader_choice && self.screen != super::Screen::Options {
-            self.shader_choice = choice;
-            self.native_shaders = Default::default();
-||||||| 31f83499b6
-        let picked = picked_pack(&self.settings).to_owned();
-        if self.native_shaders.picked != picked {
-            // Another pack, or none: drop what ran.
-            self.native_shaders = super::native_shaders::NativeShaders::picking(&picked);
-=======
         let selected = picked_pack(&self.settings).to_owned();
         let path = self.native_shaders.resolve_path(
             &Self::shader_packs_dir(),
@@ -359,9 +340,18 @@ impl Game<'_> {
         } else {
             path.to_string_lossy().into_owned()
         };
-        if self.native_shaders.picked != picked {
+        // A new choice, once the options close (each load takes seconds): what ran for the old
+        // one goes, of either kind.
+        let choice = self
+            .settings
+            .horizon
+            .shader_choice()
+            .filter(|(name, _)| !active_pack(name, &self.settings.mods).is_empty());
+        if (choice != self.shader_choice || self.native_shaders.picked != picked)
+            && self.screen != super::Screen::Options
+        {
+            self.shader_choice = choice;
             self.native_shaders.select(&picked);
->>>>>>> c98a51a664
             self.set_translucent_layers(Vec::new());
             self.pack_ids = None;
             self.pack_making = None;
@@ -373,11 +363,6 @@ impl Game<'_> {
                 renderer.set_world_post(scale, antialias, taa, upscale);
             }
         }
-<<<<<<< HEAD
-        let Some((name, profile)) = self.shader_choice.clone() else {
-||||||| 31f83499b6
-        if picked.is_empty() {
-=======
         // A pack whose pipelines were building runs once they are built, or is turned off.
         if let Some((dimension, name, started, report)) =
             self.renderer.as_mut().and_then(|r| r.poll_shader_pack())
@@ -393,6 +378,15 @@ impl Game<'_> {
                         programs.join(" "),
                         started.elapsed().as_millis()
                     );
+                    // None could be made (the notes above say why): the world would stay as it
+                    // is with the pack still "on".
+                    if let Some(making) = self.pack_making.take() {
+                        if programs.is_empty() {
+                            self.shader_pack_failed(&name, dimension, "none of its programs loaded");
+                        } else {
+                            self.pack_ids = Some(making.ids);
+                        }
+                    }
                 }
                 Ok(None) => {}
                 // Stopped because it isn't wanted any more: not the pack's failure.
@@ -406,22 +400,16 @@ impl Game<'_> {
             }
         }
         if picked.is_empty() {
->>>>>>> c98a51a664
             return PackInputs::default();
-<<<<<<< HEAD
-        };
-||||||| 31f83499b6
-        }
-        let name = picked;
-=======
         }
         if !horizon_client::sprites::labpbr_maps() {
             horizon_client::sprites::set_labpbr_maps(true);
             self.reload_packs();
             return PackInputs::default();
         }
-        let name = selected.clone();
->>>>>>> c98a51a664
+        let Some((name, profile)) = self.shader_choice.clone() else {
+            return PackInputs::default();
+        };
         let dimension = match self.dim {
             Dim::Overworld => 0,
             Dim::Nether => -1,
@@ -480,17 +468,12 @@ impl Game<'_> {
                             .get("separateAo")
                             .is_some_and(|v| v.trim() == "true");
                         renderer.set_separate_ao(separate_ao);
-<<<<<<< HEAD
-                        let folder = dimension_folder(&pack, dimension);
                         // On a phone whatever the profile: it pays for itself even on a pack's
                         // highest settings, and the player picks a profile for how it looks.
                         renderer.set_pack_prepass(
                             (cfg!(target_os = "android") || profile == AUTO_PROFILE)
                                 && !light_shader_pack(name),
                         );
-||||||| 31f83499b6
-                        let folder = dimension_folder(&pack, dimension);
-=======
                         // Lava's faces draw with the solid terrain's program.
                         renderer.set_pack_lava_layers(
                             ["lava_still", "lava_flow"]
@@ -502,7 +485,6 @@ impl Game<'_> {
                                 .collect(),
                         );
                         let folder = dimension_folder_named(&pack, self.dim.id(), dimension);
->>>>>>> c98a51a664
                         let inputs = renderer.pack_inputs();
                         let biomes: Vec<String> = world_biomes!(self)
                             .list
@@ -525,17 +507,11 @@ impl Game<'_> {
                             &Properties::parse(text.as_deref().unwrap_or_default(), &macros),
                             "item",
                         );
-<<<<<<< HEAD
-                        let pack_ids = PackIds {
-||||||| 31f83499b6
-                        self.pack_ids = Some(PackIds {
-=======
                         let block_items =
                             block_item_ids(self.res.facts(), self.pack.assets.registry, &ids);
-                        self.pack_ids = Some(PackIds {
+                        let pack_ids = PackIds {
                             block_items,
                             item_file: text.is_some(),
->>>>>>> c98a51a664
                             items: items.plain(),
                             missing_item: if text.is_some() { -1 } else { 0 },
                             // OQ-21: on unless the pack turns it off.
@@ -568,12 +544,11 @@ impl Game<'_> {
                             table.len() / 3,
                             started_ids.elapsed().as_millis()
                         );
-<<<<<<< HEAD
                         // The programs are translated and built on the renderer's thread for
                         // packs; the world draws without the pack until they are.
                         let program_folder = folder.clone();
                         let pack_name = name.to_owned();
-                        renderer.start_shader_pack(
+                        renderer.load_shader_pack(
                             dimension,
                             move || {
                                 let mut post = load_post(
@@ -618,32 +593,10 @@ impl Game<'_> {
                                 post
                             },
                             table,
-                        );
-                        self.pack_making = Some(Making {
-                            ids: pack_ids,
-                            folder,
+                            name.to_owned(),
                             started,
-                        });
-||||||| 31f83499b6
-                        if let Some((programs, notes)) =
-                            renderer.set_shader_pack(dimension, Some(post), &table)
-                        {
-                            for note in notes {
-                                log::warn!("shader pack {name}: {note}");
-                            }
-                            log::info!(
-                                "shader pack {name}: folder `{folder}`, {} programs ({}) in {} ms",
-                                programs.len(),
-                                programs.join(" "),
-                                started.elapsed().as_millis()
-                            );
-                        }
-=======
-                        log::info!("shader pack {name}: folder `{folder}`, building its pipelines");
-                        // The driver compiles the programs on a thread of their own; the game
-                        // draws without a pack meanwhile, and the next frames pick it up.
-                        renderer.load_shader_pack(dimension, post, table, name.to_owned(), started);
->>>>>>> c98a51a664
+                        );
+                        self.pack_making = Some(Making { ids: pack_ids });
                     }
                     Err(e) => {
                         log::warn!("shader pack {name}: {e}");
@@ -656,33 +609,6 @@ impl Game<'_> {
             // A pack that can't run is turned off like one that panics.
             if let Err(error) = loaded.flatten() {
                 self.shader_pack_failed(name, dimension, &error);
-            }
-        }
-        if let Some(made) = self.renderer.as_mut().and_then(|r| r.poll_shader_pack())
-            && let Some(making) = self.pack_making.take()
-        {
-            match made {
-                Ok((programs, notes)) => {
-                    for note in notes {
-                        log::warn!("shader pack {name}: {note}");
-                    }
-                    log::info!(
-                        "shader pack {name}: folder `{}`, {} programs ({}) in {} ms, made \
-                         beside the game",
-                        making.folder,
-                        programs.len(),
-                        programs.join(" "),
-                        making.started.elapsed().as_millis()
-                    );
-                    // None could be made (the notes above say why): the world would stay as it
-                    // is with the pack still "on".
-                    if programs.is_empty() {
-                        self.shader_pack_failed(&name, dimension, "none of its programs loaded");
-                    } else {
-                        self.pack_ids = Some(making.ids);
-                    }
-                }
-                Err(e) => self.shader_pack_failed(&name, dimension, &e),
             }
         }
         let lerp = |(old, new): (f32, f32)| old + (new - old) * partial;

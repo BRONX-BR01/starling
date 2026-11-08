@@ -3724,7 +3724,6 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
     fn a_png_with_wrong_checksums_still_reads() {
         let mut png = Vec::new();
         {
@@ -3744,8 +3743,9 @@ mod tests {
         }
         let (w, h, rgba) = decode_bytes(&png).unwrap();
         assert_eq!((w, h, rgba), (2, 1, vec![255, 0, 0, 255, 0, 0, 255, 128]));
-||||||| 31f83499b6
-=======
+    }
+
+    #[test]
     fn decode_bytes_ignores_a_bad_ihdr_checksum() {
         let mut encoded = Vec::new();
         {
@@ -3761,7 +3761,6 @@ mod tests {
         encoded[ihdr + 4 + 13] ^= 0xFF;
         let (w, h, rgba) = decode_bytes(&encoded).expect("a bad IHDR CRC decodes, as stb_image's");
         assert_eq!((w, h, rgba.len()), (2, 2, 16));
->>>>>>> c98a51a664
     }
 
     #[test]

@@ -57,15 +57,8 @@ pub use options::{
 pub use pack::{Pack, PackError};
 pub use post::{
     Blend, BufferObject, BufferSize, CELESTIAL_BLEND, CustomImage, Factor, GameInputs, Group,
-<<<<<<< HEAD
-    ImageSize, Post, PostProgram, ShadowCulling, Skipped, TRANSLUCENT_BLEND, dimension_folder,
-    load_post,
-||||||| 31f83499b6
-    ImageSize, Post, PostProgram, ShadowCulling, TRANSLUCENT_BLEND, dimension_folder, load_post,
-=======
-    ImageSize, Post, PostProgram, STARS_BLEND, ShadowCulling, TRANSLUCENT_BLEND, dimension_folder,
-    dimension_folder_named, load_post,
->>>>>>> c98a51a664
+    ImageSize, Post, PostProgram, STARS_BLEND, ShadowCulling, Skipped, TRANSLUCENT_BLEND,
+    dimension_folder, dimension_folder_named, load_post,
 };
 pub use preprocess::{Diagnostic, Origin, Preprocessed, preprocess};
 pub use properties::{Entry, Note, Properties};

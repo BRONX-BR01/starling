@@ -22,14 +22,8 @@ const RED: u32 = 0xFF5555;
 /// One of Horizon's own packs as it runs; a new choice starts it over (`game/shader_packs.rs`).
 #[derive(Default)]
 pub(super) struct NativeShaders {
-<<<<<<< HEAD
-||||||| 31f83499b6
-    /// The pack's name in `shaderpacks/`, of either kind (`game/shader_packs.rs`); empty: none.
-    pub picked: String,
-=======
     /// The resolved pack path, of either kind (`game/shader_packs.rs`); empty: none.
     pub picked: String,
->>>>>>> c98a51a664
     /// The pack's files when it was last read (`fingerprint`).
     stamp: Option<u64>,
     looked: Option<Instant>,
@@ -38,18 +32,6 @@ pub(super) struct NativeShaders {
     resolved_at: Option<Instant>,
 }
 
-<<<<<<< HEAD
-||||||| 31f83499b6
-impl NativeShaders {
-    pub fn picking(name: &str) -> Self {
-        Self {
-            picked: name.to_owned(),
-            ..Self::default()
-        }
-    }
-}
-
-=======
 impl NativeShaders {
     pub fn resolve_path(&mut self, dir: &Path, picked: &str, filesystem: bool) -> PathBuf {
         if self.selection != picked || self.resolved_at.is_none_or(|t| t.elapsed() >= LOOK_EVERY) {
@@ -89,7 +71,6 @@ impl NativeShaders {
     }
 }
 
->>>>>>> c98a51a664
 impl Game<'_> {
     /// Builds the pack at `path` when its files changed since it was last read.
     pub(super) fn tick_native_shader_pack(&mut self, path: &Path) {

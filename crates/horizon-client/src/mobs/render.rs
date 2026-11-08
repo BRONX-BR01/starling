@@ -998,7 +998,6 @@ pub fn layers(m: &Mob, age: f32) -> Vec<Layer> {
     humanoid_armor(m, &mut v);
     v
 }
-<<<<<<< HEAD
 /// The texture `humanoid_armor` gives a piece with its own equipment asset, then the layer kind.
 const OWN_EQUIPMENT: &str = "horizon:own_equipment/";
 
@@ -1031,8 +1030,6 @@ fn own_equipment(m: &Mob, layer: &mut Layer, kind: &str, equipment: &crate::equi
     }
 }
 
-||||||| 31f83499b6
-=======
 /// `HumanoidArmorLayer.renderArmorPiece`: a baby wears the `humanoid_baby`
 /// layer type for every slot (leggings included), an adult the leggings layer
 /// for its legs and the `humanoid` one otherwise.
@@ -1045,7 +1042,6 @@ fn humanoid_layer_folder(baby: bool, layer: &str) -> &'static str {
         "humanoid"
     }
 }
->>>>>>> c98a51a664
 /// `HumanoidArmorLayer`: the armour models of the mob's main model with the
 /// equipment textures (leather tinted, with its overlay).
 fn humanoid_armor(m: &Mob, v: &mut Vec<Layer>) {

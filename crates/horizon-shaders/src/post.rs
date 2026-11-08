@@ -466,14 +466,8 @@ pub struct Post {
     pub entities_translucent: Option<PostProgram>,
     /// What draws particles.
     pub particles: Option<PostProgram>,
-<<<<<<< HEAD
-||||||| 31f83499b6
-    pub damaged_block: Option<PostProgram>,
-=======
     /// What draws beacon and End gateway beams (after deferred, blended).
     pub beacon_beam: Option<PostProgram>,
-    pub damaged_block: Option<PostProgram>,
->>>>>>> c98a51a664
     /// What draws the game's clouds.
     pub clouds: Option<PostProgram>,
     /// What draws lines (the block outline), with the pack's own transform and look.
@@ -732,13 +726,7 @@ pub fn load_post(
         damaged_block: None,
         entities_translucent: None,
         particles: None,
-<<<<<<< HEAD
-||||||| 31f83499b6
-        damaged_block: None,
-=======
         beacon_beam: None,
-        damaged_block: None,
->>>>>>> c98a51a664
         clouds: None,
         lines: None,
         weather: None,
@@ -841,19 +829,15 @@ pub fn load_post(
             }
         }
     }
-<<<<<<< HEAD
     // Developers' aid: `HORIZON_SHADER_PACK_SKIP=gbuffers_terrain` leaves a program out of the
     // fallback chains too, so the geometry draws with the next one (to time a program).
     let skip = std::env::var("HORIZON_SHADER_PACK_SKIP").unwrap_or_default();
-||||||| 31f83499b6
-=======
     let split_terrain = ["gbuffers_terrain_solid", "gbuffers_terrain_cutout"]
         .iter()
         .any(|n| loader.has(n));
     // Whether the pack has a program for each part, loaded or not.
     let [has_solid, has_cutout] =
         [&TERRAIN_SOLID, &TERRAIN_CUTOUT].map(|chain| chain.iter().any(|n| loader.has(n)));
->>>>>>> c98a51a664
     let mut gbuffers = |names: &[&str], group, inputs: &GbuffersInputs| {
         let skip = skip.split(',').collect::<Vec<_>>();
         names.iter().filter(|n| !skip.contains(n)).find_map(|name| {
@@ -1086,18 +1070,10 @@ pub fn load_post(
     loader.post.damaged_block = damaged_block;
     loader.post.entities_translucent = entities_translucent;
     loader.post.particles = particles;
-<<<<<<< HEAD
-    loader.post.clouds = clouds;
-||||||| 31f83499b6
-    loader.post.damaged_block = damaged_block;
-    loader.post.clouds = clouds;
-=======
     loader.post.beacon_beam = beacon_beam;
-    loader.post.damaged_block = damaged_block;
     loader.post.clouds_off = properties.get("clouds").is_some_and(|v| v.trim() == "off");
     loader.post.clouds = clouds.filter(|_| !loader.post.clouds_off);
     loader.post.lines = lines;
->>>>>>> c98a51a664
     loader.post.weather = weather;
     loader.post.hand = hand;
     loader.post.hand_water = hand_water;
@@ -1142,13 +1118,7 @@ fn load_shadow(
         &post.damaged_block,
         &post.entities_translucent,
         &post.particles,
-<<<<<<< HEAD
-||||||| 31f83499b6
-        &post.damaged_block,
-=======
         &post.beacon_beam,
-        &post.damaged_block,
->>>>>>> c98a51a664
         &post.clouds,
         &post.weather,
         &post.hand,
@@ -1387,7 +1357,7 @@ impl Loader<'_> {
                 return None;
             }
         };
-        notes.extend(
+        self.post.notes.extend(
             program
                 .notes
                 .iter()
@@ -1532,7 +1502,6 @@ impl Loader<'_> {
             return None;
         }
         let [vertex, geometry, fragment] = &stages;
-<<<<<<< HEAD
         let translated = contained(fsh, || {
             crate::translate_geometry(vertex, geometry, fragment, inputs)
         });
@@ -1543,44 +1512,13 @@ impl Loader<'_> {
                 return None;
             }
         };
-        self.post.config.read(vertex);
-||||||| 31f83499b6
-        let (program, triangles) =
-            match crate::translate_geometry(vertex, geometry, fragment, inputs) {
-                Ok(p) => p,
-                Err(errors) => {
-                    notes.extend(
-                        errors
-                            .iter()
-                            .map(|e| format!("{}:{}: {}", e.file, e.line, e.message)),
-                    );
-                    notes.push(format!("{name}: skipped"));
-                    return None;
-                }
-            };
-        self.post.config.read(vertex);
-=======
-        let (program, triangles) =
-            match crate::translate_geometry(vertex, geometry, fragment, inputs) {
-                Ok(p) => p,
-                Err(errors) => {
-                    notes.extend(
-                        errors
-                            .iter()
-                            .map(|e| format!("{}:{}: {}", e.file, e.line, e.message)),
-                    );
-                    notes.push(format!("{name}: skipped"));
-                    return None;
-                }
-            };
-        notes.extend(
+        self.post.notes.extend(
             program
                 .notes
                 .iter()
                 .map(|e| format!("{}:{}: {}", e.file, e.line, e.message)),
         );
         self.post.config.read_vertex(vertex);
->>>>>>> c98a51a664
         self.post.config.read(fragment);
         let mut buffers =
             config::draw_buffers(fragment).unwrap_or_else(|| default_draw_buffers(true));
@@ -1643,25 +1581,9 @@ impl Loader<'_> {
                 skip(self.post, &name, problems);
                 continue;
             }
-<<<<<<< HEAD
             match contained(&path, || translate_compute(&pp)) {
-                Ok(program) => out.push((name, program)),
-                Err(errors) => skip(self.post, &name, located_errors(&errors)),
-||||||| 31f83499b6
-            match translate_compute(&pp) {
-                Ok(program) => out.push((name, program)),
-                Err(errors) => {
-                    notes.extend(
-                        errors
-                            .iter()
-                            .map(|e| format!("{}:{}: {}", e.file, e.line, e.message)),
-                    );
-                    notes.push(format!("{name}: skipped"));
-                }
-=======
-            match translate_compute(&pp) {
                 Ok(program) => {
-                    notes.extend(
+                    self.post.notes.extend(
                         program
                             .notes
                             .iter()
@@ -1669,15 +1591,7 @@ impl Loader<'_> {
                     );
                     out.push((name, program));
                 }
-                Err(errors) => {
-                    notes.extend(
-                        errors
-                            .iter()
-                            .map(|e| format!("{}:{}: {}", e.file, e.line, e.message)),
-                    );
-                    notes.push(format!("{name}: skipped"));
-                }
->>>>>>> c98a51a664
+                Err(errors) => skip(self.post, &name, located_errors(&errors)),
             }
         }
         out

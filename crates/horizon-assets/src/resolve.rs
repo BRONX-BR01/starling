@@ -116,14 +116,8 @@ impl ModelLibrary {
             )]),
             elements: None,
             display: None,
-<<<<<<< HEAD
-            obj: None,
-            mesh: None,
-||||||| 31f83499b6
-=======
             render_type: None,
             visibility: BTreeMap::new(),
->>>>>>> c98a51a664
         }
     }
     pub fn new(models: BTreeMap<String, CuboidModel>) -> Result<Self> {
@@ -493,13 +487,7 @@ pub fn missing_model() -> CuboidModel {
                 }),
             ),
         ]),
-<<<<<<< HEAD
-        obj: None,
-        mesh: None,
-||||||| 31f83499b6
-=======
         visibility: BTreeMap::new(),
->>>>>>> c98a51a664
     }
 }
 

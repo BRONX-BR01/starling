@@ -83,13 +83,9 @@ pub mod options_file;
 pub mod options_fixes;
 pub mod options_ui;
 pub mod overlay;
-<<<<<<< HEAD
 pub mod own_buttons;
 pub mod own_skin;
-||||||| 31f83499b6
-=======
 pub mod pack_browser;
->>>>>>> c98a51a664
 pub mod pack_screen;
 pub mod packs;
 pub mod pad_cursor;
@@ -131,12 +127,8 @@ mod sprite_cache;
 pub mod sprites;
 pub mod streaming;
 pub mod structure_block;
-<<<<<<< HEAD
 pub mod system_stats;
-||||||| 31f83499b6
-=======
 pub mod studio_ui;
->>>>>>> c98a51a664
 pub mod tab_list;
 pub mod telemetry;
 pub mod test_block;

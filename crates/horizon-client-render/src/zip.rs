@@ -15,21 +15,13 @@ use std::{
 use zip::{CompressionMethod, ZipArchive};
 
 /// The most one entry inflates to: far above any real pack file, but a zip
-<<<<<<< HEAD
 /// bomb stops here. Java's `ZipFile` does not hold an entry to the size its
 /// directory records, so only this cap bounds a hostile archive; 128 MiB keeps
 /// a phone clear of the out-of-memory killer.
 const MAX_ENTRY: usize = 128 << 20;
-||||||| 31f83499b6
-/// bomb stops here.
-const MAX_ENTRY: usize = 1 << 30;
-=======
-/// bomb stops here.
-const MAX_ENTRY: usize = 1 << 30;
 /// The most every entry inflates to together, once per archive: per-entry
-/// limits still let a bomb spend its budget one 1 GiB entry at a time.
+/// limits still let a bomb spend its budget one 128 MiB entry at a time.
 const MAX_TOTAL: usize = 4 << 30;
->>>>>>> c98a51a664
 
 /// One archive with its entries indexed by name (`\` read as `/`), files
 /// and folders apart.
@@ -259,59 +251,6 @@ impl Zip {
         let method = entry.compression();
         let mut raw = Vec::with_capacity((entry.compressed_size() as usize).min(self.len));
         entry.read_to_end(&mut raw)?;
-<<<<<<< HEAD
-        match method {
-            CompressionMethod::Stored => Ok(raw),
-            CompressionMethod::Deflated => {
-                // Java's ZipFile trusts neither size an entry declares: it
-                // inflates the stream to its end and keeps what comes out.
-                // Packs in the wild (a Nexo-generated one served through
-                // Dropbox, for one) carry central-directory sizes that point
-                // at other files, and miniz_oxide, which refuses input past
-                // the stream's end, failed whole entries with "corrupt
-                // deflate stream" and with them the whole pack. Only the
-                // size limit stands between the archive and a zip bomb.
-                let decoder = flate2::read::DeflateDecoder::new(raw.as_slice());
-                let mut decoded = Vec::with_capacity(raw.len().min(MAX_ENTRY));
-                decoder
-                    .take(MAX_ENTRY as u64 + 1)
-                    .read_to_end(&mut decoded)
-                    .map_err(|e| invalid(format!("{name}: corrupt deflate stream ({e})")))?;
-                if decoded.len() > MAX_ENTRY {
-                    return Err(invalid(format!(
-                        "{name}: entry inflates past the size limit"
-                    )));
-                }
-                Ok(decoded)
-            }
-            other => Err(invalid(format!(
-                "{name}: unsupported zip compression {other:?}"
-            ))),
-||||||| 31f83499b6
-        match method {
-            CompressionMethod::Stored => Ok(raw),
-            CompressionMethod::Deflated => {
-                // Java's ZipFile trusts neither size an entry declares: it
-                // inflates the stream to its end and keeps what comes out.
-                // Packs in the wild (a Nexo-generated one served through
-                // Dropbox, for one) carry central-directory sizes that point
-                // at other files, and miniz_oxide, which refuses input past
-                // the stream's end, failed whole entries with "corrupt
-                // deflate stream" and with them the whole pack. Only the
-                // size limit stands between the archive and a zip bomb.
-                let decoder = flate2::read::DeflateDecoder::new(raw.as_slice());
-                let mut decoded = Vec::with_capacity(raw.len().min(MAX_ENTRY));
-                decoder
-                    .take(MAX_ENTRY as u64 + 1)
-                    .read_to_end(&mut decoded)
-                    .map_err(|_| invalid("corrupt deflate stream"))?;
-                if decoded.len() > MAX_ENTRY {
-                    return Err(invalid("entry inflates past the size limit"));
-                }
-                Ok(decoded)
-            }
-            _ => Err(invalid("unsupported zip compression")),
-=======
         Ok((method, raw))
     }
 }
@@ -329,7 +268,6 @@ fn take(budget: &AtomicU64, n: u64) -> io::Result<()> {
         match budget.compare_exchange_weak(left, rest, Ordering::Relaxed, Ordering::Relaxed) {
             Ok(_) => return Ok(()),
             Err(now) => left = now,
->>>>>>> c98a51a664
         }
     }
 }

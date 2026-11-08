@@ -147,7 +147,7 @@ fn emit(span: Span) {
         || HERE.with(Cell::get)
         || (RECORDING.load(Ordering::Relaxed) && DIAGNOSTIC_HERE.with(Cell::get))
     {
-        SPANS.with(|s| s.borrow_mut().push(span));
+        push(span);
     }
 }
 /// Record this thread's spans even with spans off, their wall time only (no CPU clock read):
@@ -159,13 +159,10 @@ pub fn record_here(on: bool) {
 /// Whether this thread records spans: all of them on, or [`record_here`].
 #[inline]
 pub fn recording_here() -> bool {
-<<<<<<< HEAD
-    ENABLED.load(Ordering::Relaxed) || HERE.with(Cell::get) || RECORDING.load(Ordering::Relaxed)
-||||||| 31f83499b6
-    ENABLED.load(Ordering::Relaxed) || HERE.with(Cell::get)
-=======
-    ENABLED.load(Ordering::Relaxed) || HERE.with(Cell::get) || trace::on()
->>>>>>> c98a51a664
+    ENABLED.load(Ordering::Relaxed)
+        || HERE.with(Cell::get)
+        || RECORDING.load(Ordering::Relaxed)
+        || trace::on()
 }
 /// The thread's CPU time when spans are on for every thread (`HORIZON_SPIKES`): only they
 /// print it.
@@ -198,35 +195,6 @@ pub fn guard(name: &'static str) -> Guard {
         return Guard { open: None, _heap };
     }
     let depth = DEPTH.with(|d| d.replace(d.get().saturating_add(1)));
-<<<<<<< HEAD
-    let (started, cpu) = (Instant::now(), cpu_if_enabled());
-    let out = f();
-    let ms = started.elapsed().as_secs_f32() * 1000.0;
-    let cpu_ms = cpu
-        .and_then(|start| Some((thread_cpu()?, start)))
-        .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
-    DEPTH.with(|d| d.set(depth));
-    emit(Span {
-        name,
-        ms,
-        cpu_ms,
-        depth,
-||||||| 31f83499b6
-    let (started, cpu) = (Instant::now(), cpu_if_enabled());
-    let out = f();
-    let ms = started.elapsed().as_secs_f32() * 1000.0;
-    let cpu_ms = cpu
-        .and_then(|start| Some((thread_cpu()?, start)))
-        .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
-    DEPTH.with(|d| d.set(depth));
-    SPANS.with(|s| {
-        s.borrow_mut().push(Span {
-            name,
-            ms,
-            cpu_ms,
-            depth,
-        })
-=======
     Guard {
         open: Some((name, Instant::now(), cpu_if_enabled(), depth)),
         _heap,
@@ -243,7 +211,7 @@ impl Drop for Guard {
             .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
         DEPTH.with(|d| d.set(depth));
         trace::span(name, started, ms);
-        push(Span {
+        emit(Span {
             name,
             ms,
             cpu_ms,
@@ -259,7 +227,6 @@ fn push(span: Span) {
             s.clear();
         }
         s.push(span);
->>>>>>> c98a51a664
     });
 }
 /// Attach per-tick counts without interpreting them as durations.
@@ -330,20 +297,8 @@ impl Laps {
             .zip(*cpu)
             .map_or(ms, |(end, start)| (end - start).as_secs_f32() * 1000.0);
         let depth = DEPTH.with(Cell::get);
-<<<<<<< HEAD
-        emit(Span {
-||||||| 31f83499b6
-        SPANS.with(|s| {
-            s.borrow_mut().push(Span {
-                name,
-                ms,
-                cpu_ms,
-                depth,
-            })
-=======
         trace::span(name, *started, ms);
-        push(Span {
->>>>>>> c98a51a664
+        emit(Span {
             name,
             ms,
             cpu_ms,
@@ -793,12 +748,19 @@ pub mod startup {
 #[cfg(test)]
 mod tests {
     use super::Span;
-<<<<<<< HEAD
-    static SETTINGS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use std::sync::{Mutex, MutexGuard};
+
+    /// Spans on for every thread ([`super::enable`]) is process-wide: a test that turns them on
+    /// would make another, run beside it, record what it expects left out. Those tests take
+    /// this lock.
+    fn spans_switch() -> MutexGuard<'static, ()> {
+        static SWITCH: Mutex<()> = Mutex::new(());
+        SWITCH.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     #[test]
     fn diagnostic_aggregates_do_not_retain_worker_raw_spans() {
-        let _settings = SETTINGS.lock().unwrap();
+        let _switch = spans_switch();
         super::record_timings(true);
         super::time("render_step", || ());
         assert_eq!(super::take_raw()[0].name, "render_step");
@@ -826,18 +788,9 @@ mod tests {
         assert_eq!(step["calls"], 10000);
         assert_eq!(step["role"], "worker");
         super::record_timings(false);
-||||||| 31f83499b6
-=======
-    use std::sync::{Mutex, MutexGuard};
-
-    /// Spans on for every thread ([`super::enable`]) is process-wide: a test that turns them on
-    /// would make another, run beside it, record what it expects left out. Those tests take
-    /// this lock.
-    fn spans_switch() -> MutexGuard<'static, ()> {
-        static SWITCH: Mutex<()> = Mutex::new(());
-        SWITCH.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    #[test]
     /// A slow tick's notes are its slowest steps, slowest first; short steps and steps on a
     /// thread that records no spans leave none.
     #[test]
@@ -862,7 +815,6 @@ mod tests {
         let names: Vec<&str> = notes.iter().map(|(_, w)| w.as_str()).collect();
         assert_eq!(names, ["b", "e", "c"]);
         assert!(super::take_notes().is_empty(), "taking them clears them");
->>>>>>> c98a51a664
     }
 
     /// Spans of one name add up; a span the thread spent mostly waiting
@@ -1011,12 +963,7 @@ mod tests {
     /// Laps record the steps between them while spans are on, and nothing while off.
     #[test]
     fn laps_time_consecutive_steps() {
-<<<<<<< HEAD
-        let _settings = SETTINGS.lock().unwrap();
-||||||| 31f83499b6
-=======
         let _switch = spans_switch();
->>>>>>> c98a51a664
         let _ = super::take();
         let mut off = super::laps();
         off.lap("unseen");

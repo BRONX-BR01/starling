@@ -102,13 +102,7 @@ fn vs_box(@builtin(vertex_index) v: u32, @builtin(instance_index) t: u32) -> Box
         out.position = select(vec4(0.0, 0.0, 0.0, 1.0), vec4(p, 1.0, 1.0), v < 3u);
         return out;
     }
-<<<<<<< HEAD
-    out.position = globals.view_proj * vec4(corner(origin, box_corner(v)), 1.0);
-||||||| 31f83499b6
-    out.position = globals.view_proj * vec4(corner(origin, CORNERS[v]), 1.0);
-=======
-    out.position = globals.view_proj * vec4(corner(origin, low, high, CORNERS[v]), 1.0);
->>>>>>> c98a51a664
+    out.position = globals.view_proj * vec4(corner(origin, low, high, box_corner(v)), 1.0);
     return out;
 }
 

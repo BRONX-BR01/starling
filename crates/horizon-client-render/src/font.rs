@@ -638,21 +638,6 @@ impl Font {
         region: (u32, u32),
         white: Rect,
     ) -> Self {
-<<<<<<< HEAD
-        let sheets = sprites
-            .iter()
-            .filter(|(k, _)| k.starts_with("font/"))
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
-        let mut font = Self {
-||||||| 31f83499b6
-        let sheets = sprites
-            .iter()
-            .filter(|(k, _)| k.starts_with("font/"))
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
-        let font = Self {
-=======
         Self::load_with(root, None, sprites, pixels, atlas, region, white, false)
     }
     /// [`Font::load`] over a pack overlay: a sheet, TrueType file or Unihex
@@ -706,8 +691,7 @@ impl Font {
         metrics_only: bool,
     ) -> Self {
         let sheets = sprites.clone();
-        let font = Self {
->>>>>>> c98a51a664
+        let mut font = Self {
             sheets,
             missing: Glyph {
                 rect: None,

@@ -704,20 +704,16 @@ impl PackAtlas {
         if flat && std::env::var_os("HORIZON_SHADER_PACK_NO_FACE").is_none() {
             body.push_str(FACE);
         }
-<<<<<<< HEAD
-        declarations.push_str("vec2 hz_cell; vec2 hz_scale; vec4 hz_tangent;\n");
+        declarations.push_str(
+            "vec2 hz_cell; vec2 hz_scale; vec2 hz_mid; float hz_uv_scale; vec4 hz_tangent;
+",
+        );
         let mut after = String::new();
         let prepass_uv = super::pack_post::prepass_wanted();
         if prepass_uv {
-            after.push_str("    hz_prepass_uv = hz_MultiTexCoord0.xy;\n");
+            after.push_str("    hz_prepass_uv = hz_MultiTexCoord0.xy;
+");
         }
-||||||| 31f83499b6
-        declarations.push_str("vec2 hz_cell; vec2 hz_scale; vec4 hz_tangent;\n");
-=======
-        declarations.push_str(
-            "vec2 hz_cell; vec2 hz_scale; vec2 hz_mid; float hz_uv_scale; vec4 hz_tangent;\n",
-        );
->>>>>>> c98a51a664
         let entity = if flat {
             "vec4(float(hz_block_ids[3u * hz_layer]), float(hz_block_ids[3u * hz_layer + 1u]), 0.0, 0.0)"
         } else {

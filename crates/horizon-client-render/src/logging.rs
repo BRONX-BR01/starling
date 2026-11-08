@@ -479,7 +479,6 @@ impl Floods {
 
 static LOGGER: std::sync::OnceLock<Logger> = std::sync::OnceLock::new();
 
-<<<<<<< HEAD
 /// Where messages are printed instead of stderr, which a platform may discard (Android's
 /// logcat, set by horizon-android). It gets every message the file gets, and other crates'
 /// warnings too (the graphics driver's, wgpu's), since nothing else shows them there.
@@ -488,8 +487,8 @@ static CONSOLE: std::sync::OnceLock<fn(log::Level, &str)> = std::sync::OnceLock:
 /// Prints messages with `console` from now on (before `init`).
 pub fn set_console(console: fn(log::Level, &str)) {
     let _ = CONSOLE.set(console);
-||||||| 31f83499b6
-=======
+}
+
 /// What [`set_line_hook`] installed: level (`INFO`, `WARN`, `ERROR`), thread, message, and the
 /// lines as `latest.log` got them.
 type LineHook = fn(&str, &str, &str, &str);
@@ -500,7 +499,6 @@ static LINE_HOOK: std::sync::OnceLock<LineHook> = std::sync::OnceLock::new();
 /// the first.
 pub fn set_line_hook(hook: LineHook) {
     let _ = LINE_HOOK.set(hook);
->>>>>>> c98a51a664
 }
 
 fn ours(target: &str) -> bool {
@@ -525,22 +523,16 @@ impl log::Log for Logger {
             }
             return;
         }
-<<<<<<< HEAD
-        let message = record.args().to_string();
-        // A platform console (Android's logcat) gets the message in place of stderr.
-        if let Some(console) = console {
-            console(record.level(), &message);
-        }
-||||||| 31f83499b6
-        let message = record.args().to_string();
-=======
         let horizon = ours(record.target());
         let message = if horizon {
             record.args().to_string()
         } else {
             format!("[{}] {}", record.target(), record.args())
         };
->>>>>>> c98a51a664
+        // A platform console (Android's logcat) gets the message in place of stderr.
+        if let Some(console) = console {
+            console(record.level(), &message);
+        }
         let current = std::thread::current();
         let thread = match current.name() {
             Some("main") => self.main_thread,
@@ -569,13 +561,7 @@ impl log::Log for Logger {
             ),
             _ => {}
         }
-<<<<<<< HEAD
-        let stderr = (console.is_none() && ours(record.target())).then(|| message.clone());
-||||||| 31f83499b6
-        let stderr = ours(record.target()).then(|| message.clone());
-=======
-        let stderr = horizon.then(|| message.clone());
->>>>>>> c98a51a664
+        let stderr = (console.is_none() && horizon).then(|| message.clone());
         self.send(thread, level, &message, stderr);
         if gate == Gate::Last {
             self.write(

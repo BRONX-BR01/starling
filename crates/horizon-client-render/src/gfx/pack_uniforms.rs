@@ -405,17 +405,13 @@ pub struct FrameUniforms {
     center_depth: Option<f32>,
     /// The pack's shadow settings (7.1).
     pub shadow: Shadow,
-<<<<<<< HEAD
     /// Where the shadow map was last drawn from: the camera, the view and the projection.
     shadow_drawn: Option<(DVec3, Mat4, Mat4)>,
     /// This frame keeps the shadow map (`PackPost::shadow_view`): nothing draws into it, and the
     /// shadow matrices go on describing it.
     pub keep_shadow: bool,
-||||||| 31f83499b6
-=======
     /// The pack's smoothing half-lives in ticks (`horizon_shaders::HALF_LIVES`).
     pub half_lives: [Option<f32>; 4],
->>>>>>> c98a51a664
 }
 
 impl Default for FrameUniforms {
@@ -433,13 +429,9 @@ impl Default for FrameUniforms {
             center_depth_raw: None,
             center_depth: None,
             shadow: Shadow::default(),
-<<<<<<< HEAD
             shadow_drawn: None,
             keep_shadow: false,
-||||||| 31f83499b6
-=======
             half_lives: [None; 4],
->>>>>>> c98a51a664
         }
     }
 }
@@ -632,23 +624,14 @@ pub fn shadow_culling_at(light: Vec3, camera: DVec3, shadow: &Shadow) -> Mat4 {
     depth * gl * view
 }
 
-<<<<<<< HEAD
 /// The view of a shadow map drawn with `view` from `drawn`, seen from `camera`. A pack gives it
 /// player space, which moves with the camera; the map stays where it was drawn.
 fn kept_shadow_view(view: Mat4, drawn: DVec3, camera: DVec3) -> Mat4 {
     view * Mat4::from_translation((camera - drawn).as_vec3())
 }
 
-/// How far toward the light the shadow projection starts, in blocks: part of the projection,
-/// not of `shadowModelView` (Iris's matrices, measured).
-pub const SHADOW_EYE: f32 = 100.0;
-||||||| 31f83499b6
-/// How far toward the light the shadow projection starts, in blocks: part of the projection,
-/// not of `shadowModelView` (Iris's matrices, measured).
-pub const SHADOW_EYE: f32 = 100.0;
-=======
 /// How far toward the light a `shadowMapFov` projection starts, in blocks.
-const SHADOW_EYE: f32 = 100.0;
+pub const SHADOW_EYE: f32 = 100.0;
 
 /// The orthographic shadow projection's planes when the pack sets none, as JOML's `zNear` and
 /// `zFar`: Iris 1.11.7's, measured with a probe pack (each unset plane on its own).
@@ -712,7 +695,6 @@ fn invert_affine(m: Mat4) -> Mat4 {
         1.0,
     ])
 }
->>>>>>> c98a51a664
 
 /// The shadow camera as Iris places it (7.1; measured from the outside): its view (player
 /// space to shadow view space) and GL projection. The view undoes `sunPathRotation`, turns the
@@ -877,30 +859,25 @@ impl FrameUniforms {
             None => (frame.sky.fog_color, frame.distance * 0.9, frame.distance),
         };
         let light = shadow_light(frame, &self.shadow);
-<<<<<<< HEAD
-        let (shadow_view, shadow_projection) = match self.shadow_drawn.filter(|_| self.keep_shadow)
-        {
-            Some((drawn, view, projection)) => {
-                (kept_shadow_view(view, drawn, frame.camera), projection)
-            }
-            None => {
-                let (view, projection) = shadow_camera(light, frame.camera, &self.shadow);
-                self.shadow_drawn = Some((frame.camera, view, projection));
-                (view, projection)
-            }
-        };
-||||||| 31f83499b6
-        let (shadow_view, shadow_projection) = shadow_camera(light, frame.camera, &self.shadow);
-=======
-        let (shadow_projection, shadow_projection_inverse) = match self.shadow.fov {
-            Some(_) => {
-                let (_, projection) = shadow_camera(light, frame.camera, &self.shadow);
-                (projection, projection.inverse())
-            }
-            None => shadow_ortho(&self.shadow),
-        };
-        let (shadow_view, shadow_view_inverse) = shadow_model_view(frame, &self.shadow);
->>>>>>> c98a51a664
+        let (shadow_projection, shadow_projection_inverse, shadow_view, shadow_view_inverse) =
+            match self.shadow_drawn.filter(|_| self.keep_shadow) {
+                Some((drawn, view, projection)) => {
+                    let view = kept_shadow_view(view, drawn, frame.camera);
+                    (projection, projection.inverse(), view, view.inverse())
+                }
+                None => {
+                    let (projection, projection_inverse) = match self.shadow.fov {
+                        Some(_) => {
+                            let (_, projection) = shadow_camera(light, frame.camera, &self.shadow);
+                            (projection, projection.inverse())
+                        }
+                        None => shadow_ortho(&self.shadow),
+                    };
+                    let (view, view_inverse) = shadow_model_view(frame, &self.shadow);
+                    self.shadow_drawn = Some((frame.camera, view, projection));
+                    (projection, projection_inverse, view, view_inverse)
+                }
+            };
         let day_time = inputs.day_time.rem_euclid(24000) as i32;
         let world_day = inputs.day_time.div_euclid(24000);
         let (seconds, frame_time, frame_counter) = match (inputs.frame_timing, inputs.still_ticks) {
