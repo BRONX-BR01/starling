@@ -57,7 +57,8 @@ in an overlay thrown away after it, so a mod can't reach a later player's build.
 sleeps until a request wakes it (about 35 seconds) and goes back to sleep once it has been idle for 15 minutes. It limits
 how many builds an address, and everyone together (`BUILDS_PER_DAY`, 80 unless set), can ask for in a day, and says which
 limit it was. Mods that are already built pass at any limit, a build that failed gives its place back, and failures have
-a day limit of their own.
+a day limit of their own, counted by job. Mods that fail for their own fault (a refused injection, a compile error with
+its code) aren't built again: asking again gets the same error at once and counts nothing.
 
 Each new release needs `versions.json` updated and the clean cache rebuilt on its commit, or its first builds are slow.
 

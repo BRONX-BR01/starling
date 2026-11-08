@@ -53,6 +53,38 @@ class DayLimits(unittest.TestCase):
             gateway.job_failed(f"job {i}")
         self.assertEqual(gateway.refusal("new player", "theirs"), gateway.EVERYONES_LIMIT)
 
+    def test_a_failure_of_the_mods_own_passes_at_the_limit_and_counts_nothing(self):
+        gateway = load(BUILDS_PER_DAY="1")
+        self.assertIsNone(gateway.refusal("a", "broken mod"))
+        gateway.note_job("a", "broken mod", "job")
+        gateway.job_failed("job", settled=True)
+        self.assertIsNone(gateway.refusal("b", "broken mod"))
+        self.assertIsNone(gateway.refusal("a", "broken mod"))
+        self.assertEqual(len(gateway.accepted), 1)
+
+    def test_a_failure_the_machine_may_have_caused_counts_when_asked_again(self):
+        gateway = load()
+        self.assertIsNone(gateway.refusal("a", "mod"))
+        gateway.note_job("a", "mod", "job")
+        gateway.job_failed("job")
+        self.assertIsNone(gateway.refusal("a", "mod"))
+        self.assertEqual(len(gateway.accepted), 2)
+
+    def test_one_job_failing_for_many_counts_once_for_everyone(self):
+        gateway = load(BUILDS_PER_DAY="2")
+        for i in range(2):
+            self.assertIsNone(gateway.refusal(f"address {i}", f"same mods, order {i}"))
+            gateway.note_job(f"address {i}", f"same mods, order {i}", "job")
+            gateway.job_failed("job", settled=True)
+        self.assertIsNone(gateway.refusal("new player", "theirs"))
+
+    def test_a_request_the_service_refused_is_no_failure_for_everyone(self):
+        gateway = load(BUILDS_PER_DAY="2")
+        for i in range(2):
+            self.assertIsNone(gateway.refusal(f"address {i}", f"request {i}"))
+            gateway.note_job(f"address {i}", f"request {i}", None)
+        self.assertIsNone(gateway.refusal("new player", "theirs"))
+
     def test_the_same_request_again_costs_nothing(self):
         gateway = load(BUILDS_PER_DAY="1")
         self.assertIsNone(gateway.refusal("a", "mine"))

@@ -150,6 +150,9 @@ def refusal(address, request):
         if request in built:
             return None
         accepted[:] = [a for a in accepted if now - a["at"] < DAY]
+        # Failed for the mods' own fault: the service says so again without building.
+        if any(a["request"] == request and a["settled"] for a in accepted):
+            return None
         own = [a for a in accepted if a["address"] == address]
         if any(a["request"] == request and not a["failed"] for a in own):
             return None
@@ -160,11 +163,19 @@ def refusal(address, request):
             return YOUR_LIMIT
         if (
             sum(not a["failed"] for a in accepted) >= PER_DAY
-            or sum(a["failed"] for a in accepted) >= FAILED_PER_DAY
+            # By job: the same mods asked in another order fail without building.
+            or len({a["job"] for a in accepted if a["failed"] and a["job"]}) >= FAILED_PER_DAY
         ):
             return EVERYONES_LIMIT
         accepted.append(
-            {"at": now, "address": address, "request": request, "job": None, "failed": False}
+            {
+                "at": now,
+                "address": address,
+                "request": request,
+                "job": None,
+                "failed": False,
+                "settled": False,
+            }
         )
     return None
 
@@ -178,11 +189,12 @@ def note_job(address, request, job):
                 a["failed"] = job is None
 
 
-def job_failed(job):
+def job_failed(job, settled=False):
     with lock:
         for a in accepted:
             if a["job"] == job:
                 a["failed"] = True
+                a["settled"] = settled
 
 
 def job_done(job):
@@ -281,11 +293,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data = response.read()
         self.wfile.write(data)
         try:
-            state = json.loads(data).get("state")
+            status = json.loads(data)
+            state = status.get("state")
         except ValueError:
             return
         if state == "failed":
-            job_failed(path.rsplit("/", 1)[-1])
+            job_failed(path.rsplit("/", 1)[-1], bool(status.get("settled")))
         elif state == "done":
             job_done(path.rsplit("/", 1)[-1])
 
