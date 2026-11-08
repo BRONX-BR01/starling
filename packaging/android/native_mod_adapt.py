@@ -48,7 +48,7 @@ CHANGED = (
         "let _ = remote;",
     ),
     (
-        r"(oversized_in_gui: resolved\.oversized_in_gui,\s*animated,)",
+        r"(oversized_in_gui: resolved\.oversized_in_gui,\s*animated,)(?!\s*cit_glint:)",
         r"\1 cit_glint: None, hdr_tier: 0, hdr_light: 0,",
     ),
     (r"extra: &\[\(&Part, \[f32; 4\], u32, u32\)\]", "extra: &[(&Part, [f32; 4], u32, u32, bool)]"),
