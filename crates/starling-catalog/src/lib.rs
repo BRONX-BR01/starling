@@ -365,7 +365,11 @@ mod datapacks {
 
     const NOT_HERE: &str = "Data packs can't be installed from here.";
 
-    pub struct DataPack;
+    /// The fields the browser's own tests read; `cargo clippy --all-targets` compiles them here.
+    pub struct DataPack {
+        pub file: String,
+        pub enabled: bool,
+    }
 
     pub struct Coverage {
         pub read: Vec<String>,
@@ -373,6 +377,10 @@ mod datapacks {
 
     impl Coverage {
         pub fn not_read(&self) -> String {
+            String::new()
+        }
+
+        pub fn summary(&self) -> String {
             String::new()
         }
     }
