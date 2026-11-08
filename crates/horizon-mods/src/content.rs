@@ -88,10 +88,11 @@ pub struct BlockProperties {
     pub sounds: Option<String>,
     /// Which states tick randomly, whatever the template does (`isRandomlyTicking`).
     pub random_ticks: Option<RandomTicks>,
-<<<<<<< HEAD
-    /// `MODEL` (the terrain draws its model), `INVISIBLE`, or `ENTITYBLOCK_ANIMATED` (the game
-    /// draws it: a kinetic part's turning model).
-    pub render_shape: Option<String>,
+    /// How the block is drawn, whatever the template does (`BlockBehaviour.getRenderShape`).
+    pub render_shape: Option<RenderShape>,
+    /// `false`: the block occludes nothing, so its neighbours' faces are drawn and light passes
+    /// it (`BlockBehaviour.Properties.noOcclusion`); unset or `true`: as its template.
+    pub occludes: Option<bool>,
     /// Starling: the block's own shape, for a block shaped unlike its template: boxes
     /// `[x1, y1, z1, x2, y2, z2]` in sixteenths (as model elements, -16 to 32: a block out at
     /// most), made for a state facing up (or along y) and turned to each state's `facing` (else
@@ -100,8 +101,27 @@ pub struct BlockProperties {
     pub shape: Option<Vec<[f32; 6]>>,
 }
 
-/// The render shapes a block may declare.
-pub const RENDER_SHAPES: [&str; 3] = ["MODEL", "INVISIBLE", "ENTITYBLOCK_ANIMATED"];
+/// Vanilla's `RenderShape`, by its constant's name: `MODEL` puts the block model in the chunk
+/// mesh, `ENTITYBLOCK_ANIMATED` leaves it out for a block whose parts are drawn every frame
+/// (its block entity's drawing), and `INVISIBLE` draws nothing.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RenderShape {
+    Model,
+    EntityblockAnimated,
+    Invisible,
+}
+
+impl RenderShape {
+    /// The constant's name, as the block tables write it.
+    pub fn name(self) -> &'static str {
+        match self {
+            RenderShape::Model => "MODEL",
+            RenderShape::EntityblockAnimated => "ENTITYBLOCK_ANIMATED",
+            RenderShape::Invisible => "INVISIBLE",
+        }
+    }
+}
 
 /// What a block is in a kinetic network (rotation passed from block to block, as Create's):
 /// its part, a source's speed, and the models the game turns with it. Its axis or facing is
@@ -282,36 +302,6 @@ pub enum Machine {
     /// chute it leads into (its state's `facing`: down, or a diagonal one's way), or dropped
     /// below (Create's chute).
     Chute,
-||||||| 31f83499b6
-=======
-    /// How the block is drawn, whatever the template does (`BlockBehaviour.getRenderShape`).
-    pub render_shape: Option<RenderShape>,
-    /// `false`: the block occludes nothing, so its neighbours' faces are drawn and light passes
-    /// it (`BlockBehaviour.Properties.noOcclusion`); unset or `true`: as its template.
-    pub occludes: Option<bool>,
-}
-
-/// Vanilla's `RenderShape`, by its constant's name: `MODEL` puts the block model in the chunk
-/// mesh, `ENTITYBLOCK_ANIMATED` leaves it out for a block whose parts are drawn every frame
-/// (its block entity's drawing), and `INVISIBLE` draws nothing.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum RenderShape {
-    Model,
-    EntityblockAnimated,
-    Invisible,
-}
-
-impl RenderShape {
-    /// The constant's name, as the block tables write it.
-    pub fn name(self) -> &'static str {
-        match self {
-            RenderShape::Model => "MODEL",
-            RenderShape::EntityblockAnimated => "ENTITYBLOCK_ANIMATED",
-            RenderShape::Invisible => "INVISIBLE",
-        }
-    }
->>>>>>> c98a51a664
 }
 
 /// Which of a block's states get random ticks (`BlockBehaviour.isRandomlyTicking(state)`), so a
@@ -1152,17 +1142,7 @@ impl Content {
     /// A reader of its content files. A packaged mod's archive is opened
     /// once for all of them (opening it reads its whole index).
     pub fn reader(&self) -> Result<FileReader<'_>, String> {
-<<<<<<< HEAD
         reader(&self.source, &self.fetched)
-||||||| 31f83499b6
-        Ok(match &self.source {
-            Source::Dir(root) => FileReader::Dir(root),
-            Source::Zip(path) => FileReader::Zip(Box::new(open_zip(path)?)),
-            Source::Code => FileReader::Dir(Path::new("")),
-        })
-=======
-        reader_of(&self.source)
->>>>>>> c98a51a664
     }
 
     /// Where content may go, and the declarations.
@@ -1234,10 +1214,6 @@ impl Content {
                 ));
             }
         }
-        // One reader for every declaration: opening a packaged mod reads its
-        // whole index, so a reader per file made loading a big mod quadratic.
-        let source = self.source.clone();
-        let mut reader = reader_of(&source)?;
         let mut ids = BTreeSet::new();
         // One reader for every declaration: a packaged mod's archive opened per file read its
         // whole index each time (Create's 900 declarations in 10,000 files: half a minute on a
@@ -1619,12 +1595,6 @@ fn check_block(file: &Block) -> Result<(), String> {
     if p.sounds.as_deref().is_some_and(|s| !vanilla_id(s)) {
         return Err("sounds names a vanilla block (minecraft:...)".into());
     }
-    if p.render_shape
-        .as_deref()
-        .is_some_and(|s| !RENDER_SHAPES.contains(&s))
-    {
-        return Err("render_shape is MODEL, INVISIBLE or ENTITYBLOCK_ANIMATED".into());
-    }
     if p.shape.as_ref().is_some_and(|boxes| {
         boxes.is_empty()
             || boxes.iter().any(|b| {
@@ -1768,14 +1738,6 @@ fn check_sign_walls(blocks: &[&Block]) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-fn reader_of(source: &Source) -> Result<FileReader<'_>, String> {
-    Ok(match source {
-        Source::Dir(root) => FileReader::Dir(root),
-        Source::Zip(path) => FileReader::Zip(Box::new(open_zip(path)?)),
-        Source::Code => FileReader::Dir(Path::new("")),
-    })
 }
 
 fn open_zip(path: &Path) -> Result<zip::ZipArchive<std::fs::File>, String> {

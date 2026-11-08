@@ -110,9 +110,9 @@ impl Stats {
     }
     /// `ServerStatsCounter.parseLocal`: the counters of a stats file.
     pub(super) fn read(path: &Path) -> Self {
-        let json = std::fs::read_to_string(path)
+        let json = horizon_client::save::read_file(path)
             .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|t| serde_json::from_slice::<serde_json::Value>(&t).ok())
             .unwrap_or_default();
         Self::from_json(&json)
     }
@@ -122,22 +122,6 @@ impl Stats {
             loaded: true,
             ..Self::default()
         };
-<<<<<<< HEAD
-        let Some(json) = horizon_client::save::read_file(path)
-            .ok()
-            .and_then(|t| serde_json::from_slice::<serde_json::Value>(&t).ok())
-        else {
-            return stats;
-        };
-||||||| 31f83499b6
-        let Some(json) = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
-        else {
-            return stats;
-        };
-=======
->>>>>>> c98a51a664
         if let Some(all) = json.get("stats").and_then(|s| s.as_object()) {
             for (ty, entries) in all {
                 let Some(entries) = entries.as_object() else {
@@ -169,14 +153,6 @@ impl Stats {
         serde_json::json!({
             "stats": stats,
             "DataVersion": horizon_world::DATA_VERSION,
-<<<<<<< HEAD
-        });
-||||||| 31f83499b6
-        });
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-=======
         })
     }
     /// `ServerStatsCounter.save`.
@@ -185,7 +161,6 @@ impl Stats {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
->>>>>>> c98a51a664
         if let Ok(text) = serde_json::to_string_pretty(&json) {
             let _ = horizon_client::save::write_file(path, text.into_bytes());
         }

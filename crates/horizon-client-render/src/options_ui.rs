@@ -21,7 +21,6 @@ use crate::{
 fn tr(key: &str) -> Text {
     Text::translate(key, &[])
 }
-<<<<<<< HEAD
 /// `text` cut to `chars` characters, `...` marking the cut.
 fn clipped(text: &str, chars: usize) -> String {
     if text.chars().count() <= chars {
@@ -46,8 +45,7 @@ fn shader_folder_note() -> String {
         }
     }
     clipped(&format!("Folder: {}", dir.display()), 52)
-||||||| 31f83499b6
-=======
+}
 
 /// False only in a game built without the `horizon-extras` feature (docs/forking.md), which says
 /// so once at startup: the Options screen then has vanilla's Telemetry Data slot instead of
@@ -55,7 +53,6 @@ fn shader_folder_note() -> String {
 pub static HORIZON_EXTRAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 fn horizon_extras() -> bool {
     HORIZON_EXTRAS.load(std::sync::atomic::Ordering::Relaxed)
->>>>>>> c98a51a664
 }
 fn generic(caption: &str, value: Text) -> Text {
     Text::translate("options.generic_value", &[tr(caption), value])
@@ -881,13 +878,9 @@ impl Opt {
             }),
             Opt::PadInvertX => on_off(s.controller.invert_x),
             Opt::PadInvertY => on_off(s.controller.invert_y),
-<<<<<<< HEAD
             Opt::PadServerStick => tr(&s.controller.server_stick.lang_key()),
             Opt::PadStickPrompt => on_off(s.controller.stick_prompt),
-||||||| 31f83499b6
-=======
             Opt::PadCraftOnServers => on_off(s.controller.craft_on_servers),
->>>>>>> c98a51a664
             Opt::PadToggleSneak => tr(if s.controller.toggle_sneak {
                 "options.key.toggle"
             } else {
@@ -1199,15 +1192,11 @@ impl Opt {
                 s.controller.craft_on_servers = !s.controller.craft_on_servers
             }
             Opt::PadToggleSneak => s.controller.toggle_sneak = !s.controller.toggle_sneak,
-<<<<<<< HEAD
             Opt::PadServerStick => s.controller.server_stick = s.controller.server_stick.next(),
             Opt::PadStickPrompt => s.controller.stick_prompt = !s.controller.stick_prompt,
-||||||| 31f83499b6
-=======
             Opt::PadNintendoButtons => {
                 s.controller.nintendo_letters = !s.controller.nintendo_letters
             }
->>>>>>> c98a51a664
             Opt::PadLightbar => {
                 let all = gamepad::Lightbar::ALL;
                 let i = all
@@ -1641,12 +1630,8 @@ enum Act {
     ResetKey(&'static str),
     ResetKeys,
     ToggleMod(usize),
-<<<<<<< HEAD
-    /// Pick `s.shader_packs[i]`, or turn it off when it is the pick (None: Off).
-    PickShaderPack(Option<usize>),
     /// The next profile of the chosen pack, on the Shader Packs page.
     PackProfile,
-    OpenShaderPackFolder,
     /// The next of the resolutions the Shader Packs page offers.
     ShaderResolution,
     /// The next of the frame limits the Shader Packs page offers.
@@ -1670,57 +1655,20 @@ enum Act {
     CanvasClear,
     CanvasPlate,
     CanvasImport(u32),
-    /// Open the picked pack's Shader Options page.
-    ShaderOptions,
-    /// Open the options page of the Horizon pack `s.shader_packs[.0]`.
-    NativePackOptions(usize),
-    /// Option `.1` of that pack: its next value.
-    NativePackOption(usize, usize),
-    /// Every option of that pack back to its default.
-    NativePackReset(usize),
-    /// Shader Options: the next value of an option, a screen of the pack, the next profile,
-    /// every option back to its default.
-    ShaderOption(String),
-    ShaderScreen(String),
-    ShaderProfile,
-    ShaderReset,
-||||||| 31f83499b6
-    /// Pick `s.shader_packs[i]`, or turn it off when it is the pick.
-    PickShaderPack(usize),
-    OpenShaderPackFolder,
-    /// Open the picked pack's Shader Options page.
-    ShaderOptions,
-    /// Open the options page of the Horizon pack `s.shader_packs[.0]`.
-    NativePackOptions(usize),
-    /// Option `.1` of that pack: its next value.
-    NativePackOption(usize, usize),
-    /// Every option of that pack back to its default.
-    NativePackReset(usize),
-    /// Shader Options: the next value of an option, a screen of the pack, the next profile,
-    /// every option back to its default.
-    ShaderOption(String),
-    ShaderScreen(String),
-    ShaderProfile,
-    ShaderReset,
-=======
     /// PvP & HUD's PvP preset (`pvp::apply_preset`).
     PvpPreset,
     /// PvP & HUD's Edit HUD button.
     HudEditor,
->>>>>>> c98a51a664
     /// The installed native mod's settings page.
     ModSettings(usize),
     /// A native mod's key (mod, key) waits for a key; a button of its page.
     NativeKey(usize, usize),
     NativeButton(usize, usize),
     OpenModFolder,
-<<<<<<< HEAD
     /// The creative screen with the inventory beside it, or as the game draws it.
     BedrockInventory,
     /// The touch layout editor (phones).
     TouchLayout,
-||||||| 31f83499b6
-=======
     /// Browse mods: the page of listing `.0` of `mod_browser`.
     ModProject(usize),
     /// The open project page's Install or Update.
@@ -1730,7 +1678,6 @@ enum Act {
     /// Accessibility's "Accessibility Help" link
     /// (`AccessibilityOptionsScreen.addFooter`'s openLinkButton).
     AccessibilityHelp,
->>>>>>> c98a51a664
     /// Credits & Attribution's Credits button (WinScreen without the poem).
     Credits,
     CopyAgentDetails,
@@ -1997,15 +1944,12 @@ pub struct OptionsUi {
     language_choice: Option<String>,
     language_search: ui::EditBox,
     pub(crate) settings_search: ui::EditBox,
-<<<<<<< HEAD
     /// What the custom button on its page sends.
     custom_send: ui::EditBox,
     /// The custom button on its page came from the touch editor's Add, and goes back there.
     back_to_editor: bool,
     /// The canvas of a custom button's image.
     painter: Painter,
-||||||| 31f83499b6
-=======
     /// Browse mods: the registry's projects, filled by the game.
     pub mod_browser: crate::mod_browser::ModBrowser,
     /// The project whose page is open (`Page::ModProject`).
@@ -2017,7 +1961,6 @@ pub struct OptionsUi {
     pub mods_live: std::collections::BTreeSet<String>,
     /// Horizon's `packBrowser` extra: the pack screen's Add button.
     pub pack_browser: bool,
->>>>>>> c98a51a664
     /// Packs: the packs found and the selection the screen opens with.
     pub pack_infos: Vec<crate::pack_screen::PackInfo>,
     pub pack_selection: Vec<String>,
@@ -2079,9 +2022,11 @@ pub struct OptionsUi {
     /// The list's rows as last laid out: each row's top and bottom (GUI
     /// pixels), for the narration's row under the mouse.
     row_bands: Vec<[f32; 2]>,
-<<<<<<< HEAD
     /// The Shader Packs page's chosen pack's profiles ("" first: its defaults).
     shader_profiles: Vec<String>,
+    /// The PvP & HUD items that take a whole row (`wide_extras`), measured
+    /// when the page is drawn.
+    wide_extras: Vec<crate::extras::Item>,
     /// Whether Options opens Skin Customization: the game's options do; the menus before the
     /// game, which can't put a skin on, keep vanilla's greyed button.
     pub skin_page: bool,
@@ -2121,12 +2066,6 @@ impl Default for SkinPage {
             actions: Vec::new(),
         }
     }
-||||||| 31f83499b6
-=======
-    /// The PvP & HUD items that take a whole row (`wide_extras`), measured
-    /// when the page is drawn.
-    wide_extras: Vec<crate::extras::Item>,
->>>>>>> c98a51a664
 }
 impl Default for OptionsUi {
     fn default() -> Self {
@@ -2154,18 +2093,14 @@ impl Default for OptionsUi {
             language_choice: None,
             language_search: search,
             settings_search,
-<<<<<<< HEAD
             custom_send,
             back_to_editor: false,
             painter: Painter::default(),
-||||||| 31f83499b6
-=======
             mod_browser: Default::default(),
             mod_project: String::new(),
             mods_note: None,
             mods_live: Default::default(),
             pack_browser: false,
->>>>>>> c98a51a664
             pack_infos: Vec::new(),
             pack_selection: Vec::new(),
             pack_screen: None,
@@ -2198,14 +2133,10 @@ impl Default for OptionsUi {
             framebuffer: [1280, 720],
             split_guest: false,
             row_bands: Vec::new(),
-<<<<<<< HEAD
             shader_profiles: Vec::new(),
             skin_page: false,
             skin: SkinPage::default(),
-||||||| 31f83499b6
-=======
             wide_extras: Vec::new(),
->>>>>>> c98a51a664
         }
     }
 }
@@ -2310,248 +2241,6 @@ fn horizon_page_tooltip(page: Page) -> Option<&'static str> {
         _ => return None,
     })
 }
-<<<<<<< HEAD
-/// A list's slot with nothing in it: text takes no clicks.
-fn blank_slot(w: f32) -> Widget {
-    Widget {
-        x: 0.0,
-        y: 0.0,
-        w,
-        h: 20.0,
-        kind: WKind::Text {
-            text: Text::literal(""),
-            color: 0,
-            centered: false,
-        },
-        list: false,
-        row: 0,
-    }
-}
-/// Page `at` of the options of the Horizon pack `s.shader_packs[i]`: the pack's own layout,
-/// else every option two a row.
-fn native_pack_option_rows(s: &Settings, i: usize, at: u8) -> Vec<Row> {
-    use horizon_shader_api::PageItem;
-    let Some(pack) = s.shader_packs.get(i) else {
-        return Vec::new();
-    };
-    let count = pack.options.len().min(pack.values.len());
-    let (columns, items) = match pack.pages.get(usize::from(at)) {
-        Some(page) => (usize::from(page.columns), page.items.clone()),
-        None => (2, (0..count).map(PageItem::Option).collect()),
-    };
-    let width = if columns == 1 { 310.0 } else { 150.0 };
-    let widget = |item: &PageItem| match *item {
-        PageItem::Option(o) if o < count => {
-            let option = &pack.options[o];
-            let value = crate::shader_pack_list::show_value(&option.kind, pack.values[o]);
-            let label = Text::literal(format!("{}: {value}", option.name));
-            button(0.0, 0.0, width, label, Act::NativePackOption(i, o))
-        }
-        PageItem::Page(p) if p < pack.pages.len() => {
-            let label = Text::literal(format!("{}...", pack.pages[p].name));
-            let page = Page::NativePackOptions(i, p as u8);
-            button(0.0, 0.0, width, label, Act::Push(page))
-        }
-        _ => blank_slot(width),
-    };
-    let mut rows = Vec::new();
-    if at == 0 {
-        rows.push(Row::Note(pack.title.clone()));
-    }
-    rows.extend(
-        items
-            .chunks(columns)
-            .map(|row| Row::Buttons(widget(&row[0]), row.get(1).map(widget))),
-    );
-    rows
-}
-/// The open screen of the picked pack: its title, then its items, one to a row on a phone, where
-/// long names fit and a finger finds them, else as the pack lays them out.
-fn shader_option_rows(s: &Settings) -> Vec<Row> {
-    let Some(options) = &s.shader_options else {
-        return vec![Row::Header("horizon.shader_options.loading")];
-    };
-    let columns = if cfg!(target_os = "android") {
-        1
-    } else {
-        options
-            .screens
-            .screen(options.screen())
-            .map_or(2, |(_, c)| c)
-    };
-    let blank = || blank_slot(150.0);
-    let width = if columns == 1 { 310.0 } else { 150.0 };
-    let widget = |item: &horizon_shaders::ScreenItem| -> Option<Widget> {
-        use horizon_shaders::ScreenItem;
-        Some(match item {
-            ScreenItem::Empty if columns > 2 || cfg!(target_os = "android") => return None,
-            ScreenItem::Empty => blank(),
-            ScreenItem::Profile => {
-                button(0.0, 0.0, width, options.profile_label(), Act::ShaderProfile)
-            }
-            ScreenItem::Screen(name) => button(
-                0.0,
-                0.0,
-                width,
-                options.screen_label(name),
-                Act::ShaderScreen(name.clone()),
-            ),
-            ScreenItem::Option(name) => match options.slider_position(name) {
-                Some(value) => Widget {
-                    x: 0.0,
-                    y: 0.0,
-                    w: width,
-                    h: 20.0,
-                    kind: WKind::ShaderSlider {
-                        label: options.option_label(name),
-                        value,
-                        name: name.clone(),
-                    },
-                    list: false,
-                    row: 0,
-                },
-                None => button(
-                    0.0,
-                    0.0,
-                    width,
-                    options.option_label(name),
-                    Act::ShaderOption(name.clone()),
-                ),
-            },
-        })
-    };
-    let widgets: Vec<Widget> = options.items().iter().filter_map(widget).collect();
-    let mut rows = vec![Row::Note(options.title().strip_legacy().plain())];
-    if columns == 1 {
-        rows.extend(widgets.into_iter().map(|w| Row::Buttons(w, None)));
-        return rows;
-    }
-    let mut widgets = widgets.into_iter();
-    while let Some(a) = widgets.next() {
-        rows.push(Row::Buttons(a, widgets.next()));
-    }
-    rows
-}
-||||||| 31f83499b6
-/// The open screen of the picked pack: its title, then its items two to a row (one when the
-/// pack asks for a single column).
-/// A list's slot with nothing in it: text takes no clicks.
-fn blank_slot(w: f32) -> Widget {
-    Widget {
-        x: 0.0,
-        y: 0.0,
-        w,
-        h: 20.0,
-        kind: WKind::Text {
-            text: Text::literal(""),
-            color: 0,
-            centered: false,
-        },
-        list: false,
-        row: 0,
-    }
-}
-/// Page `at` of the options of the Horizon pack `s.shader_packs[i]`: the pack's own layout,
-/// else every option two a row.
-fn native_pack_option_rows(s: &Settings, i: usize, at: u8) -> Vec<Row> {
-    use horizon_shader_api::PageItem;
-    let Some(pack) = s.shader_packs.get(i) else {
-        return Vec::new();
-    };
-    let count = pack.options.len().min(pack.values.len());
-    let (columns, items) = match pack.pages.get(usize::from(at)) {
-        Some(page) => (usize::from(page.columns), page.items.clone()),
-        None => (2, (0..count).map(PageItem::Option).collect()),
-    };
-    let width = if columns == 1 { 310.0 } else { 150.0 };
-    let widget = |item: &PageItem| match *item {
-        PageItem::Option(o) if o < count => {
-            let option = &pack.options[o];
-            let value = crate::shader_pack_list::show_value(&option.kind, pack.values[o]);
-            let label = Text::literal(format!("{}: {value}", option.name));
-            button(0.0, 0.0, width, label, Act::NativePackOption(i, o))
-        }
-        PageItem::Page(p) if p < pack.pages.len() => {
-            let label = Text::literal(format!("{}...", pack.pages[p].name));
-            let page = Page::NativePackOptions(i, p as u8);
-            button(0.0, 0.0, width, label, Act::Push(page))
-        }
-        _ => blank_slot(width),
-    };
-    let mut rows = Vec::new();
-    if at == 0 {
-        rows.push(Row::Note(pack.title.clone()));
-    }
-    rows.extend(
-        items
-            .chunks(columns)
-            .map(|row| Row::Buttons(widget(&row[0]), row.get(1).map(widget))),
-    );
-    rows
-}
-fn shader_option_rows(s: &Settings) -> Vec<Row> {
-    let Some(options) = &s.shader_options else {
-        return vec![Row::Header("horizon.shader_options.loading")];
-    };
-    let columns = options
-        .screens
-        .screen(options.screen())
-        .map_or(2, |(_, c)| c);
-    let blank = || blank_slot(150.0);
-    let width = if columns == 1 { 310.0 } else { 150.0 };
-    let widget = |item: &horizon_shaders::ScreenItem| -> Option<Widget> {
-        use horizon_shaders::ScreenItem;
-        Some(match item {
-            ScreenItem::Empty if columns > 2 => return None,
-            ScreenItem::Empty => blank(),
-            ScreenItem::Profile => {
-                button(0.0, 0.0, width, options.profile_label(), Act::ShaderProfile)
-            }
-            ScreenItem::Screen(name) => button(
-                0.0,
-                0.0,
-                width,
-                options.screen_label(name),
-                Act::ShaderScreen(name.clone()),
-            ),
-            ScreenItem::Option(name) => match options.slider_position(name) {
-                Some(value) => Widget {
-                    x: 0.0,
-                    y: 0.0,
-                    w: width,
-                    h: 20.0,
-                    kind: WKind::ShaderSlider {
-                        label: options.option_label(name),
-                        value,
-                        name: name.clone(),
-                    },
-                    list: false,
-                    row: 0,
-                },
-                None => button(
-                    0.0,
-                    0.0,
-                    width,
-                    options.option_label(name),
-                    Act::ShaderOption(name.clone()),
-                ),
-            },
-        })
-    };
-    let widgets: Vec<Widget> = options.items().iter().filter_map(widget).collect();
-    let mut rows = vec![Row::Note(options.title().strip_legacy().plain())];
-    if columns == 1 {
-        rows.extend(widgets.into_iter().map(|w| Row::Buttons(w, None)));
-        return rows;
-    }
-    let mut widgets = widgets.into_iter();
-    while let Some(a) = widgets.next() {
-        rows.push(Row::Buttons(a, widgets.next()));
-    }
-    rows
-}
-=======
->>>>>>> c98a51a664
 /// Rows of an OptionsList: (big?, options) or a header.
 enum Row {
     Big(Opt),
@@ -3005,15 +2694,12 @@ impl OptionsUi {
         if page == Page::SplitProfiles {
             self.split_profiles.reset();
         }
-<<<<<<< HEAD
         if page == Page::Skin {
             self.skin.name.focused = false;
             self.refresh_skin_page();
-||||||| 31f83499b6
-=======
+        }
         if page == Page::Studio {
             self.studio.refresh();
->>>>>>> c98a51a664
         }
     }
     /// The open page's screen on the settings shell. This, with `shell_mut`, is all a screen
@@ -3167,17 +2853,11 @@ impl OptionsUi {
             Page::ModProject => "horizon.mods.browse.project",
             Page::NativeMod(_) => "Mod Settings",
             Page::ShaderPacks => "horizon.pages.shader_packs",
-<<<<<<< HEAD
-            Page::ShaderOptions | Page::NativePackOptions(..) => "horizon.pages.shader_options",
+            Page::ShaderOptions => "horizon.pages.shader_options",
             Page::CustomButtons
             | Page::CustomButton(_)
             | Page::CustomPick(..)
             | Page::CustomDraw(_) => "Custom Buttons",
-||||||| 31f83499b6
-            Page::ShaderOptions | Page::NativePackOptions(..) => "horizon.pages.shader_options",
-=======
-            Page::ShaderOptions => "horizon.pages.shader_options",
->>>>>>> c98a51a664
             Page::Graphics | Page::GraphicsAdvanced | Page::GraphicsHdr | Page::HdrCalibration => {
                 "options.videoTitle"
             }
@@ -3631,6 +3311,8 @@ impl OptionsUi {
                 // SkinCustomizationScreen: the seven layers, then Main Hand; in the game's own
                 // options, the player's name and skin before them.
                 let mut opts: Vec<Opt> = (0..MODEL_PART_KEYS.len()).map(Opt::ModelPart).collect();
+                // Horizon's own: the outer layer as real pixels, not one box.
+                opts.push(Opt::SkinLayers3d);
                 opts.push(Opt::MainHand);
                 let layers = pairs(&opts);
                 if !self.skin_page {
@@ -3726,35 +3408,10 @@ impl OptionsUi {
                 rows
             }
             Page::Video => {
-<<<<<<< HEAD
-                // Horizon's graphics settings screen, at General and at Advanced.
-                let mut rows = vec![Row::Buttons(
-                    button(
-                        0.0,
-                        0.0,
-                        150.0,
-                        tr("horizon.pages.open.horizon_graphics"),
-                        Act::Push(Page::Graphics),
-                    ),
-                    Some(button(
-                        0.0,
-                        0.0,
-                        150.0,
-                        tr("horizon.pages.open.graphics_advanced"),
-                        Act::Push(Page::GraphicsAdvanced),
-                    )),
-                )];
-                rows.push(Row::Buttons(
-                    button(
-                        0.0,
-                        0.0,
-                        310.0,
-                        Text::literal("Shader Packs..."),
-                        Act::Push(Page::ShaderPacks),
-                    ),
-                    None,
-                ));
-                rows.push(Row::Header("options.video.display.header"));
+                // Vanilla's VideoSettingsScreen as vanilla lays it out. No menu opens it (Video
+                // Settings... opens the graphics screen, which has all of it); it stays for
+                // `horizon-ctl options video-vanilla` and the tests that pin vanilla's screen.
+                let mut rows = vec![Row::Header("options.video.display.header")];
                 // A phone's app always fills its screen.
                 let display: &[Opt] = if cfg!(target_os = "android") {
                     &[
@@ -3778,53 +3435,6 @@ impl OptionsUi {
                     ]
                 };
                 rows.extend(pairs(display));
-||||||| 31f83499b6
-                // Horizon's graphics settings screen, at General and at Advanced.
-                let mut rows = vec![Row::Buttons(
-                    button(
-                        0.0,
-                        0.0,
-                        150.0,
-                        tr("horizon.pages.open.horizon_graphics"),
-                        Act::Push(Page::Graphics),
-                    ),
-                    Some(button(
-                        0.0,
-                        0.0,
-                        150.0,
-                        tr("horizon.pages.open.graphics_advanced"),
-                        Act::Push(Page::GraphicsAdvanced),
-                    )),
-                )];
-                rows.push(Row::Header("options.video.display.header"));
-                rows.push(Row::Big(Opt::ExclusiveMode));
-                rows.extend(pairs(&[
-                    Opt::MaxFps,
-                    Opt::Vsync,
-                    Opt::InactivityFps,
-                    Opt::GuiScale,
-                    Opt::Fullscreen,
-                    Opt::ExclusiveFullscreen,
-                    Opt::Gamma,
-                    Opt::GraphicsBackend,
-                ]));
-=======
-                // Vanilla's VideoSettingsScreen as vanilla lays it out. No menu opens it (Video
-                // Settings... opens the graphics screen, which has all of it); it stays for
-                // `horizon-ctl options video-vanilla` and the tests that pin vanilla's screen.
-                let mut rows = vec![Row::Header("options.video.display.header")];
-                rows.push(Row::Big(Opt::ExclusiveMode));
-                rows.extend(pairs(&[
-                    Opt::MaxFps,
-                    Opt::Vsync,
-                    Opt::InactivityFps,
-                    Opt::GuiScale,
-                    Opt::Fullscreen,
-                    Opt::ExclusiveFullscreen,
-                    Opt::Gamma,
-                    Opt::GraphicsBackend,
-                ]));
->>>>>>> c98a51a664
                 rows.push(Row::Header("options.video.quality.header"));
                 rows.push(Row::Big(Opt::Preset));
                 rows.extend(pairs(&[
@@ -3910,24 +3520,6 @@ impl OptionsUi {
                 }
                 rows
             }
-<<<<<<< HEAD
-||||||| 31f83499b6
-            Page::Skin => {
-                // SkinCustomizationScreen: the seven layers, then Main Hand.
-                let mut opts: Vec<Opt> = (0..MODEL_PART_KEYS.len()).map(Opt::ModelPart).collect();
-                opts.push(Opt::MainHand);
-                pairs(&opts)
-            }
-=======
-            Page::Skin => {
-                // SkinCustomizationScreen: the seven layers, then Main Hand.
-                let mut opts: Vec<Opt> = (0..MODEL_PART_KEYS.len()).map(Opt::ModelPart).collect();
-                // Horizon's own: the outer layer as real pixels, not one box.
-                opts.push(Opt::SkinLayers3d);
-                opts.push(Opt::MainHand);
-                pairs(&opts)
-            }
->>>>>>> c98a51a664
             Page::Online => {
                 // OnlineOptionsScreen without the Xbox and friends-list parts.
                 let mut rows = vec![Row::Header("options.online.friends.header")];
@@ -4003,89 +3595,6 @@ impl OptionsUi {
                 }
                 self.filter_option_rows(rows)
             }
-<<<<<<< HEAD
-            Page::Controller => {
-                let mut rows = vec![Row::Buttons(
-                    button(
-                        0.0,
-                        0.0,
-                        310.0,
-                        tr("horizon.pages.open.controller_binds"),
-                        Act::Push(Page::PadBinds),
-                    ),
-                    None,
-                )];
-                // A phone reads its controllers through Android (game/pad/android.rs): the
-                // DualSense's own output (its triggers and lightbar) and Steam's keyboard are
-                // the computer's only.
-                let opts: &[Opt] = if cfg!(target_os = "android") {
-                    &[
-                        Opt::PadEnabled,
-                        Opt::PadVibration,
-                        Opt::PadLookSensitivity,
-                        Opt::PadToggleSneak,
-                        Opt::PadServerStick,
-                        Opt::PadStickPrompt,
-                        Opt::PadInvertX,
-                        Opt::PadInvertY,
-                        Opt::PadMoveDeadzone,
-                        Opt::PadLookDeadzone,
-                        Opt::PadGlyphs,
-                        Opt::PadMenuNav,
-                    ]
-                } else {
-                    &[
-                        Opt::PadEnabled,
-                        Opt::PadVibration,
-                        Opt::PadAdaptiveTriggers,
-                        Opt::PadLightbar,
-                        Opt::PadLookSensitivity,
-                        Opt::PadToggleSneak,
-                        Opt::PadServerStick,
-                        Opt::PadStickPrompt,
-                        Opt::PadInvertX,
-                        Opt::PadInvertY,
-                        Opt::PadMoveDeadzone,
-                        Opt::PadLookDeadzone,
-                        Opt::PadGlyphs,
-                        Opt::PadMenuNav,
-                        Opt::PadKeyboard,
-                    ]
-                };
-                rows.extend(pairs(opts));
-                rows
-            }
-||||||| 31f83499b6
-            Page::Controller => {
-                let mut rows = vec![Row::Buttons(
-                    button(
-                        0.0,
-                        0.0,
-                        310.0,
-                        tr("horizon.pages.open.controller_binds"),
-                        Act::Push(Page::PadBinds),
-                    ),
-                    None,
-                )];
-                rows.extend(pairs(&[
-                    Opt::PadEnabled,
-                    Opt::PadVibration,
-                    Opt::PadAdaptiveTriggers,
-                    Opt::PadLightbar,
-                    Opt::PadLookSensitivity,
-                    Opt::PadToggleSneak,
-                    Opt::PadInvertX,
-                    Opt::PadInvertY,
-                    Opt::PadMoveDeadzone,
-                    Opt::PadLookDeadzone,
-                    Opt::PadGlyphs,
-                    Opt::PadMenuNav,
-                    Opt::PadKeyboard,
-                ]));
-                rows
-            }
-=======
->>>>>>> c98a51a664
             Page::Mouse => pairs(MOUSE_OPTIONS),
             Page::Chat => pairs(&[
                 Opt::ChatVisibility,
@@ -4137,100 +3646,6 @@ impl OptionsUi {
                     rows.push(Row::Header("horizon.mods.empty"));
                     return rows;
                 }
-<<<<<<< HEAD
-                s.mods
-                    .installed
-                    .iter()
-                    .enumerate()
-                    .map(|(i, installed)| {
-                        let mut label = Text::literal(format!("{}: ", installed.title))
-                            .append(on_off(s.mods.is_on(i)));
-                        if installed.problem.as_deref() == Some(crate::mod_list::NOT_BUILT) {
-                            label = label.append(tr("horizon.mods.not_built"));
-                        } else if installed.problem.is_some() {
-                            label = label.append(tr("horizon.mods.stopped"));
-                        } else if installed.dev {
-                            label = label.append(tr("horizon.mods.dev"));
-                        }
-                        let dead = installed.dev || installed.id.is_empty();
-                        // Only native mods with actual settings need a second button.
-                        if installed
-                            .native
-                            .as_ref()
-                            .is_some_and(|page| !page.keys.is_empty() || !page.buttons.is_empty())
-                        {
-                            let toggle = button(0.0, 0.0, 150.0, label, Act::ToggleMod(i));
-                            // A mod not in this game (Android): its one button, Compile, at once.
-                            let settings = if installed.problem.as_deref()
-                                == Some(crate::mod_list::NOT_BUILT)
-                            {
-                                button(
-                                    0.0,
-                                    0.0,
-                                    150.0,
-                                    Text::literal("Compile"),
-                                    Act::NativeButton(i, 0),
-                                )
-                            } else {
-                                button(
-                                    0.0,
-                                    0.0,
-                                    150.0,
-                                    tr("horizon.mods.settings"),
-                                    Act::ModSettings(i),
-                                )
-                            };
-                            Row::Buttons(
-                                if dead { inactive(toggle) } else { toggle },
-                                Some(settings),
-                            )
-                        } else {
-                            let widget = button(0.0, 0.0, 310.0, label, Act::ToggleMod(i));
-                            Row::Buttons(if dead { inactive(widget) } else { widget }, None)
-                        }
-                    })
-                    .collect()
-||||||| 31f83499b6
-                s.mods
-                    .installed
-                    .iter()
-                    .enumerate()
-                    .map(|(i, installed)| {
-                        let mut label = Text::literal(format!("{}: ", installed.title))
-                            .append(on_off(s.mods.is_on(i)));
-                        if installed.problem.as_deref() == Some(crate::mod_list::NOT_BUILT) {
-                            label = label.append(tr("horizon.mods.not_built"));
-                        } else if installed.problem.is_some() {
-                            label = label.append(tr("horizon.mods.stopped"));
-                        } else if installed.dev {
-                            label = label.append(tr("horizon.mods.dev"));
-                        }
-                        let dead = installed.dev || installed.id.is_empty();
-                        // Only native mods with actual settings need a second button.
-                        if installed
-                            .native
-                            .as_ref()
-                            .is_some_and(|page| !page.keys.is_empty() || !page.buttons.is_empty())
-                        {
-                            let toggle = button(0.0, 0.0, 150.0, label, Act::ToggleMod(i));
-                            let settings = button(
-                                0.0,
-                                0.0,
-                                150.0,
-                                tr("horizon.mods.settings"),
-                                Act::ModSettings(i),
-                            );
-                            Row::Buttons(
-                                if dead { inactive(toggle) } else { toggle },
-                                Some(settings),
-                            )
-                        } else {
-                            let widget = button(0.0, 0.0, 310.0, label, Act::ToggleMod(i));
-                            Row::Buttons(if dead { inactive(widget) } else { widget }, None)
-                        }
-                    })
-                    .collect()
-=======
                 rows.extend(s.mods.installed.iter().enumerate().map(|(i, installed)| {
                     let mut label = Text::option_name_value(
                         Text::literal(installed.title.clone()),
@@ -4255,13 +3670,26 @@ impl OptionsUi {
                         .is_some_and(|page| !page.keys.is_empty() || !page.buttons.is_empty())
                     {
                         let toggle = button(0.0, 0.0, 150.0, label, Act::ToggleMod(i));
-                        let settings = button(
-                            0.0,
-                            0.0,
-                            150.0,
-                            tr("horizon.mods.settings"),
-                            Act::ModSettings(i),
-                        );
+                        // A mod not in this game (Android): its one button, Compile, at once.
+                        let settings = if installed.problem.as_deref()
+                            == Some(crate::mod_list::NOT_BUILT)
+                        {
+                            button(
+                                0.0,
+                                0.0,
+                                150.0,
+                                Text::literal("Compile"),
+                                Act::NativeButton(i, 0),
+                            )
+                        } else {
+                            button(
+                                0.0,
+                                0.0,
+                                150.0,
+                                tr("horizon.mods.settings"),
+                                Act::ModSettings(i),
+                            )
+                        };
                         Row::Buttons(if dead { inactive(toggle) } else { toggle }, Some(settings))
                     } else {
                         let widget = button(0.0, 0.0, 310.0, label, Act::ToggleMod(i));
@@ -4269,115 +3697,10 @@ impl OptionsUi {
                     }
                 }));
                 rows
->>>>>>> c98a51a664
             }
             Page::ModBrowser => self.mod_browser_rows(),
             Page::ModProject => self.mod_project_rows(s),
             Page::NativeMod(i) => self.native_rows(s, i),
-<<<<<<< HEAD
-            Page::ShaderPacks => {
-                use crate::shader_pack_list::Kind as PackKind;
-                let choice = s.horizon.shader_choice();
-                let pick = |on: bool, name: &str, act: Act| {
-                    let label = if on {
-                        format!("> {name} <")
-                    } else {
-                        name.to_owned()
-                    };
-                    Row::Buttons(button(0.0, 0.0, 310.0, Text::literal(label), act), None)
-                };
-                let mut rows = Vec::new();
-                // Packs cost per pixel: what matters most, above however many packs there are.
-                if let Some((pack, profile)) = &choice {
-                    let scale = s.horizon.resolution_scale;
-                    let limit = (crate::graphics::auto_shader_scale() * 100.0).round() as u32;
-                    let limited = profile == crate::graphics::AUTO_PROFILE
-                        && !crate::graphics::light_shader_pack(pack)
-                        && scale > limit;
-                    let resolution = if limited {
-                        format!("Resolution: {limit}% (Auto)")
-                    } else {
-                        format!("Resolution: {scale}%")
-                    };
-                    let fps = match s.max_fps {
-                        fps if fps >= 260 => "Off".to_owned(),
-                        fps => fps.to_string(),
-                    };
-                    rows.push(Row::Note("Settings of the pack on".into()));
-                    rows.push(Row::Buttons(
-                        button(
-                            0.0,
-                            0.0,
-                            150.0,
-                            Text::literal(resolution),
-                            Act::ShaderResolution,
-                        ),
-                        Some(button(
-                            0.0,
-                            0.0,
-                            150.0,
-                            Text::literal(format!("FPS Limit: {fps}")),
-                            Act::ShaderFpsLimit,
-                        )),
-                    ));
-                    // Profiles are a `shaders/` pack's; a Horizon pack has its own options page.
-                    let horizon = s
-                        .shader_packs
-                        .iter()
-                        .position(|p| p.file == *pack && p.kind == PackKind::Horizon);
-                    if let Some(i) = horizon.filter(|&i| !s.shader_packs[i].options.is_empty()) {
-                        let label = tr("horizon.shader_options.open");
-                        let act = Act::NativePackOptions(i);
-                        rows.push(Row::Buttons(button(0.0, 0.0, 310.0, label, act), None));
-                    }
-                    if horizon.is_none() {
-                        let shown = match profile.as_str() {
-                            "" => "Pack Default",
-                            crate::graphics::AUTO_PROFILE => "Auto",
-                            profile => profile,
-                        };
-                        rows.push(Row::Buttons(
-                            button(
-                                0.0,
-                                0.0,
-                                150.0,
-                                Text::literal(format!("Profile: {shown}")),
-                                Act::PackProfile,
-                            ),
-                            Some(button(
-                                0.0,
-                                0.0,
-                                150.0,
-                                tr("horizon.shader_options.open"),
-                                Act::ShaderOptions,
-                            )),
-                        ));
-                    }
-                }
-                rows.push(Row::Note(
-                    "Horizon's own packs, and Iris and OptiFine ones".into(),
-                ));
-                rows.push(Row::Note(shader_folder_note()));
-                rows.push(pick(choice.is_none(), "Off", Act::PickShaderPack(None)));
-                if s.shader_packs.is_empty() {
-                    rows.push(Row::Header("horizon.shader_packs.empty"));
-                }
-                for (i, pack) in s.shader_packs.iter().enumerate() {
-                    let on = choice.as_ref().is_some_and(|(p, _)| *p == pack.file);
-                    let name = match pack.kind {
-                        PackKind::Horizon => format!(
-                            "{}{}",
-                            pack.title,
-                            lang::get("horizon.shader_packs.kind_horizon")
-                        ),
-                        PackKind::Classic => pack.title.clone(),
-                    };
-                    rows.push(pick(on, &name, Act::PickShaderPack(Some(i))));
-                }
-                rows
-            }
-            Page::ShaderOptions => shader_option_rows(s),
-            Page::NativePackOptions(i, at) => native_pack_option_rows(s, i, at),
             Page::CustomButtons => {
                 let mut rows = vec![Row::Note(
                     "Buttons of your own: place them in Touch Controls".into(),
@@ -4563,44 +3886,6 @@ impl OptionsUi {
                 }
                 rows
             }
-||||||| 31f83499b6
-            Page::ShaderPacks => {
-                if s.shader_packs.is_empty() {
-                    return vec![Row::Header("horizon.shader_packs.empty")];
-                }
-                let picked = s
-                    .shader_packs
-                    .iter()
-                    .position(|p| p.file == s.horizon.shader_pack);
-                let options = picked.and_then(|i| {
-                    let pack = &s.shader_packs[i];
-                    let act = match pack.kind {
-                        crate::shader_pack_list::Kind::Classic => Act::ShaderOptions,
-                        _ if pack.options.is_empty() => return None,
-                        crate::shader_pack_list::Kind::Horizon => Act::NativePackOptions(i),
-                    };
-                    let label = tr("horizon.shader_options.open");
-                    Some(Row::Buttons(button(0.0, 0.0, 310.0, label, act), None))
-                });
-                options
-                    .into_iter()
-                    .chain(s.shader_packs.iter().enumerate().map(|(i, pack)| {
-                        let kind = match pack.kind {
-                            crate::shader_pack_list::Kind::Horizon => {
-                                lang::get("horizon.shader_packs.kind_horizon")
-                            }
-                            crate::shader_pack_list::Kind::Classic => String::new(),
-                        };
-                        let label = Text::literal(format!("{}{kind}: ", pack.title))
-                            .append(on_off(s.horizon.shader_pack == pack.file));
-                        Row::Buttons(button(0.0, 0.0, 310.0, label, Act::PickShaderPack(i)), None)
-                    }))
-                    .collect()
-            }
-            Page::ShaderOptions => shader_option_rows(s),
-            Page::NativePackOptions(i, at) => native_pack_option_rows(s, i, at),
-=======
->>>>>>> c98a51a664
             _ => {
                 let _ = s;
                 Vec::new()
@@ -5214,12 +4499,8 @@ impl OptionsUi {
                     Page::Accessibility => {
                         Some(("options.accessibility.link", Act::AccessibilityHelp))
                     }
-<<<<<<< HEAD
                     Page::Skin if self.skin_page => Some(("Open Skin Folder", Act::OpenSkinFolder)),
-||||||| 31f83499b6
-=======
                     Page::Mods => Some(("horizon.mods.open_folder", Act::OpenModFolder)),
->>>>>>> c98a51a664
                     _ => None,
                 };
                 if let Some((label, act)) = folder {
@@ -5494,39 +4775,27 @@ impl OptionsUi {
                     (!pointer_over || self.pad_driving).then_some([wd.x, wd.y, wd.w, wd.h]);
             }
             match &wd.kind {
-<<<<<<< HEAD
                 WKind::Button {
                     label,
                     active,
                     icon,
-                    ..
+                    act,
                 } => {
                     match icon.as_deref().filter(|i| atlas.sprites.contains_key(*i)) {
                         Some(icon) => {
                             ui::sprite_sized(batch, atlas, icon, wd.x, wd.y, wd.w, wd.h, u32::MAX)
                         }
-                        None => {
-                            let label = fitted.as_ref().map_or(label, |f| &f.0);
-                            ui::button(batch, atlas, wd.x, wd.y, wd.w, wd.h, label, *active, hover);
-                        }
+                        None => ui::focused_button(
+                            batch,
+                            atlas,
+                            [wd.x, wd.y, wd.w, wd.h],
+                            label,
+                            *active,
+                            pointer_over,
+                            is_focused,
+                            matches!(act, Act::Done).then_some(crate::widgets::Action::Done),
+                        ),
                     }
-||||||| 31f83499b6
-                WKind::Button { label, active, .. } => {
-                    let label = fitted.as_ref().map_or(label, |f| &f.0);
-                    ui::button(batch, atlas, wd.x, wd.y, wd.w, wd.h, label, *active, hover);
-=======
-                WKind::Button { label, active, act } => {
-                    ui::focused_button(
-                        batch,
-                        atlas,
-                        [wd.x, wd.y, wd.w, wd.h],
-                        label,
-                        *active,
-                        pointer_over,
-                        is_focused,
-                        matches!(act, Act::Done).then_some(crate::widgets::Action::Done),
-                    );
->>>>>>> c98a51a664
                     crate::widgets::last_narratable(|n| {
                         narrate_widget(n, s, wd, hover, list_key, framebuffer);
                     });
@@ -5878,21 +5147,15 @@ impl OptionsUi {
         self.size = size;
         self.framebuffer = framebuffer;
         let mut events = Vec::new();
-<<<<<<< HEAD
         if !right && self.painting() && self.painter.press(x, y, drag) {
             return events;
         }
-        if !drag && matches!(self.page(), Page::Video | Page::Controls | Page::KeyBinds) {
-||||||| 31f83499b6
-        if !drag && matches!(self.page(), Page::Video | Page::Controls | Page::KeyBinds) {
-=======
         if !drag
             && matches!(
                 self.page(),
                 Page::Video | Page::Controls | Page::KeyBinds | Page::ModBrowser
             )
         {
->>>>>>> c98a51a664
             let search = &mut self.settings_search;
             search.focused = ui::hovered((x, y), search.x, search.y, search.width, search.height);
             if search.focused {
@@ -6026,13 +5289,9 @@ impl OptionsUi {
                             if p == Page::ShaderPacks {
                                 // The pack list, and the picked pack's own settings with it.
                                 events.push(Event::ListShaderPacks);
-<<<<<<< HEAD
                                 self.refresh_shader_profiles(s);
-||||||| 31f83499b6
-=======
                                 s.shader_options = None;
                                 events.push(Event::OpenShaderOptions);
->>>>>>> c98a51a664
                             }
                             if p == Page::Music {
                                 events.push(Event::ListMusicTracks);
@@ -6041,22 +5300,6 @@ impl OptionsUi {
                                 events.push(Event::BrowseMods);
                             }
                             self.push(p)
-                        }
-                        Act::PickShaderPack(i) => {
-                            let pick = match i {
-                                Some(i) => s.shader_packs.get(i).map(|p| p.file.clone()),
-                                None => Some(String::new()),
-                            };
-                            if let Some(pick) = pick {
-                                s.horizon.shader_pack = if s.horizon.shader_pack == pick {
-                                    String::new()
-                                } else {
-                                    pick
-                                };
-                                s.horizon.shader_profile.clear();
-                                self.refresh_shader_profiles(s);
-                                events.push(Event::ShaderPack);
-                            }
                         }
                         Act::PackProfile => {
                             let now = s.horizon.shader_choice().map(|c| c.1).unwrap_or_default();
@@ -6121,8 +5364,12 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
-<<<<<<< HEAD
-                        Act::OpenShaderPackFolder => events.push(Event::OpenShaderPackFolder),
+                        Act::ModProject(i) => {
+                            if let Some(listing) = self.mod_browser.listings.get(i) {
+                                self.mod_project = listing.id.clone();
+                                self.push(Page::ModProject);
+                            }
+                        }
                         Act::ShaderResolution => {
                             const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
                             let now = s.horizon.resolution_scale;
@@ -6168,24 +5415,8 @@ impl OptionsUi {
                         Act::CustomToggle(id) => {
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
                                 b.toggle = !b.toggle;
-||||||| 31f83499b6
-                        Act::PickShaderPack(i) => {
-                            if let Some(pack) = s.shader_packs.get(i) {
-                                s.horizon.shader_pack = if s.horizon.shader_pack == pack.file {
-                                    String::new()
-                                } else {
-                                    pack.file.clone()
-                                };
-                                events.push(Event::ShaderPack);
-=======
-                        Act::ModProject(i) => {
-                            if let Some(listing) = self.mod_browser.listings.get(i) {
-                                self.mod_project = listing.id.clone();
-                                self.push(Page::ModProject);
->>>>>>> c98a51a664
                             }
                         }
-<<<<<<< HEAD
                         Act::CustomKey(id, name) => {
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
                                 b.action = crate::settings::CustomAction::Key(name.to_owned());
@@ -6239,21 +5470,9 @@ impl OptionsUi {
                         Act::CanvasClear => self.painter.clear(),
                         Act::CanvasPlate => self.painter.plate(atlas),
                         Act::CanvasImport(id) => events.push(Event::ImportButtonImage(id)),
-                        Act::ShaderOptions => {
-                            s.shader_options = None;
-                            self.push(Page::ShaderOptions);
-                            events.push(Event::OpenShaderOptions);
-||||||| 31f83499b6
-                        Act::OpenShaderPackFolder => events.push(Event::OpenShaderPackFolder),
-                        Act::ShaderOptions => {
-                            s.shader_options = None;
-                            self.push(Page::ShaderOptions);
-                            events.push(Event::OpenShaderOptions);
-=======
                         Act::InstallMod => {
                             self.mod_browser.message = None;
                             events.push(Event::InstallMod(self.mod_project.clone()));
->>>>>>> c98a51a664
                         }
                         Act::OpenModPage => {
                             if let Some(l) = self.mod_browser.listing(&self.mod_project) {
@@ -6264,14 +5483,10 @@ impl OptionsUi {
                             crate::pvp::apply_preset(s);
                             events.push(Event::Changed);
                         }
-<<<<<<< HEAD
                         Act::TouchLayout => events.push(Event::TouchLayout),
                         Act::BedrockInventory => s.bedrock_inventory = !s.bedrock_inventory,
-||||||| 31f83499b6
-=======
                         Act::HudEditor => events.push(Event::HudEditor),
                         Act::AccessibilityHelp => events.push(Event::AccessibilityHelp),
->>>>>>> c98a51a664
                         Act::Credits => events.push(Event::Credits),
                         Act::CopyAgentDetails => events.push(Event::CopyAgentDetails),
                         Act::NextSkin => {
@@ -7309,36 +6524,10 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
-<<<<<<< HEAD
-                        Act::PickShaderPack(i) => {
-                            let pick = match i {
-                                Some(i) => s.shader_packs.get(i).map(|p| p.file.clone()),
-                                None => Some(String::new()),
-                            };
-                            if let Some(pick) = pick {
-                                s.horizon.shader_pack = if s.horizon.shader_pack == pick {
-                                    String::new()
-                                } else {
-                                    pick
-                                };
-                                s.horizon.shader_profile.clear();
-                                self.refresh_shader_profiles(s);
-                                events.push(Event::ShaderPack);
-||||||| 31f83499b6
-                        Act::PickShaderPack(i) => {
-                            if let Some(pack) = s.shader_packs.get(i) {
-                                s.horizon.shader_pack = if s.horizon.shader_pack == pack.file {
-                                    String::new()
-                                } else {
-                                    pack.file.clone()
-                                };
-                                events.push(Event::ShaderPack);
-=======
                         Act::ModProject(i) => {
                             if let Some(listing) = self.mod_browser.listings.get(i) {
                                 self.mod_project = listing.id.clone();
                                 self.push(Page::ModProject);
->>>>>>> c98a51a664
                             }
                         }
                         Act::InstallMod => {

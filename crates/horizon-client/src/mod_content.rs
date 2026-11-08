@@ -1456,9 +1456,6 @@ impl<'a> Plan<'a> {
         if let Some(s) = &p.sounds {
             row.set("sound", self.sounds[s].clone());
         }
-        if let Some(s) = &p.render_shape {
-            row.set("render_shape", J::Str(s.clone()));
-        }
     }
 
     /// Adds each new block's copy of the template's entry to a map by name.
@@ -2920,16 +2917,10 @@ pub fn build(base: &Path, mods: &[ContentMod], out: &Path) -> Result<Vec<String>
 }
 
 /// The root to load: `base` itself with no content, else the mods' overlay
-<<<<<<< HEAD
-/// over it, built in `cache/mod-content/<set>`.
-||||||| 31f83499b6
-/// over it, built in `cache/mod-content`.
-=======
 /// over it, built in `cache/mod-content/<stamp>`: one folder per mod set, so
 /// a running game keeps reading the root it was given while a switch builds
 /// another (docs/design/mod-hotload.md). Roots of other sets unused for a day
 /// are removed.
->>>>>>> c98a51a664
 ///
 /// The root is built once and kept: later starts with the same build, base
 /// and mod files reuse it. With ATM10's carried mods a build takes about
@@ -2956,17 +2947,6 @@ pub fn resource_root_with(
     {
         return Ok(base.to_owned());
     }
-<<<<<<< HEAD
-    let sets = cache.join("mod-content");
-    // The first layout kept one root in mod-content itself.
-    if sets.join(STAMP).is_file() {
-        let _ = fs::remove_dir_all(&sets);
-    }
-    let out = sets.join(set_name(mods));
-||||||| 31f83499b6
-    let out = cache.join("mod-content");
-=======
->>>>>>> c98a51a664
     let stamp = stamp(base, mods)?;
     let roots = cache.join("mod-content");
     let out = roots.join(&stamp[..ROOT_NAME]);
@@ -2974,14 +2954,9 @@ pub fn resource_root_with(
         // A reused root warns as the build did; rewriting the stamp marks it as used.
         let warnings = fs::read_to_string(out.join(WARNINGS)).unwrap_or_default();
         warnings.lines().for_each(|w| log::warn!("Horizon: {w}"));
-<<<<<<< HEAD
-        let _ = fs::write(out.join(STAMP), &stamp);
-||||||| 31f83499b6
-=======
         // Used again: kept another day. Marked beside the root, not in it: the pack overlay
         // laid over the root reads its files, and a rewritten one would rebuild it (#12403).
         let _ = fs::write(used_path(&out), b"");
->>>>>>> c98a51a664
         return Ok(out);
     }
     on_build();
@@ -2989,48 +2964,10 @@ pub fn resource_root_with(
         log::warn!("Horizon: {warning}");
     }
     fs::write(out.join(STAMP), stamp)?;
-<<<<<<< HEAD
-    prune_sets(&sets, &out);
-||||||| 31f83499b6
-=======
     prune_roots(&roots, &out, KEEP_ROOTS);
->>>>>>> c98a51a664
     Ok(out)
 }
 
-<<<<<<< HEAD
-/// A set's folder: its mods' ids, hashed.
-fn set_name(mods: &[ContentMod]) -> String {
-    use sha2::{Digest, Sha256};
-    let mut ids: Vec<&str> = mods.iter().map(|m| m.id.as_str()).collect();
-    ids.sort_unstable();
-    let hash = Sha256::digest(ids.join("\n").as_bytes());
-    hash.iter().take(6).map(|b| format!("{b:02x}")).collect()
-}
-
-/// Removes the roots of sets not used for longest, past [`KEPT_SETS`], never `keep`.
-fn prune_sets(sets: &Path, keep: &Path) {
-    let Ok(entries) = fs::read_dir(sets) else {
-        return;
-    };
-    let mut used: Vec<(std::time::SystemTime, PathBuf)> = entries
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p != keep && p.is_dir())
-        .map(|p| {
-            let when = fs::metadata(p.join(STAMP))
-                .and_then(|m| m.modified())
-                .unwrap_or(std::time::UNIX_EPOCH);
-            (when, p)
-        })
-        .collect();
-    used.sort();
-    let extra = (used.len() + 1).saturating_sub(KEPT_SETS);
-    for (_, path) in used.into_iter().take(extra) {
-        let _ = fs::remove_dir_all(path);
-    }
-||||||| 31f83499b6
-=======
 /// The length of a root's folder name: the start of its stamp.
 const ROOT_NAME: usize = 16;
 /// How long a root no start or switch used is kept.
@@ -3123,7 +3060,6 @@ pub fn live_switch(content: &Content) -> std::result::Result<(), &'static str> {
         return Err("horizon.mods.switch.worldgen");
     }
     Ok(())
->>>>>>> c98a51a664
 }
 
 /// In a root built by [`build`]: its warnings, one per line.

@@ -1487,7 +1487,6 @@ impl ChatScreen {
         self.input.set_value(m, command);
         self.edited(m, c);
     }
-<<<<<<< HEAD
     /// The whole input at once, as the on-screen keyboard's editor holds it (Android): the text
     /// without the characters typing refuses, cut to the maximum length, with the cursor and the
     /// selection's other end (in characters of `text`).
@@ -1517,13 +1516,8 @@ impl ChatScreen {
             self.edited(m, c);
         }
     }
-    /// `ChatScreen.resize`: a new screen with the current text.
-||||||| 31f83499b6
-    /// `ChatScreen.resize`: a new screen with the current text.
-=======
     /// `ChatScreen.resize`: a new screen with the current text, still a draft
     /// while it has not been edited (`ChatScreen.resize` keeps the field).
->>>>>>> c98a51a664
     pub fn resize(&mut self, m: &Measure, c: &Commands, width: i32, height: i32) {
         if (width, height) != (self.width, self.height) {
             let value = self.input.value.clone();

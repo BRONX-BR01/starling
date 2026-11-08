@@ -337,13 +337,9 @@ pub enum Mode {
         alert: Option<Alert>,
     },
     Multiplayer(crate::multiplayer::Screen),
-<<<<<<< HEAD
     /// Starling's Microsoft account (`accounts`): signing in, the game's files.
     Account,
-||||||| 31f83499b6
-=======
     Realms(crate::realms::Screen),
->>>>>>> c98a51a664
     /// SafetyScreen: the warning before the first Multiplayer click, with its
     /// "Do not show this screen again" box.
     MultiplayerWarning {
@@ -2585,10 +2581,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                     ),
                 ),
             ),
-<<<<<<< HEAD
             Mode::Account => ScreenInfo::new("account", "Microsoft Account"),
-||||||| 31f83499b6
-=======
             Mode::Realms(screen) => {
                 let info = ScreenInfo::new("realms", lang::get("menu.online"));
                 // `AbstractSelectionList.updateNarration`: the selected entry is a
@@ -2598,7 +2591,6 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                     None => info,
                 }
             }
->>>>>>> c98a51a664
             Mode::Multiplayer(_) => return None,
         };
         Some(info)

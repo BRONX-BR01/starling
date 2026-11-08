@@ -355,15 +355,6 @@ pub struct PackScreen {
     confirm: Option<Confirm>,
     /// The selection changed since the screen opened.
     pub changed: bool,
-<<<<<<< HEAD
-    /// The packs' icons by their [`icon_texture`].
-    icons: HashMap<String, Arc<[u8]>>,
-    /// Data packs and world mods (Create New World's) rather than resource packs.
-    pub data: bool,
-||||||| 31f83499b6
-    /// The packs' icons by their [`icon_texture`].
-    icons: HashMap<String, Arc<[u8]>>,
-=======
     /// The packs' icons by their [`icon_texture`], and the browser's.
     pub icons: HashMap<String, Arc<[u8]>>,
     /// Horizon's own Add button and its Modrinth list, when the player has
@@ -386,7 +377,8 @@ pub struct PackScreen {
     browser_search: TextField,
     /// The browser's search box has the keyboard.
     browser_focus: bool,
->>>>>>> c98a51a664
+    /// Data packs and world mods (Create New World's) rather than resource packs.
+    pub data: bool,
 }
 
 fn tr(key: &str) -> Text {
@@ -909,12 +901,10 @@ impl PackScreen {
             self.filter(None);
         }
     }
-<<<<<<< HEAD
     /// Whether `(x, y)` (GUI pixels) is on the focused search box.
     pub fn search_at(&self, x: f32, y: f32) -> bool {
         self.search_focused() && self.search.contains(f64::from(x), f64::from(y))
-||||||| 31f83499b6
-=======
+    }
     /// Keeps a browser icon, remembering it so [`Self::release_browser_icons`]
     /// can free it again. The installed packs' own icons are not touched.
     pub fn keep_browser_icon(&mut self, key: String, icon: Arc<[u8]>) {
@@ -946,7 +936,6 @@ impl PackScreen {
         // it on a click elsewhere made typing after picking a filter or a card
         // go nowhere, and Search then submitted stale text.
         self.browser.is_some()
->>>>>>> c98a51a664
     }
     pub fn search_focused(&self) -> bool {
         // The browser's own box counts: the game routes typing by this.

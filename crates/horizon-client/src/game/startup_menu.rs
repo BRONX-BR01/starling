@@ -385,36 +385,30 @@ pub(super) fn spawn_loader(
         .name("resource-loader".into())
         .spawn(move || {
             let mut pack_error = None;
-            let base = mods::content_root(&vanilla_root, &settings.mods.enabled, &dev_mods);
-            let root = packs::startup_root(&vanilla_root, &base, &settings.resource_packs, &[])
-                .unwrap_or_else(|error| {
-                    pack_error = Some(error.to_string());
-                    base.clone()
-                });
-<<<<<<< HEAD
             // A content build takes a while (about 40 s on a phone for Create): the menu bundle
             // goes first, so the loading screen can say what it waits for.
             let registries = super::world_content::next_start().map(|next| &next.content);
             let mut menu_sent = false;
-            let root = mods::content_root(
-                &root,
+            let base = mods::content_root(
+                &vanilla_root,
                 &settings.mods.enabled,
                 &dev_mods,
                 registries,
                 &mut |note| {
                     progress.note(Some(note.text()));
                     if !std::mem::replace(&mut menu_sent, true)
-                        && let Ok(ui) = UiResources::load(&root, &vanilla_root)
+                        && let Ok(ui) = UiResources::load(&vanilla_root, &vanilla_root)
                     {
-                        let _ = sender.send(LoaderMsg::Ui(ui, root.clone()));
+                        let _ = sender.send(LoaderMsg::Ui(ui, vanilla_root.clone()));
                     }
                 },
             );
             progress.note(None);
-||||||| 31f83499b6
-            let root = mods::content_root(&root, &settings.mods.enabled, &dev_mods);
-=======
->>>>>>> c98a51a664
+            let root = packs::startup_root(&vanilla_root, &base, &settings.resource_packs, &[])
+                .unwrap_or_else(|error| {
+                    pack_error = Some(error.to_string());
+                    base.clone()
+                });
             let result = load_resources(
                 root,
                 world.as_deref(),
@@ -794,15 +788,12 @@ impl Loading {
                     let _ = std::fs::create_dir_all(&dir);
                     packs::open_folder(&dir);
                 }
-<<<<<<< HEAD
                 Event::ButtonClick => {
                     if let Some(audio) = &mut self.audio {
                         audio.play_button_click();
                     }
                 }
                 Event::TouchLayout => self.open_menu_touch_editor(),
-||||||| 31f83499b6
-=======
                 Event::BrowseMods => {
                     let ui = &mut self.menu.options.mod_browser;
                     self.menu.mod_jobs.browse(ui, Game::game_dir());
@@ -812,7 +803,6 @@ impl Loading {
                     self.menu.mod_jobs.install(ui, Game::game_dir(), id);
                 }
                 Event::OpenModPage(url) => packs::open_uri(&url),
->>>>>>> c98a51a664
                 Event::ListShaderPacks => {
                     let (key, _) = horizon_client::shader_pack_list::resolve(
                         &Game::shader_packs_dir(),
@@ -892,8 +882,8 @@ impl Loading {
                     super::packs::open_uri(super::options::ACCESSIBILITY_HELP_LINK)
                 }
                 // Mods' settings pages open only in a running game.
-<<<<<<< HEAD
-                Event::NativeSettings(_) | Event::NativeButton(..) => {}
+                // The HUD editor needs a world: its button is inactive here.
+                Event::NativeSettings(_) | Event::NativeButton(..) | Event::HudEditor => {}
                 // Options.createSoundSliderOptionInstance: the preview plays without a level,
                 // once the menu's sound output is up.
                 Event::Volume(source, volume) => {
@@ -904,33 +894,10 @@ impl Loading {
                 // The startup menu runs before the game opens a control socket, and has no music
                 // tracks to list or play.
                 Event::CopyAgentDetails
-||||||| 31f83499b6
-                Event::NativeSettings(_) | Event::NativeButton(..) => {}
-                // The startup menu runs before the game opens a control socket,
-                // and before its sound engine (no clicks, no volume previews,
-                // and no music tracks to list or play).
-                Event::ButtonClick
-                | Event::CopyAgentDetails
-=======
-                // The HUD editor needs a world: its button is inactive here.
-                Event::NativeSettings(_) | Event::NativeButton(..) | Event::HudEditor => {}
-                // The startup menu runs before the game opens a control socket,
-                // and before its sound engine (no clicks, no volume previews,
-                // and no music tracks to list or play).
-                Event::ButtonClick
-                | Event::CopyAgentDetails
->>>>>>> c98a51a664
                 | Event::ToggleRecording
                 | Event::ExportRepro
                 | Event::ListMusicTracks
-<<<<<<< HEAD
                 | Event::PlayMusicTrack(..) => {}
-||||||| 31f83499b6
-                | Event::PlayMusicTrack(..)
-                | Event::Volume(..) => {}
-=======
-                | Event::PlayMusicTrack(..)
-                | Event::Volume(..) => {}
                 Event::OpenStudioFolder => {
                     let dir = std::path::PathBuf::from("recordings");
                     let _ = std::fs::create_dir_all(&dir);
@@ -941,7 +908,6 @@ impl Loading {
                     self.menu.dragging = false;
                     self.menu.pending = Some(PendingWorldEntry::StudioReplay(path));
                 }
->>>>>>> c98a51a664
             }
         }
     }
@@ -1512,12 +1478,6 @@ impl Loading {
             horizon_client::ui_theme::draw_boot(&self.boot, batch, &logs);
             return;
         };
-<<<<<<< HEAD
-        // A content build holds the menu too: its line says what the wait is for.
-        if self.menu.pending.is_some() || self.progress.noted().is_some() {
-||||||| 31f83499b6
-        if self.menu.pending.is_some() {
-=======
         // `Gui.setScreen` clears the focus of the screen it leaves
         // (`Screen.clearFocus`): the title behind the options, and the one
         // that comes back, start with no button highlighted.
@@ -1528,8 +1488,8 @@ impl Loading {
                 title.focused_button = None;
             }
         }
-        if self.menu.pending.is_some() {
->>>>>>> c98a51a664
+        // A content build holds the menu too: its line says what the wait is for.
+        if self.menu.pending.is_some() || self.progress.noted().is_some() {
             horizon_client::level_loading::draw_loading_overlay(
                 batch,
                 &gui.atlas,

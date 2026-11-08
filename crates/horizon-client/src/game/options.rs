@@ -245,12 +245,8 @@ impl Game<'_> {
     }
     pub(super) fn draw_options(&mut self, batch: &mut HudBatch) {
         self.watch_pack_folder();
-<<<<<<< HEAD
         self.poll_diagnostics();
-||||||| 31f83499b6
-=======
         let context = self.controller_settings_context();
->>>>>>> c98a51a664
         let mut ui = std::mem::take(&mut self.ui.options);
         if ui.controller_open() {
             ui.controller.context = context;

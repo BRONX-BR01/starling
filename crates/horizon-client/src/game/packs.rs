@@ -32,31 +32,11 @@ mod folder;
 
 /// `Util.getPlatform().openPath`: the system file manager on the folder.
 pub fn open_folder(dir: &Path) {
-<<<<<<< HEAD
     // Android's file manager, through the activity.
     if horizon_client::platform::open_folder(dir).is_some() {
         return;
     }
-    let program = if cfg!(target_os = "windows") {
-        "explorer"
-    } else if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    if let Err(e) = std::process::Command::new(program).arg(dir).spawn() {
-||||||| 31f83499b6
-    let program = if cfg!(target_os = "windows") {
-        "explorer"
-    } else if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    if let Err(e) = std::process::Command::new(program).arg(dir).spawn() {
-=======
     if let Err(e) = folder::command(dir).and_then(|mut command| command.spawn()) {
->>>>>>> c98a51a664
         log::warn!("Horizon: could not open {}: {e}", dir.display());
     }
 }
@@ -540,19 +520,16 @@ pub(super) fn stage_pack(
     japanese: bool,
     progress: &super::Progress,
 ) -> horizon_client::Result<StagedPack> {
-<<<<<<< HEAD
-    let root = startup_root(vanilla_root, selected, server)?;
     // The blocks and items stay the start's: the registries can't change (world_content.rs).
     let started = super::world_content::running();
-    let root =
-        super::mods::content_root(&root, mods_enabled, dev_mods, Some(&started), &mut |_| {});
-||||||| 31f83499b6
-    let root = startup_root(vanilla_root, selected, server)?;
-    let root = super::mods::content_root(&root, mods_enabled, dev_mods);
-=======
-    let base = super::mods::content_root(vanilla_root, mods_enabled, dev_mods);
+    let base = super::mods::content_root(
+        vanilla_root,
+        mods_enabled,
+        dev_mods,
+        Some(&started),
+        &mut |_| {},
+    );
     let root = startup_root(vanilla_root, &base, selected, server)?;
->>>>>>> c98a51a664
     progress.set(1);
     // The world's models and sprites and the GUI atlas read the same root and nothing of
     // each other: about a second each, side by side.

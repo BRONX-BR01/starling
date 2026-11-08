@@ -1143,27 +1143,14 @@ impl Game<'_> {
         self.place_recipe(book_type, entry_index, use_max);
         true
     }
-<<<<<<< HEAD
     /// Whether the open screen takes `recipes.place` and `native_place_recipe`: a crafting grid's
-    /// book (the inventory's or a crafting table's).
-||||||| 31f83499b6
-    /// Whether the open screen takes `native_place_recipe`: a crafting grid's
-    /// book (the inventory's or a crafting table's).
-=======
-    /// Whether the open screen takes `native_place_recipe`: a crafting grid's
     /// book (the inventory's or a crafting table's), or a mod menu type's
     /// crafting grid.
->>>>>>> c98a51a664
     pub(super) fn mod_recipe_screen(&self) -> bool {
         self.screen == Screen::Inventory
             && (self.active_book() == Some(BookType::Crafting) || self.mod_crafting_open())
             && !self.spectator()
     }
-<<<<<<< HEAD
-    /// `native_place_recipe` and `recipes.place`: the book's click on the recipe with this display
-||||||| 31f83499b6
-    /// `native_place_recipe`: the book's click on the recipe with this display
-=======
     /// Whether the open menu is a mod menu type with a crafting grid.
     fn mod_crafting_open(&self) -> bool {
         self.remote
@@ -1172,8 +1159,7 @@ impl Game<'_> {
             .and_then(|(_, menu)| horizon_client::containers::mod_menu_type(menu))
             .is_some_and(|t| t.crafting.is_some())
     }
-    /// `native_place_recipe`: the book's click on the recipe with this display
->>>>>>> c98a51a664
+    /// `native_place_recipe` and `recipes.place`: the book's click on the recipe with this display
     /// id, refused as `handlePlaceRecipe` refuses it (no crafting screen,
     /// not in the player's book; an impossible one in `place_recipe`).
     pub(super) fn mod_place_recipe(&mut self, display_id: i32, all: bool) {

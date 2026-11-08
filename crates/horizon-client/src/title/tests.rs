@@ -2740,7 +2740,6 @@ fn the_multiplayer_screens_have_their_own_ids() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn world_options_survive_the_restart_as_json() {
     let mut options = WorldOptions {
         hardcore: true,
@@ -2758,8 +2757,9 @@ fn world_options_survive_the_restart_as_json() {
     // An older file without the newer fields reads as their defaults.
     let old: WorldOptions = serde_json::from_str(r#"{"hardcore":true}"#).unwrap();
     assert_eq!(old.mods, None);
-||||||| 31f83499b6
-=======
+}
+
+#[test]
 fn native_field_visitor_excludes_preparing_and_game_rule_editors() {
     let mut f = Fixture::new();
     f.title.mode = Mode::Multiplayer(crate::multiplayer::Screen::Direct {
@@ -2846,5 +2846,4 @@ fn cancelling_a_realms_new_world_returns_to_the_realm() {
         crate::realms::SubScreen::Configure { .. }
     ));
     let _ = fs::remove_dir_all(&f.root);
->>>>>>> c98a51a664
 }

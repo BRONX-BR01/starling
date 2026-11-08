@@ -557,7 +557,6 @@ impl Game<'_> {
                     }
                 };
                 let m = &package.manifest;
-<<<<<<< HEAD
                 // Assets from Modrinth: where from, and why they are not here if they are not.
                 let fetched = m.assets.as_ref().map_or_else(String::new, |a| {
                     format!(
@@ -575,12 +574,7 @@ impl Game<'_> {
                         super::mod_assets::failed(&m.id)
                             .map(|e| format!("Its assets could not be downloaded: {e}"))
                     });
-||||||| 31f83499b6
-                let problem = package.wasm.is_some().then(|| STOPPED.to_owned());
-=======
-                let problem = package.wasm.is_some().then(|| STOPPED.to_owned());
                 live_switch_of(path, &package, &mut content_ids, &mut live_ids);
->>>>>>> c98a51a664
                 Installed {
                     id: m.id.clone(),
                     title: format!("{} {}", m.name, m.version),
@@ -598,13 +592,9 @@ impl Game<'_> {
         }
         // A mod with a native version built in says so instead, and isn't news.
         self.list_native_mods();
-<<<<<<< HEAD
         #[cfg(target_os = "android")]
         self.list_native_builds_row();
-||||||| 31f83499b6
-=======
         self.sync_native_switches();
->>>>>>> c98a51a664
         let built = std::env::current_exe()
             .ok()
             .and_then(|exe| std::fs::read_to_string(exe.with_file_name(BUILD_INFO)).ok())

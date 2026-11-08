@@ -174,24 +174,11 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
             vec![
                 (
                     "Preset",
-<<<<<<< HEAD
-                    vec![h(
-                        H::Preset,
-                        None,
-                        "Sets distance, particles, shadows, sky and fog; changing one makes it Custom.",
-                    )],
-||||||| 31f83499b6
-                    vec![h(
-                        H::Preset,
-                        None,
-                        "Sets the options below together. Changing one makes it Custom.",
-                    )],
-=======
                     vec![
                         h(
                             H::Preset,
                             None,
-                            "Sets the options below together. Changing one makes it Custom.",
+                            "Sets distance, particles, shadows, sky and fog; changing one makes it Custom.",
                         ),
                         v(
                             Opt::Preset,
@@ -199,7 +186,6 @@ pub fn rows() -> Vec<(Page, Vec<(&'static str, Vec<Setting>)>)> {
                             "Vanilla's own preset: sets only vanilla's options, as Minecraft does.",
                         ),
                     ],
->>>>>>> c98a51a664
                 ),
                 (
                     "Distance",
@@ -815,14 +801,8 @@ impl H {
                 Some(i as f32 / (LOD_STEPS.len() - 1) as f32)
             }
             H::Workers => Some(g.workers as f32 / max_workers() as f32),
-<<<<<<< HEAD
             H::ResolutionScale => Some((g.resolution_scale as f32 - 25.0) / 175.0),
-||||||| 31f83499b6
-            H::ResolutionScale => Some((g.resolution_scale as f32 - 50.0) / 150.0),
-=======
-            H::ResolutionScale => Some((g.resolution_scale as f32 - 50.0) / 150.0),
             H::UpscalingSharpness => Some(g.upscaling_sharpness as f32 / 100.0),
->>>>>>> c98a51a664
             // Auto, then 10..480 by 10.
             H::HdrPaperWhite => Some(g.hdr_paper_white as f32 / 480.0),
             // Auto, then 200..2000 by 50.
@@ -841,14 +821,8 @@ impl H {
             H::EntityCullingPrecheck => Some(32),
             H::UploadBudget => Some((UPLOAD_STEPS.len() - 1) as u32),
             H::Workers => Some(max_workers()),
-<<<<<<< HEAD
             H::ResolutionScale => Some(35),
-||||||| 31f83499b6
-            H::ResolutionScale => Some(30),
-=======
-            H::ResolutionScale => Some(30),
             H::UpscalingSharpness => Some(20),
->>>>>>> c98a51a664
             H::HdrPaperWhite => Some(41),
             H::HdrPeak => Some(37),
             H::HdrBlackLevel => Some(100),
@@ -1018,14 +992,8 @@ impl H {
                 g.lod_distance = LOD_STEPS[(v * (LOD_STEPS.len() - 1) as f32).round() as usize]
             }
             H::Workers => g.workers = (v * max_workers() as f32).round() as u32,
-<<<<<<< HEAD
             H::ResolutionScale => g.resolution_scale = (25.0 + (v * 35.0).round() * 5.0) as u32,
-||||||| 31f83499b6
-            H::ResolutionScale => g.resolution_scale = (50.0 + (v * 30.0).round() * 5.0) as u32,
-=======
-            H::ResolutionScale => g.resolution_scale = (50.0 + (v * 30.0).round() * 5.0) as u32,
             H::UpscalingSharpness => g.upscaling_sharpness = (v * 20.0).round() as u32 * 5,
->>>>>>> c98a51a664
             H::HdrPaperWhite => g.hdr_paper_white = (v * 48.0).round() as u32 * 10,
             H::HdrPeak => {
                 g.hdr_peak = match (v * 37.0).round() as u32 {

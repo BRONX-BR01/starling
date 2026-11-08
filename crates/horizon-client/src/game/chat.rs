@@ -1688,13 +1688,6 @@ impl Game<'_> {
     /// Chat lines over the HUD (focused while the chat screen is open).
     pub(super) fn draw_chat(&mut self, batch: &mut HudBatch) {
         let focused = self.screen == Screen::Chat;
-<<<<<<< HEAD
-        // ChatComponent.isChatHidden: Chat Visibility Hidden draws no lines (a server is told
-        // too, and leaves out other players' chat for Commands Only).
-        if (self.ui.hide_gui || self.settings.chat_visibility == 2) && !focused {
-||||||| 31f83499b6
-        if self.ui.hide_gui && !focused {
-=======
         let options = self.settings.extras.pvp.chat;
         self.ui.chat.set_qol(&self.gui.atlas, options.qol());
         // A search ends with its option; a chat closed some other way ends it in keep_chat_draft.
@@ -1713,8 +1706,9 @@ impl Game<'_> {
             .map(|s| s.value());
         self.ui.chat.set_search(&self.gui.atlas, query);
         self.ui.chat.search_prompt = focused && self.pvp.chat_search;
-        if self.ui.hide_gui && !focused {
->>>>>>> c98a51a664
+        // ChatComponent.isChatHidden: Chat Visibility Hidden draws no lines (a server is told
+        // too, and leaves out other players' chat for Commands Only).
+        if (self.ui.hide_gui || self.settings.chat_visibility == 2) && !focused {
             return;
         }
         self.ui.chat.smooth = self.settings.extras.chat_animation;

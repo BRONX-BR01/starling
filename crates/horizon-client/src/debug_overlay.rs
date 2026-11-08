@@ -245,20 +245,14 @@ pub fn scale(
 ) -> (f32, [i32; 2]) {
     let scale = match option {
         -1 => gui_scale,
-<<<<<<< HEAD
         // A phone is held close and its pixels are small: Auto follows the
         // GUI scale instead of halving it, so the text stays readable.
         0 if cfg!(target_os = "android") => gui_scale,
-        0 => crate::window::calculate_scale(framebuffer, 0, unicode) / 2,
-||||||| 31f83499b6
-        0 => crate::window::calculate_scale(framebuffer, 0, unicode) / 2,
-=======
         // Half the automatic scale, rounded up: an odd scale has no exact
         // half, and truncating it put the overlay at a third of the GUI
         // scale instead of a half on a window whose automatic scale is odd
         // (1280x720 is 3). Even scales are unchanged.
         0 => (crate::window::calculate_scale(framebuffer, 0, unicode) + 1) / 2,
->>>>>>> c98a51a664
         n => crate::window::calculate_scale(framebuffer, n, unicode),
     };
     if scale < gui_scale && scale > 0 {
