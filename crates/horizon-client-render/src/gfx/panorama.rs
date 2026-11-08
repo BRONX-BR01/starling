@@ -539,7 +539,7 @@ mod tests {
     #[test]
     fn cube_geometry_covers_six_faces_with_inward_triangles() {
         let mut faces = [0; 6];
-        for triangle in cube_vertices().chunks_exact(3) {
+        for triangle in cube_vertices().as_chunks::<3>().0 {
             let [a, b, c] = [triangle[0], triangle[1], triangle[2]].map(glam::Vec3::from_array);
             let normal = (b - a).cross(c - a);
             assert_eq!(normal.length_squared(), 16.0);

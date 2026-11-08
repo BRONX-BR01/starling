@@ -22043,7 +22043,13 @@ pub fn run_with() -> Result<()> {
     // Snapshots of derived tables live in the game folder (or its private
     // half), never beside the shared resources.
     Behaviours::set_cache_dir(horizon_client::logging::cache_dir());
-    if !synchronous_startup(&options) {
+    // Android's windowed harnesses need the same early adapter discovery as a
+    // normal launch: packing before the window opens cannot know the GPU limit.
+    let android_windowed = cfg!(target_os = "android")
+        && options.execution_role.is_client()
+        && !options.headless
+        && !options.offscreen;
+    if !synchronous_startup(&options) || android_windowed {
         return run_loading(options, early_settings, vanilla_root, None, started);
     }
     let mut pack_error = None;
