@@ -304,6 +304,21 @@ pub fn first_frame_shown() {
     });
 }
 
+/// The dialog that chooses another build server for native mods, with its warning; it writes the
+/// choice itself (StarlingActivity.askBuildServer, game/native_builds.rs reads it).
+pub fn ask_build_server(current: &str) {
+    with_activity(|env, activity| {
+        let current = env.new_string(current)?;
+        env.call_method(
+            activity,
+            "askBuildServer",
+            "(Ljava/lang/String;)V",
+            &[jni::objects::JValue::Object(&current)],
+        )
+        .map(drop)
+    });
+}
+
 /// Put the on-screen keyboard away, however it was shown.
 pub fn hide_keyboard() {
     with_activity(|env, activity| {

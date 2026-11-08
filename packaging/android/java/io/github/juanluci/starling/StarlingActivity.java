@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,6 +27,12 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.provider.DocumentsContract;
+import android.text.InputType;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.view.InputDevice;
 import android.view.View;
 import android.view.WindowInsets;
@@ -33,6 +40,9 @@ import android.view.WindowInsetsController;
 import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import android.view.WindowManager;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.Toast;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.system.ErrnoException;
@@ -539,6 +549,70 @@ public class StarlingActivity extends NativeActivity {
                         NativeMods.declinePermissions(modBuild);
                     }
                 })
+                .show();
+    }
+
+    /**
+     * The player's own build server for native mods (game/native_builds.rs): only ever typed here,
+     * so no link or file can choose it. The game it sends back runs inside this app, so the warning
+     * says that plainly.
+     */
+    public void askBuildServer(final String current) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                showBuildServerDialog(current);
+            }
+        });
+    }
+
+    private void showBuildServerDialog(String current) {
+        final EditText address = new EditText(this);
+        address.setSingleLine(true);
+        address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        address.setHint("https://example.com");
+        address.setText(current);
+        FrameLayout frame = new FrameLayout(this);
+        int side = Math.round(20 * getResources().getDisplayMetrics().density);
+        frame.setPadding(side, 0, side, 0);
+        frame.addView(address);
+
+        String warning = "WE TAKE NO RESPONSIBILITY FOR OTHER BUILD SERVERS";
+        SpannableStringBuilder message = new SpannableStringBuilder(warning);
+        message.setSpan(new ForegroundColorSpan(0xFFFF5252), 0, warning.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        message.setSpan(new RelativeSizeSpan(1.3f), 0, warning.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        message.setSpan(new StyleSpan(Typeface.BOLD), 0, warning.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        message.append("\n\nThe game another server sends back runs inside Starling with full "
+                + "access, including your worlds and your signed-in account. Only use a server you "
+                + "run yourself or fully trust. Your native mods are the only files sent to it.");
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Build server")
+                .setMessage(message)
+                .setView(frame)
+                .setPositiveButton("Use this server", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String typed = address.getText().toString();
+                        if (NativeMods.isBuildServer(typed)) {
+                            NativeMods.chooseBuildServer(StarlingActivity.this, typed);
+                        } else {
+                            Toast.makeText(StarlingActivity.this,
+                                    "That is not an https:// address. Nothing changed.",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                })
+                .setNeutralButton("Use Starling's", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        NativeMods.chooseBuildServer(StarlingActivity.this, null);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 
