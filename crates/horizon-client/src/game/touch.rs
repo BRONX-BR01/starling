@@ -1174,7 +1174,7 @@ impl Game<'_> {
             self.sync_toggle(0);
             // As a press of the key reaches the game (it gets a sleeper up).
             if pressed {
-                let _ = self.key_pressed(KeyCode::ShiftLeft);
+                let _ = self.key_pressed(KeyCode::ShiftLeft, KeyCode::ShiftLeft);
             }
         }
     }

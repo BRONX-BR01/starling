@@ -223,11 +223,6 @@ impl Game<'_> {
                 .map(|s| s.as_ref().map(|s| (&*s.item, Some(s)))),
         )
     }
-    /// The equipment asset `stack` draws when worn: its own `equippable`'s (a server's custom
-    /// armour), else its item's.
-    pub(super) fn worn_asset(&self, stack: &ItemStack) -> Option<String> {
-        horizon_client::item_sync::equippable(stack, self.res.items()).and_then(|e| e.asset_id)
-    }
     /// `HumanoidArmorLayer` for another player's model: the armour it wears
     /// (`extra.head` .. `extra.feet`).
     pub(super) fn worn_armor_layers(&self, m: &Mob) -> Vec<(&Part, [f32; 4], u32, u32, bool)> {

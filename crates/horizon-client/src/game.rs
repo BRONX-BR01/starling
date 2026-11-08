@@ -573,7 +573,7 @@ use key_codes::{
     glfw_button, glfw_modifiers, keyboard_button,
 };
 use loading_screen::{
-    App, Loading, leave_fullscreen_after, missing_resources, run_event_loop, unclean_start_recovery,
+    App, Loading, event_loop, leave_fullscreen_after, missing_resources, run_event_loop, unclean_start_recovery,
 };
 use loading_window::{
     build_renderer, loading_frame, loading_renderer, prepare_renderer_textures, start_game,
@@ -620,7 +620,7 @@ use winit::{
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    window::{Window, WindowId},
+    window::{CursorGrabMode, Window, WindowId},
 };
 
 /// The time a frame spends uploading chunk meshes when the player set no
@@ -14180,7 +14180,7 @@ impl Game<'_> {
                 self.save_parked_levels(false)?;
                 self.save_game_metadata()?;
                 let _ = self.finish_player_autosaves(false);
-                Ok(())
+                Result::<()>::Ok(())
             })?;
         }
         self.native_world_saved(wait);

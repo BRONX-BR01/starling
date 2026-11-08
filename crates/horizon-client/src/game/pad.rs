@@ -13,7 +13,6 @@ use horizon_client::{
     controller_ui::Device,
     gamepad::{self, Button, Edges, GlyphStyle, HealthWatch, PadState, Route, Rumble},
     input_mode::InputMode,
-    keybinds::{KeyBinds, key_code, mouse_button},
     keymapping::SNEAK,
 };
 use serde_json::{Value, json};

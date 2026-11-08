@@ -358,9 +358,10 @@ impl Game<'_> {
             let scale = self.world_scale();
             let horizon = &self.settings.horizon;
             let (antialias, taa, upscale) = (horizon.fxaa, horizon.taa, horizon.upscaling.ratio());
+            let sharpness = horizon.upscaling_sharpness as f32 / 100.0;
             if let Some(renderer) = &mut self.renderer {
                 renderer.drop_shader_packs();
-                renderer.set_world_post(scale, antialias, taa, upscale);
+                renderer.set_world_post(scale, antialias, taa, upscale, sharpness);
             }
         }
         // A pack whose pipelines were building runs once they are built, or is turned off.

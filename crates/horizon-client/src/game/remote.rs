@@ -908,7 +908,7 @@ impl Remote {
         self.steer_yaw = None;
         self.last_input = 0;
         self.was_sprinting = false;
-        self.carried = None;
+        self.carried.set(None);
         self.loaded_sent = false;
         self.predictions = Default::default();
         self.menu = None;
@@ -1529,6 +1529,28 @@ impl Game<'_> {
         let services_keys = Arc::new(std::sync::Mutex::new(ServicesKeys::Ready(Vec::new())));
 
         self.remote = Some(Remote {
+            names: HashMap::new(),
+            tick_end_at: None,
+            moved_at: None,
+            play_began: None,
+            rate: (None, 0, 0),
+            trail: Default::default(),
+            steer_yaw: None,
+            interacted_at: Default::default(),
+            told_rotation: Default::default(),
+            held_back: Default::default(),
+            stick_mode: Default::default(),
+            stick_choice: None,
+            stick_remembered: None,
+            stick_setting: None,
+            stick_setbacks: Default::default(),
+            stick_used_at: None,
+            stick_asked: false,
+            swap_presses: 0,
+            waiting_ticks: 0,
+            setbacks: 0,
+            player_attributes: Vec::new(),
+            creative_menu: None,
             session,
             save_folder: None,
             brand: "horizon-studio".into(),
@@ -3372,19 +3394,16 @@ impl Game<'_> {
         if let Some(p) = self
             .remote
             .as_mut()
-            .is_some_and(|r| r.predictions.update(pos, state))
+            .and_then(|r| r.predictions.get_mut(&pos))
         {
             p.state = state;
             return;
         }
         self.set_block(pos, state);
     }
-    /// BlockStatePredictionHandler.endPredictionsUpTo (ClientboundBlockChangedAckPacket) and
-    /// ClientLevel.syncBlockState: the actions up to `sequence` are settled, so the blocks they
-    /// predicted take the state the server gave them. A break the server refused comes back,
-    /// and when it comes back where the player now is (flown up into the space it left), the
-    /// player goes back to where it stood when it broke the block: an anticheat that simulates
-    /// vanilla (GrimAC) does the same and takes the next move from there.
+    /// BlockStatePredictionHandler.endPredictionsUpTo (ClientboundBlockChangedAckPacket): the
+    /// actions up to `sequence` are settled, so the blocks they predicted take the state the
+    /// server gave them (a break the server refused comes back).
     fn end_predictions(&mut self, sequence: i32) {
         let Some(r) = self.remote.as_mut() else {
             return;
@@ -3411,18 +3430,6 @@ impl Game<'_> {
             if let Some(at) = snap_target(prediction.player_pos, last_teleport, sequence, meets) {
                 self.snap_player_to(at);
             }
-            log::info!(
-                "Horizon: the server kept the block at {x} {y} {z}; the player goes back to \
-                 {:.2} {:.2} {:.2}",
-                back.x,
-                back.y,
-                back.z
-            );
-            // Entity.absSnapTo: the position and the old one; the motion stays.
-            if let Some(player) = self.player.as_mut() {
-                player.position = back;
-            }
-            self.previous_position = back;
         }
     }
     /// The player's position, for `retainKnownServerState`'s `player.position()`.
@@ -9828,7 +9835,6 @@ impl Game<'_> {
     /// (`BlockStatePredictionHandler.retainKnownServerState`): a use the
     /// server refused goes back.
     pub(super) fn predict_blocks(&mut self, changes: &DryChanges, seq: i32) {
-        let at = self.player.as_ref().map(|p| p.position);
         for &(p, state) in changes {
             let pos = [p.x, p.y, p.z];
             let before = self.world.block(p.x, p.y, p.z);

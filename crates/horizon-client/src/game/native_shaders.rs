@@ -62,13 +62,6 @@ impl NativeShaders {
         self.stamp = None;
         self.looked = None;
     }
-
-    pub fn picking(name: &str) -> Self {
-        Self {
-            picked: name.to_owned(),
-            ..Self::default()
-        }
-    }
 }
 
 impl Game<'_> {

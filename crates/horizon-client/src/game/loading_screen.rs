@@ -504,7 +504,7 @@ impl Loading {
         }
     }
     /// Load the resources again (they were imported after a failure): a fresh loader, as at start.
-    fn retry(&mut self) -> Result<()> {
+    pub(super) fn retry(&mut self) -> Result<()> {
         let options = self.options.as_ref().ok_or("loading already finished")?;
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();

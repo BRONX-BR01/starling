@@ -629,6 +629,7 @@ impl Game<'_> {
                 lines: vec![(name.resolve_legacy(), 0.0)],
                 light,
                 discrete: false,
+                marks: Marks::default(),
             });
         }
     }
@@ -846,26 +847,6 @@ impl Game<'_> {
         // Glyphs rasterized on first use (Unifont's) upload with the frame.
         batch.patches
     }
-    /// Lines of text facing the camera as a name tag's, `scale` blocks a text pixel: the text
-    /// at `text_alpha` in its layer, on `background` (RGBA8, alpha on top: unlit, a hair
-    /// behind). Returns the glyph pixels the atlas still needs.
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn text_quads(
-        &self,
-        o: glam::DVec3,
-        lines: &[(Text, f64)],
-        scale: f32,
-        text_alpha: u32,
-        background: Option<u32>,
-        text_layer: u32,
-        light: u32,
-        out: &mut Vec<Vertex>,
-    ) -> Vec<horizon_client::font::Patch> {
-        let axes = self.camera_text_axes();
-        self.text_quads_along(
-            o, lines, axes, scale, text_alpha, background, text_layer, light, out,
-        )
-    }
     /// The axes of text facing the camera.
     pub(super) fn camera_text_axes(&self) -> TextAxes {
         // The camera's facing (Camera.rotation()), turned round in third-person
@@ -886,65 +867,6 @@ impl Game<'_> {
             up: up.as_vec3(),
             away: forward.as_vec3() * 0.002,
         }
-    }
-    /// [`Self::text_quads`] along `axes`.
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn text_quads_along(
-        &self,
-        o: glam::DVec3,
-        lines: &[(Text, f64)],
-        axes: TextAxes,
-        scale: f32,
-        text_alpha: u32,
-        background: Option<u32>,
-        text_layer: u32,
-        light: u32,
-        out: &mut Vec<Vertex>,
-    ) -> Vec<horizon_client::font::Patch> {
-        let away = axes.away;
-        let mut batch = HudBatch::new([1, 1]);
-        for (text, lift) in lines {
-            let o = (o + glam::DVec3::new(0.0, *lift, 0.0)).as_vec3();
-            let (r, u) = (axes.right * scale, axes.up * scale);
-            // Text space: x right, y down (scale 0.025, -0.025).
-            let at = |x: f32, y: f32| o + r * x - u * y;
-            let y0 = if text.plain() == "deadmau5" {
-                -10.0
-            } else {
-                0.0
-            };
-            batch.vertices.clear();
-            // Font.prepareText, as any text: bold, italic, fonts and each
-            // glyph's own box (accented.png's are 12 pixels tall).
-            let behind = batch.name_tag(
-                &self.gui.atlas,
-                text,
-                y0,
-                text_alpha << 24 | 0xFF_FFFF,
-                background.unwrap_or(0),
-            );
-            for (i, quad) in batch.vertices.as_chunks::<6>().0.iter().enumerate() {
-                let shift = if i * 6 < behind {
-                    away
-                } else {
-                    glam::Vec3::ZERO
-                };
-                // The corners from the bottom left, as the world draws quads.
-                for v in [quad[5], quad[2], quad[1], quad[0]] {
-                    out.push(Vertex {
-                        normal: [0; 4],
-                        pos: (at(v.pos[0], v.pos[1]) + shift).to_array(),
-                        uv: v.uv,
-                        layer: text_layer,
-                        color: v.color,
-                        light,
-                        glint_uv: [0.0, 0.0],
-                    });
-                }
-            }
-        }
-        // Glyphs rasterized on first use (Unifont's) upload with the frame.
-        batch.patches
     }
 }
 
