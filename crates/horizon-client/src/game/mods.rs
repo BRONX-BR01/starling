@@ -417,8 +417,28 @@ fn not_built(dir: &std::path::Path, built: &str, rows: &[Installed]) -> Vec<Inst
     paths.sort();
     let mut out: Vec<Installed> = Vec::new();
     for path in paths {
-        let Ok(bundle) = horizon_mods::index::native::Bundle::read(&path) else {
-            continue;
+        let bundle = match horizon_mods::index::native::Bundle::read(&path) {
+            Ok(bundle) => bundle,
+            // Said on its row: a file left out without a word looks like the folder isn't read.
+            Err(e) => {
+                let title = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                let shown = |row: &Installed| row.id.is_empty() && row.title == title;
+                if !rows.iter().chain(&out).any(shown) {
+                    out.push(Installed {
+                        title,
+                        id: String::new(),
+                        description: String::new(),
+                        problem: Some(format!("Not a native mod Starling can read: {e}")),
+                        dev: false,
+                        native: None,
+                    });
+                }
+                continue;
+            }
         };
         let m = bundle.manifest;
         let listed = rows.iter().chain(&out).any(|row| row.id == m.id);
@@ -442,6 +462,15 @@ const STOPPED: &str = "Doesn't run any more: needs a native port";
 const NOTICE_SEEN: &str = ".native-notice";
 
 impl Game<'_> {
+    /// The Mods page opened: native mods copied into the folder since the game started (the Files
+    /// app, a computer) get their rows, as the catalog's do. Only a phone compiles them.
+    #[cfg(target_os = "android")]
+    pub(super) fn list_copied_native_mods(&mut self) {
+        self.list_new_native_mods();
+    }
+    #[cfg(not(target_os = "android"))]
+    pub(super) fn list_copied_native_mods(&mut self) {}
+
     /// A native mod the catalog just put in the folder: its row on the Mods page, with Compile.
     #[cfg(target_os = "android")]
     pub(super) fn list_new_native_mods(&mut self) {
