@@ -243,3 +243,13 @@ Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
 The port uses Starling's existing logger, crash hook and GPU timers and exposes
 reports through the game's Diagnostics settings and an Android launcher shortcut,
 with a renderer-independent recovery window for interrupted startup.
+
+## Horizon Android documents provider
+
+The game folder's place in Android's Files app (`packaging/android/java/io/github/juanluci/starling/GameFolderProvider.java`
+and `GameFolder.java`) is adapted from the documents provider in [Vasysik/horizon-android at
+fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606/packaging/android/java/dev/horizon/android)
+and its `crates/horizon-client/src/android/document_store.rs`, under the MIT license (the same
+[LICENSE](LICENSE) as this repository). Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+The port is plain Java over Starling's one game folder, in place of the fork's Rust store of
+profiles and fixed folders that its launcher screens share.

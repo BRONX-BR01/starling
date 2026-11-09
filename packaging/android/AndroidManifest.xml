@@ -130,5 +130,19 @@
             android:authorities="@APPLICATION_ID@.updates"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <!-- The game folder in Android's Files app (GameFolderProvider), which only the system may
+             bind. In a process of its own: the game ends its process with its activity, which
+             would cut a copy short. -->
+        <provider
+            android:name="io.github.juanluci.starling.GameFolderProvider"
+            android:authorities="@APPLICATION_ID@.documents"
+            android:exported="true"
+            android:process=":documents"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
     </application>
 </manifest>
