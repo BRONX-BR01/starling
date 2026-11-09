@@ -31,15 +31,23 @@ CALLS = (
     (".show_suggestions(", 1, "false"),
     ("ui::slider(", 9, "false"),
     ("super::build_renderer(", 7, "false, false"),
+    ("content_root(", 3, "None, &mut |_| {}"),
 )
 # What became something else. Some of it gives a little up: a LAN guest as the F3 target, `/dh` in the
-# chat's completion, a camera's own eye height, the bounds of a dimension lower than the overworld.
+# chat's completion, a camera's own eye height, the bounds of a dimension lower than the overworld, a
+# world's own set of mods and the note about preparing them when a mod calls `content_root` again.
 CHANGED = (
     (r"GuestUse::Entity\(Hand::Main\)", "GuestUse::Entity(Hand::Main, _)"),
     (r"Slots::Ender => Vec::new\(\),", "_ => Vec::new(),"),
     (r"\b[\w.]*\.dim\.min_y\(\)", "(-64)"),
     (r"\b[\w.]*\.dim\.max_y\(\)", "319"),
     (r"fn treefall_destroy_progress\(&self", "fn treefall_destroy_progress(&mut self"),
+    (r"fn treefall_speed\(game: &crate::game::Game<'_>", "fn treefall_speed(game: &mut crate::game::Game<'_>"),
+    (r"chat_animation_layout\(self, height, ticks, focused\)", "chat_animation_layout(self, height, ticks as u64, focused)"),
+    (
+        r"(\.registry\s*\.state\(state\)\s*\.map\(\|s\| s\.properties\.clone\(\)\)\s*\.unwrap_or_default\(\))",
+        r"\1.into()",
+    ),
     (r"game\.camera_eye_height\(\)\.unwrap_or\(STANDING_EYE\)", "STANDING_EYE"),
     (r"portal::set_entities\(vertices\)", "portal::set_entities(vertices.0)"),
     (
@@ -64,7 +72,7 @@ CHANGED = (
     ),
     (
         r"d\.custom_name = Some\(bc::ITEM_NAME\.to_owned\(\)\);",
-        "d.custom_name = Some(horizon_world::nbt::Tag::String(bc::ITEM_NAME.to_owned().into()));",
+        "d.custom_name = Some(horizon_world::nbt::Tag::String(bc::ITEM_NAME.into()));",
     ),
 )
 
@@ -128,6 +136,12 @@ def adapt(text, source, modules):
 
     # A mob's extra parts gained a flag; a binding spells the type as its helper does (CHANGED).
     text = re.sub(r"(\[f32;\s*4\],\s*u32,\s*u32)\)\]", r"\1, bool)]", text)
+    # Treefall's helper takes the game by `&mut` now (CHANGED), and so does the target.
+    text = re.sub(
+        r'(helper = "speed\.rs"\s*bindings = \[\s*\{ name = "game", ty = ")&crate::game::Game',
+        r"\1&mut crate::game::Game",
+        text,
+    )
     text = re.sub(r'^(\s*target\s*=\s*")([^"]*)"', target, text, flags=re.M)
     return re.sub(r'^(\s*file\s*=\s*")([^"]*)"', file, text, flags=re.M)
 
