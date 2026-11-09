@@ -231,6 +231,7 @@ pub mod panorama;
 mod readback;
 mod resident;
 mod reuse;
+mod solid_paths;
 mod stars;
 pub mod submit;
 mod sunrise_fan;
@@ -886,6 +887,8 @@ pub struct Renderer {
     /// `solid` split in two passes for the world pass (terrain.wgsl's `opaque_quad`).
     solid_opaque: wgpu::RenderPipeline,
     solid_cutout: wgpu::RenderPipeline,
+    /// Cheaper pipelines for those two passes, on Adreno's Vulkan (`solid_paths`).
+    solid_paths: Option<solid_paths::SolidPaths>,
     translucent: wgpu::RenderPipeline,
     translucent_mark: wgpu::RenderPipeline,
     /// Flat section draws (`flat`), where multi-draw is emulated.
@@ -3974,6 +3977,22 @@ impl Renderer {
         if let (Some(flat), Some(arena)) = (&mut flat, &translucent_arena) {
             flat.set_translucent_page_vertices(arena.page_vertices());
         }
+        let solid_paths = adreno::adreno_vulkan(&adapter.get_info())
+            .then(|| {
+                solid_paths::SolidPaths::new(
+                    &adreno::TerrainModule {
+                        kept: &kept,
+                        shader: &shader,
+                        format: config.format.remove_srgb_suffix(),
+                        constants: &sprite_constants,
+                    },
+                    &bindings,
+                    &layout,
+                    flat.as_ref().map(|flat| &flat.draw_layout),
+                    &terrain_buffers,
+                )
+            })
+            .flatten();
         // Without indirect draws (OpenGL before 4.0 without indirect execution, or
         // before 4.2 + GL_ARB_shader_draw_parameters without indirect first instance)
         // even creating an indirect buffer fails; one draw per section reads
@@ -4094,6 +4113,7 @@ impl Renderer {
             solid,
             solid_opaque,
             solid_cutout,
+            solid_paths,
             translucent,
             translucent_mark,
             flat_on: flat.is_some(),
@@ -4539,6 +4559,21 @@ impl Renderer {
             self.offscreen = Some(Self::offscreen_target(&self.device, &self.config));
         }
         self.depth = Self::depth(&self.device, &self.config);
+    }
+    /// Whether frames that may take it draw cutouts without their fade (`solid_paths`).
+    pub fn static_cutout_on(&self) -> bool {
+        self.solid_paths
+            .as_ref()
+            .is_some_and(|p| p.static_cutout_on)
+    }
+    /// Switches drawing cutouts without their fade, for A/B checks.
+    pub fn set_static_cutout(&mut self, on: bool) -> Result<()> {
+        match &mut self.solid_paths {
+            Some(paths) => paths.static_cutout_on = on,
+            None if on => return Err("the cheaper terrain shaders are off on this device".into()),
+            None => {}
+        }
+        Ok(())
     }
     /// Whether sections are drawn as one index list per frame (`flat`).
     pub fn flat_draws(&self) -> bool {
@@ -8151,6 +8186,13 @@ impl Renderer {
             .and_then(|n| Some((n.material.as_ref()?, &n.frame.group)));
         let solid_pipeline = material.map_or(&self.solid, |(m, _)| &m.solid);
         let split_solid = splits_solid(&self.info);
+        // What this frame's instances allow its two solid passes (`solid_paths`).
+        let solid_passes = self
+            .solid_paths
+            .as_ref()
+            .filter(|_| split_solid && self.native.is_none() && self.pack_post.is_none())
+            .filter(|_| cull.is_none())
+            .map_or_else(Default::default, |paths| paths.for_frame(&self.origins));
         let translucent_pipeline = material.map_or(&self.translucent, |(m, _)| &m.translucent);
         let pack_flat = material.and_then(|(m, _)| m.flat.as_ref());
         // A material stage's translucent pass reads a copy of the depth the solid terrain
@@ -8316,7 +8358,10 @@ impl Renderer {
                         Some(p) => &[(&p.0, 0..flat.phase1_calls)],
                         None if split_solid => &[
                             (&flat.solid_opaque, 0..opaque),
-                            (&flat.solid_cutout, cutout..flat.phase1_calls),
+                            (
+                                solid_passes.cutout(true).unwrap_or(&flat.solid_cutout),
+                                cutout..flat.phase1_calls,
+                            ),
                         ],
                         None => &[(&flat.solid, 0..flat.phase1_calls)],
                     };
@@ -8371,7 +8416,10 @@ impl Renderer {
                     let passes: &[(&wgpu::RenderPipeline, std::ops::Range<u32>)] = match material {
                         None if split_solid => &[
                             (&self.solid_opaque, 0..opaque),
-                            (&self.solid_cutout, cutout..phase1_draws),
+                            (
+                                solid_passes.cutout(false).unwrap_or(&self.solid_cutout),
+                                cutout..phase1_draws,
+                            ),
                         ],
                         _ => &[(solid_pipeline, 0..phase1_draws)],
                     };

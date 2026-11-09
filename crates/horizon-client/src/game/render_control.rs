@@ -14,6 +14,7 @@ pub const HELP: &[&str] = &[
     "section-draws [flat|indirect]  how terrain sections are drawn (A/B checks); replies the mode",
     "sky-order [early|late]         the vanilla sky before or after solid terrain, on Adreno's Vulkan (A/B checks); replies the mode",
     "section-cull [on|off]          occlusion culling of solid sections (A/B checks); replies the mode",
+    "static-cutout [on|off]         cutouts without their fade while nothing fades, on Adreno's Vulkan (A/B checks); replies the mode",
     "section-sides [on|off]         leave out solid quads facing away from the eye (A/B checks); replies the mode",
 ];
 
@@ -121,6 +122,18 @@ impl Game<'_> {
             }
             other => Err(format!("unknown render command {other}").into()),
         }
+    }
+    pub(super) fn static_cutout_command(&mut self, words: &[&str]) -> Result<Option<Value>> {
+        let r = self.renderer.as_mut().ok_or("no renderer")?;
+        match words.get(1).copied() {
+            None => {}
+            Some("on") => r.set_static_cutout(true)?,
+            Some("off") => r.set_static_cutout(false)?,
+            Some(other) => return Err(format!("unknown static cutout mode {other}").into()),
+        }
+        Ok(Some(
+            json!({ "ok": true, "static_cutout": r.static_cutout_on() }),
+        ))
     }
 }
 
