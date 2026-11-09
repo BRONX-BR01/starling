@@ -11,6 +11,7 @@ use horizon_client::{
 };
 use starling_catalog::{
     Done, Shelf,
+    browser::{Kind, Project, installed::Entry},
     list::{self, Ask, Feed, Scroller, Tail},
 };
 use std::cell::RefCell;
@@ -55,6 +56,11 @@ const NAV_BAR_SHARE: f32 = 0.08;
 const QUERY_CHARS: usize = 64;
 /// The search runs once the typing has paused this long.
 const TYPING_PAUSE: Duration = Duration::from_millis(400);
+/// How often the open screen looks again at which files are in the game folder.
+const FILE_CHECK: Duration = Duration::from_secs(2);
+/// The panel that asks before a file is deleted.
+const CONFIRM_W: f32 = 640.0;
+const CONFIRM_H: f32 = 270.0;
 
 #[derive(Clone, PartialEq)]
 enum Act {
@@ -65,6 +71,11 @@ enum Act {
     Everything,
     Retry,
     Install(usize),
+    /// Asks to remove the row's project.
+    Remove(usize),
+    /// Answers the question: delete it, or leave it.
+    ConfirmRemove,
+    CancelRemove,
 }
 
 #[derive(Default)]
@@ -90,8 +101,11 @@ pub(super) struct Catalog {
     everything: bool,
     /// How far the list is scrolled, and the finger on the screen.
     list: Scroller,
-    /// The projects installed from here, by id.
+    /// The projects installed from here whose file is there, by id, and when that was looked at.
     installed: HashSet<String>,
+    checked_at: Option<Instant>,
+    /// The project the player was asked about removing: nothing else takes a touch meanwhile.
+    removing: Option<Project>,
     /// What the last install said, and whether it failed.
     notice: Option<(String, bool)>,
     shared: Arc<Mutex<Shared>>,
@@ -206,6 +220,97 @@ fn loading_line(shelf: Shelf, first: bool) -> String {
     }
 }
 
+/// An installed row's button area: the word Installed over a Remove button.
+fn installed_parts(rect: [f32; 4]) -> ([f32; 4], [f32; 4]) {
+    let state = [rect[0], rect[1] - 14.0, rect[2], 30.0];
+    let remove = [rect[0], rect[1] + 20.0, rect[2], rect[3] - 10.0];
+    (state, remove)
+}
+
+/// The question over everything while the player is asked about deleting a file, and its buttons
+/// (they are all that takes a touch then).
+fn draw_confirm(ui: &mut Ui<'_>, title: &str, drawn: &mut Vec<([f32; 4], Act)>) {
+    drawn.clear();
+    let (w, h) = (ui.w, ui.h);
+    ui.fill(0.0, 0.0, w, h, color::hex(0x00_00_00, 190));
+    let width = CONFIRM_W.min(w - 2.0 * MARGIN);
+    let panel = [(w - width) / 2.0, (h - CONFIRM_H) / 2.0, width, CONFIRM_H];
+    ui.rounded(panel[0], panel[1], panel[2], panel[3], 14.0, color::BG);
+    ui.rounded(panel[0], panel[1], panel[2], panel[3], 14.0, color::RAISED);
+    let inner = width - 48.0;
+    let head = fitted(
+        ui,
+        Face::Semibold,
+        TITLE_TEXT,
+        inner,
+        &format!("Remove {title}?"),
+    );
+    ui.text(
+        Face::Semibold,
+        TITLE_TEXT,
+        panel[0] + 24.0,
+        panel[1] + 20.0,
+        color::TEXT,
+        &head,
+    );
+    let body = "This deletes its file from your game folder. You can install it again from here.";
+    let mut y = panel[1] + 70.0;
+    for line in fitted_lines(ui, Face::Regular, BODY_TEXT, inner, 3, body) {
+        ui.text(
+            Face::Regular,
+            BODY_TEXT,
+            panel[0] + 24.0,
+            y,
+            color::MUTED,
+            &line,
+        );
+        y += BODY_LINE;
+    }
+    let by = panel[1] + CONFIRM_H - ROW_BUTTON_H - 20.0;
+    let remove = [
+        panel[0] + width - 2.0 * ROW_BUTTON_W - 36.0,
+        by,
+        ROW_BUTTON_W,
+        ROW_BUTTON_H,
+    ];
+    let cancel = [
+        panel[0] + width - ROW_BUTTON_W - 24.0,
+        by,
+        ROW_BUTTON_W,
+        ROW_BUTTON_H,
+    ];
+    ui.rounded(
+        remove[0],
+        remove[1],
+        remove[2],
+        remove[3],
+        10.0,
+        color::DANGER,
+    );
+    label(ui, remove, color::TEXT, "Remove");
+    drawn.push((remove, Act::ConfirmRemove));
+    plate(ui, cancel, "Cancel", false);
+    drawn.push((cancel, Act::CancelRemove));
+}
+
+/// A search that failed: the log has what it said, the screen one plain sentence.
+fn search_failed(raw: &str) -> String {
+    log::warn!("Horizon: the catalog's search failed: {raw}");
+    list::friendly(raw, "The list didn't load. Try again.")
+}
+
+/// An install that failed, the same way.
+fn install_failed(title: &str, raw: &str) -> String {
+    log::warn!("Horizon: the catalog could not install {title}: {raw}");
+    list::friendly(raw, &format!("Couldn't install {title}. Try again."))
+}
+
+/// A removal that failed, the same way.
+fn remove_failed(title: &str, raw: &str) -> String {
+    log::warn!("Horizon: the catalog could not remove {title}: {raw}");
+    list::friendly(raw, &format!("Couldn't remove {title}. Try again."))
+}
+
 /// The rows that show and the list's last line, under what's above and below them.
 fn draw_list(
     ui: &mut Ui<'_>,
@@ -260,7 +365,20 @@ fn draw_list(
         if shared.installing.as_deref() == Some(project.title.as_str()) {
             label(ui, rect, color::MUTED, "Installing");
         } else if card.installed.contains(&project.id) {
-            label(ui, rect, color::MUTED, "Installed");
+            let (state, remove) = installed_parts(rect);
+            label(ui, state, color::MUTED, "Installed");
+            ui.rounded(
+                remove[0],
+                remove[1],
+                remove[2],
+                remove[3],
+                10.0,
+                color::HOVER,
+            );
+            label(ui, remove, color::TEXT, "Remove");
+            if let Some(part) = list::shown_part(remove, top, bottom) {
+                drawn.push((part, Act::Remove(i)));
+            }
         } else {
             plate(ui, rect, "Install", true);
             if let Some(part) = list::shown_part(rect, top, bottom) {
@@ -454,6 +572,116 @@ impl Game<'_> {
         self.catalog_search();
     }
 
+    /// Android's Back while the screen is open: it answers the question about a deletion with no,
+    /// or else closes the screen and nothing under it. False when the screen isn't open.
+    pub(super) fn catalog_back(&mut self) -> bool {
+        let card = &mut self.catalog;
+        if !card.shown {
+            return false;
+        }
+        if card.removing.take().is_none() {
+            card.shown = false;
+            card.typing = false;
+        }
+        true
+    }
+
+    /// Which rows say Installed: those whose file is in the game folder right now.
+    fn refresh_installed(&mut self) {
+        self.catalog.installed = starling_catalog::installed_projects(&Self::game_dir());
+        self.catalog.checked_at = Some(Instant::now());
+    }
+
+    /// While the screen is open, looks again now and then: a file the player deleted by hand
+    /// (from the phone's file manager) puts its row back to Install.
+    fn catalog_check_files(&mut self) {
+        let card = &self.catalog;
+        if card.shown && card.checked_at.is_none_or(|at| at.elapsed() >= FILE_CHECK) {
+            self.refresh_installed();
+        }
+    }
+
+    /// The Mods page shows what the folder holds now, not what it held at the start. `gone` is a
+    /// mod just removed, which is no longer on.
+    fn refresh_mods_page(&mut self, gone: Option<&str>) {
+        let on = horizon_client::mod_list::ModList::load(&Self::game_dir()).enabled;
+        let enabled = &mut self.settings.mods.enabled;
+        enabled.extend(on);
+        if let Some(id) = gone {
+            enabled.remove(id);
+        }
+        self.start_mods();
+    }
+
+    /// A row's Remove: asks first, since a deleted file can't come back.
+    fn catalog_ask_remove(&mut self, index: usize) {
+        let project = self
+            .catalog
+            .shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .feed
+            .rows()
+            .get(index)
+            .cloned();
+        self.catalog.removing = project;
+    }
+
+    /// Deletes what the player agreed to delete, and tidies the pages that listed it.
+    fn catalog_remove(&mut self, project: Project) {
+        let busy = self
+            .catalog
+            .shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .installing
+            .is_some();
+        if busy {
+            self.catalog.notice = Some(("Wait for the install to finish first.".to_owned(), true));
+            return;
+        }
+        let title = project.title.clone();
+        self.catalog.notice = Some(
+            match starling_catalog::remove(&Self::game_dir(), &project) {
+                Ok(entry) => {
+                    self.after_removal(&entry);
+                    (format!("{title} was removed."), false)
+                }
+                Err(e) => (remove_failed(&title, &e), true),
+            },
+        );
+        self.refresh_installed();
+    }
+
+    /// The page that listed a removed file lists what is left. A shader pack that was on goes off
+    /// the way the Shader Packs page turns its pack off.
+    fn after_removal(&mut self, entry: &Entry) {
+        match entry.kind {
+            Kind::Shader => self.after_shader_pack_removed(&entry.file),
+            Kind::ResourcePack => {
+                let infos =
+                    super::packs::pack_infos(&self.vanilla_root(), &self.server_packs.active);
+                self.ui.options.update_pack_infos(infos);
+            }
+            _ => {
+                let id = starling_catalog::mod_id(entry);
+                self.refresh_mods_page(id.as_deref());
+            }
+        }
+    }
+
+    /// `file` is `shaderpacks/<name>`: the list is read again, and if that pack was the one on, none is.
+    fn after_shader_pack_removed(&mut self, file: &str) {
+        let name = file.rsplit('/').next().unwrap_or(file);
+        if self.settings.horizon.shader_pack == name {
+            self.settings.horizon.shader_pack.clear();
+            self.settings.horizon.shader_profile.clear();
+            self.settings.save(&Self::options_path());
+        }
+        self.settings.shader_packs =
+            horizon_client::shader_pack_list::scan(&Self::shader_packs_dir());
+    }
+
     /// Whether the keyboard types in the search box (`text_context`).
     pub(super) fn catalog_typing(&self) -> bool {
         self.catalog.shown && self.catalog.typing
@@ -487,6 +715,7 @@ impl Game<'_> {
 
     /// A new list for the shelf and search as they are: back to the top, its first page asked for.
     fn catalog_search(&mut self) {
+        self.refresh_installed();
         self.catalog.list.reset();
         let ask = self
             .catalog
@@ -508,10 +737,8 @@ impl Game<'_> {
             .name("catalog search".into())
             .spawn(move || {
                 let found =
-                    starling_catalog::search(shelf, &query, everything, ask.offset, list::PAGE);
-                if let Err(e) = &found {
-                    log::warn!("Horizon: the catalog's search failed: {e}");
-                }
+                    starling_catalog::search(shelf, &query, everything, ask.offset, list::PAGE)
+                        .map_err(|e| search_failed(&e));
                 worker
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
@@ -523,7 +750,10 @@ impl Game<'_> {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .feed
-                .answer(ask, Err(format!("The search didn't start: {e}")));
+                .answer(
+                    ask,
+                    Err(search_failed(&format!("The search didn't start: {e}"))),
+                );
         }
     }
 
@@ -579,6 +809,7 @@ impl Game<'_> {
         if self.catalog.shown {
             self.catalog_keep_up();
         }
+        self.catalog_check_files();
         let finished = self
             .catalog
             .shared
@@ -607,15 +838,13 @@ impl Game<'_> {
                         );
                         self.ui.options.update_pack_infos(infos);
                     }
-                    Done::ContentMod => {}
+                    // The Mods page lists what was found when the game started.
+                    Done::ContentMod => self.refresh_mods_page(None),
                 }
-                self.catalog.installed = starling_catalog::installed_projects(&Self::game_dir());
+                self.refresh_installed();
                 (done_notice(done, &title), false)
             }
-            Err(e) => {
-                log::warn!("Horizon: the catalog could not install {title}: {e}");
-                (e, true)
-            }
+            Err(e) => (install_failed(&title, &e), true),
         });
     }
 
@@ -684,6 +913,9 @@ impl Game<'_> {
         ui.fill(0.0, h - FOOT_H, w, FOOT_H, color::BG);
         draw_head(&mut ui, card, edge, &mut drawn);
         draw_foot(&mut ui, card, &shared, edge, &mut drawn);
+        if let Some(project) = &card.removing {
+            draw_confirm(&mut ui, &project.title, &mut drawn);
+        }
         ui.finish();
         *card.buttons.borrow_mut() = drawn;
     }
@@ -765,6 +997,13 @@ impl Game<'_> {
                 }
             }
             Act::Install(index) => self.catalog_install(index),
+            Act::Remove(index) => self.catalog_ask_remove(index),
+            Act::ConfirmRemove => {
+                if let Some(project) = card.removing.take() {
+                    self.catalog_remove(project);
+                }
+            }
+            Act::CancelRemove => card.removing = None,
         }
         true
     }

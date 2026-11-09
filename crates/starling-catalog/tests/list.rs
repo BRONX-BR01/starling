@@ -1,6 +1,8 @@
 //! The catalog's list without its screen or the network: the pages adding up and the finger.
 use starling_catalog::browser::{Kind, Project, SourceId};
-use starling_catalog::list::{near_end, rows_shown, shown_part, Feed, Scroller, Tail, PAGE, SLOP};
+use starling_catalog::list::{
+    friendly, near_end, rows_shown, shown_part, Feed, Scroller, Tail, PAGE, SLOP,
+};
 
 fn project(id: &str) -> Project {
     Project {
@@ -288,4 +290,40 @@ fn a_button_under_what_is_above_or_below_the_list_takes_no_touch() {
     );
     assert_eq!(shown_part([10.0, 60.0, 50.0, 80.0], top, bottom), None);
     assert_eq!(shown_part([10.0, 620.0, 50.0, 80.0], top, bottom), None);
+}
+
+#[test]
+fn a_dead_network_is_one_plain_sentence_with_no_url_or_os_text() {
+    for raw in [
+        "No connection to Modrinth: https://api.modrinth.com/v2/search: Network Error: Software caused connection abort (os error 103)",
+        "Modrinth: Network Error: timed out reading response",
+        "Download interrupted: connection reset by peer",
+    ] {
+        let said = friendly(raw, "Something else.");
+        assert_eq!(
+            said,
+            "Couldn't reach the catalog. Check your connection and try again."
+        );
+        assert!(!said.contains("http") && !said.contains("os error"));
+    }
+}
+
+#[test]
+fn a_technical_error_gets_the_fallback_and_a_plain_one_stays() {
+    assert_eq!(
+        friendly(
+            "Modrinth: https://api.modrinth.com/x: status code 500",
+            "Try again."
+        ),
+        "Try again."
+    );
+    assert_eq!(
+        friendly(
+            "C:/x/y.zip: Access is denied. (os error 5)",
+            "Couldn't install it."
+        ),
+        "Couldn't install it."
+    );
+    let plain = "Foo needs other projects, which can't be installed from here.";
+    assert_eq!(friendly(plain, "Try again."), plain);
 }

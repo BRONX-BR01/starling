@@ -4477,10 +4477,10 @@ impl OptionsUi {
                 };
                 if let Some((label, act)) = folder {
                     // Android's way to find mods, resource packs and shader packs.
-                    if self.catalog_buttons
-                        && let Some(shelf) = catalog_shelf(page)
-                        && let Some((x, width)) = crate::pack_screen::catalog_button_at(cx - 154.0)
-                    {
+                    let shelf = catalog_shelf(page).filter(|_| self.catalog_buttons);
+                    let (open_w, catalog) =
+                        crate::pack_screen::open_folder_slot(cx - 154.0, shelf.is_some());
+                    if let (Some(shelf), Some((x, width))) = (shelf, catalog) {
                         out.push(button(
                             x,
                             h - 27.0,
@@ -4489,7 +4489,12 @@ impl OptionsUi {
                             Act::OpenCatalog(shelf),
                         ));
                     }
-                    out.push(button(cx - 154.0, h - 27.0, 150.0, tr(label), act));
+                    let label = if catalog.is_some() {
+                        crate::pack_screen::SHORT_OPEN_FOLDER
+                    } else {
+                        label
+                    };
+                    out.push(button(cx - 154.0, h - 27.0, open_w, tr(label), act));
                     out.push(button(cx + 4.0, h - 27.0, 150.0, tr("gui.done"), Act::Done));
                 } else {
                     out.push(done(h - 27.0));
@@ -9515,12 +9520,23 @@ mod tests {
                 assert!(catalog.x >= 0.0, "{page:?} at {size:?}");
                 for other in &footer {
                     assert_eq!(other.y, size.1 - 27.0);
-                    if !std::ptr::eq(*other, *catalog) {
-                        assert!(
-                            catalog.x + catalog.w <= other.x,
-                            "{page:?} at {size:?}: Catalog runs into the button at {}",
-                            other.x
-                        );
+                    if std::ptr::eq(*other, *catalog) {
+                        continue;
+                    }
+                    // Open Folder is left of it and Done right of it, with room between.
+                    let clear = if other.x < catalog.x {
+                        other.x + other.w < catalog.x
+                    } else {
+                        catalog.x + catalog.w < other.x
+                    };
+                    assert!(
+                        clear,
+                        "{page:?} at {size:?}: Catalog runs into the button at {}",
+                        other.x
+                    );
+                    if other.x < catalog.x {
+                        // Together they fill the 150 Open Folder had.
+                        assert_eq!(catalog.x + catalog.w - other.x, 150.0);
                     }
                 }
                 let (x, y) = (catalog.x + catalog.w / 2.0, catalog.y + catalog.h / 2.0);
@@ -9540,8 +9556,8 @@ mod tests {
             ..OptionsUi::default()
         };
         ui.show(Page::Packs);
-        // Left of the footer, which starts at (800 - 308) / 2.
-        let events = ui.click(&mut s, &atlas, 192.0, 344.0, size, [854, 480], false, false);
+        // The right half of Open Folder's slot: the footer starts at (800 - 308) / 2.
+        let events = ui.click(&mut s, &atlas, 330.0, 344.0, size, [854, 480], false, false);
         assert_eq!(
             events,
             vec![
@@ -9570,7 +9586,8 @@ mod tests {
             )));
         }
         ui.show(Page::Packs);
-        let events = ui.click(&mut s, &atlas, 192.0, 344.0, size, [854, 480], false, false);
+        // Left of the footer, where the button used to be.
+        let events = ui.click(&mut s, &atlas, 200.0, 344.0, size, [854, 480], false, false);
         assert_eq!(events, Vec::new());
     }
 
