@@ -21,6 +21,13 @@ pub(super) fn mali_or_powervr_vulkan(info: &wgpu::AdapterInfo) -> bool {
         && (info.name.contains("Mali") || info.vendor == 0x1010 || info.name.contains("PowerVR"))
 }
 
+/// Mali on Android's Vulkan.
+pub(super) fn mali_vulkan(info: &wgpu::AdapterInfo) -> bool {
+    cfg!(target_os = "android")
+        && info.backend == wgpu::Backend::Vulkan
+        && info.name.contains("Mali")
+}
+
 /// What these paths' pipelines of terrain.wgsl share. Unlike `Renderer::new`'s own, they may fail:
 /// the frame then keeps the usual pipeline.
 pub(super) struct TerrainModule<'a> {

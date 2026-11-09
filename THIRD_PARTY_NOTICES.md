@@ -263,6 +263,10 @@ fork's two specialization constants are one here, which also leaves out the dist
 and its terrain shaders also cover flat frames. The indirect offset fix in 1a115395f8 doesn't apply:
 Starling's solid passes don't rebase the indirect buffer.
 
+Drawing each section with a call of its own on Mali behind Android's Vulkan, rather than with indirect
+multi-draws (`indirect_draws_wanted` in `gfx.rs`), follows the same revision's commit 77b9e17f76,
+which turned indirect multi-draws off on every Android GPU.
+
 ## Horizon Android documents provider
 
 The game folder's place in Android's Files app (`packaging/android/java/io/github/juanluci/starling/GameFolderProvider.java`
