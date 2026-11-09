@@ -5,7 +5,7 @@
 //! control when it lands and keeps it until it lifts.
 //!
 //! As Bedrock's control modes, the taps and presses act on what is under the finger ("tap to
-//! interact", [`Interact::Tap`], the default: no crosshair, no Use button) or on what
+//! interact", [`Interact::Tap`], the default: no crosshair, no Attack button) or on what
 //! the crosshair is on ("aim crosshair", [`Interact::Crosshair`]).
 //!
 //! Where the controls are is a [`LayoutConfig`] the player edits in place ([`LayoutEditor`]):
@@ -137,10 +137,11 @@ impl Button {
             Button::Players => "players",
         }
     }
-    /// Only for aiming the crosshair: with tap to interact a tap uses what is under the finger.
-    /// Hit stays in both modes, a left click that lets another finger turn the view meanwhile.
+    /// Only for aiming the crosshair: with tap to interact a tap hits what is under the finger.
+    /// Use stays in both modes, a right click: it holds a shield up whatever is in view, while
+    /// another finger turns the view.
     fn aims(self) -> bool {
-        matches!(self, Button::Use)
+        matches!(self, Button::Attack)
     }
 }
 
@@ -1585,7 +1586,7 @@ impl LayoutEditor {
                     }
                     if action == EditorAction::Interact {
                         config.interact = config.interact.next();
-                        // Use goes with the crosshair.
+                        // Attack goes with the crosshair.
                         if matches!(self.selected, Some(Target::Button(b)) if !config.offers(b)) {
                             self.selected = None;
                         }
@@ -2287,17 +2288,17 @@ mod tests {
                 .unwrap()
                 .1
         };
-        // Aiming the crosshair brings Use into the layout, touching takes it out.
-        let has_use = |config: &LayoutConfig| {
+        // Aiming the crosshair brings Attack into the layout, touching takes it out.
+        let has_attack = |config: &LayoutConfig| {
             LayoutEditor::targets(config, w, h)
                 .iter()
-                .any(|(t, ..)| *t == Target::Button(Button::Use))
+                .any(|(t, ..)| *t == Target::Button(Button::Attack))
         };
-        assert!(!has_use(&config));
+        assert!(!has_attack(&config));
         let interact = bar(EditorAction::Interact);
         editor.event(&mut config, w, h, 10, TouchPhase::Started, interact);
         assert_eq!(config.interact, Interact::Crosshair);
-        assert!(has_use(&config));
+        assert!(has_attack(&config));
         editor.event(&mut config, w, h, 11, TouchPhase::Started, interact);
         assert_eq!(config.interact, Interact::Tap);
         let reset = bar(EditorAction::Reset);
@@ -2592,7 +2593,7 @@ mod tests {
     }
 
     #[test]
-    fn tap_to_interact_keeps_hit_has_no_use_and_the_debug_button_is_there() {
+    fn tap_to_interact_keeps_use_has_no_attack_and_the_debug_button_is_there() {
         let (w, h) = (3200.0, 1440.0);
         let has = |config: &LayoutConfig, button: Button| {
             Layout::from_config(config, w, h, 6.0)
@@ -2602,7 +2603,7 @@ mod tests {
         };
         let tap = LayoutConfig::default();
         assert!(Layout::from_config(&tap, w, h, 6.0).tap);
-        assert!(has(&tap, Button::Attack) && !has(&tap, Button::Use));
+        assert!(!has(&tap, Button::Attack) && has(&tap, Button::Use));
         assert!(has(&tap, Button::Debug) && has(&tap, Button::Jump));
         let aim = LayoutConfig {
             interact: Interact::Crosshair,
