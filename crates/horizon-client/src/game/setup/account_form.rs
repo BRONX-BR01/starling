@@ -78,6 +78,7 @@ impl Form {
     pub fn reveal(&mut self) {
         self.show_password = !self.show_password;
     }
+    #[cfg(any(target_os = "android", test))]
     pub fn replace(&mut self, text: &str, cursor: usize, anchor: usize, generation: i32) {
         if generation != self.generation {
             return;
