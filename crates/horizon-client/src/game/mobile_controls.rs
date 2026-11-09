@@ -123,7 +123,8 @@ impl Game<'_> {
     }
     pub(in crate::game) fn mobile_frame(&mut self, events: &dyn super::event_loop::EventLoopCtl) {
         self.mobile_init();
-        self.mobile.ui.utility_offset_y = if horizon_client::accounts::in_game()
+        self.mobile.ui.utility_offset_y = if self.screen == Screen::Playing
+            && horizon_client::accounts::in_game()
             && self
                 .title
                 .as_ref()

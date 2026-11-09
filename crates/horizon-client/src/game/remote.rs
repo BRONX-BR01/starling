@@ -8980,6 +8980,22 @@ impl Game<'_> {
     /// the main hand's item, then the off hand's turn (its block, its item).
     /// The server does each packet's part with that packet's hand only.
     fn remote_use_hands(&mut self) {
+        #[cfg(target_os = "android")]
+        if self.mobile.touch_shield {
+            let hand = if self
+                .offhand
+                .as_ref()
+                .is_some_and(|s| self.blocks_attacks(s).is_some())
+            {
+                Hand::Off
+            } else {
+                Hand::Main
+            };
+            if self.remote_use_item(hand) {
+                self.heights.item_used(hand);
+            }
+            return;
+        }
         // A successful Item.use always drops the hand (LocalPlayer.itemUsed).
         if self.remote_use_item(Hand::Main) {
             self.heights.item_used(Hand::Main);

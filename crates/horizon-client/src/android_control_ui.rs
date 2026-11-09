@@ -2614,7 +2614,7 @@ impl TouchUi {
                     by,
                     bw,
                     bh,
-                    color::with_alpha(rgba(0, 0, 0, 120), bubble_alpha),
+                    color::with_alpha(rgba(16, 18, 24, 180), bubble_alpha),
                 );
                 ui.icon(
                     Icon::HorizonLogo,

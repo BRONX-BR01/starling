@@ -592,7 +592,10 @@ impl TouchControls {
             if opacity <= 0.001 {
                 continue;
             }
-            if matches!(control, Control::Pause | Control::Inventory) {
+            if matches!(
+                control,
+                Control::Pause | Control::Inventory | Control::Settings
+            ) {
                 let [nx, ny, nw, nh] = p.rect(self.aspect());
                 if starling_utility(
                     b,
@@ -2879,7 +2882,7 @@ mod tests {
     }
 }
 
-/// Only these two appearances are intentionally taken from Starling.
+/// Starling utility plates, with monochrome glyphs matching the other controls.
 fn starling_utility(
     b: &mut HudBatch,
     a: &HudAtlas,
@@ -2888,13 +2891,27 @@ fn starling_utility(
     pressed: bool,
     opacity: f32,
 ) -> bool {
+    // The neighbouring Bedrock GUI buttons have alpha 204 in the pinned sheet.
+    // Starling's plates are opaque: match their effective alpha, leaving the
+    // inventory matched to the opaque action buttons instead.
+    let opacity = opacity
+        * if c == Control::Inventory {
+            1.
+        } else {
+            204. / 255.
+        };
     let name = match c {
         Control::Pause => "pause",
         Control::Inventory => "inventory",
+        Control::Settings => "custom_blank",
         _ => return false,
     };
-    let suffix = if pressed { "_pressed" } else { "" };
-    let key = format!("starling:touch/{name}{suffix}");
+    let suffix = if pressed && c != Control::Settings {
+        "_pressed"
+    } else {
+        ""
+    };
+    let key = format!("starling:gui/sprites/touch/{name}{suffix}");
     if !a.sprites.contains_key(&key) {
         return false;
     }
@@ -2908,5 +2925,30 @@ fn starling_utility(
         rect[3],
         rgba(255, 255, 255, (opacity.clamp(0., 1.) * 255.) as u8),
     );
+    if c == Control::Settings {
+        let [x, y, w, h] = rect;
+        let ink = if pressed { 230 } else { 0 };
+        let color = rgba(ink, ink, ink, (opacity.clamp(0., 1.) * 255.).round() as u8);
+        let cell = w.min(h) * 0.62 / 9.;
+        let origin = [x + (w - cell * 9.) / 2., y + (h - cell * 9.) / 2.];
+        // A one-pixel ring and eight teeth; the centre stays open.
+        for iy in -4i32..=4 {
+            for ix in -4i32..=4 {
+                let d = ix * ix + iy * iy;
+                let ring = (4..=10).contains(&d);
+                let tooth = (11..=18).contains(&d) && (ix == 0 || iy == 0 || ix.abs() == iy.abs());
+                if ring || tooth {
+                    b.fill(
+                        a,
+                        origin[0] + (ix + 4) as f32 * cell,
+                        origin[1] + (iy + 4) as f32 * cell,
+                        cell,
+                        cell,
+                        color,
+                    );
+                }
+            }
+        }
+    }
     true
 }

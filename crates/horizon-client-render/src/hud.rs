@@ -859,7 +859,14 @@ fn builtin_touch_sprites(images: &[PackedImage]) -> Vec<PackedImage> {
             if images.iter().any(|(k, ..)| *k == key) {
                 return None;
             }
-            let (w, h, pixels) = decode_bytes(png).ok()?;
+            let (w, h, mut pixels) = decode_bytes(png).ok()?;
+            if matches!(*name, "pause" | "inventory") {
+                for pixel in pixels.chunks_exact_mut(4) {
+                    if pixel[0] >= 245 && pixel[1] >= 245 && pixel[2] >= 245 {
+                        pixel[..3].copy_from_slice(&[32, 32, 32]);
+                    }
+                }
+            }
             Some((key, w, h, pixels))
         })
         // A slot for each custom button's own images, whichever it has now.
@@ -1702,8 +1709,25 @@ impl HudAtlas {
         // Read this small overlay from disk too, without walking every prepared asset.
         if full {
             let mut existing: HashSet<String> = images.iter().map(|i| i.0.clone()).collect();
-            for base in [root, defaults] {
-                let dir = base.join("assets/minecraft/textures/gui/bedrock");
+            for (base, folder, prefix) in [
+                (root, "assets/minecraft/textures/gui/bedrock", "gui/bedrock"),
+                (
+                    root,
+                    "assets/starling/textures/gui/sprites/touch",
+                    "starling:gui/sprites/touch",
+                ),
+                (
+                    defaults,
+                    "assets/minecraft/textures/gui/bedrock",
+                    "gui/bedrock",
+                ),
+                (
+                    defaults,
+                    "assets/starling/textures/gui/sprites/touch",
+                    "starling:gui/sprites/touch",
+                ),
+            ] {
+                let dir = base.join(folder);
                 let mut pending = vec![dir.clone()];
                 while let Some(folder) = pending.pop() {
                     let Ok(entries) = fs::read_dir(folder) else {
@@ -1722,7 +1746,7 @@ impl HudAtlas {
                             continue;
                         };
                         let name = format!(
-                            "gui/bedrock/{}",
+                            "{prefix}/{}",
                             relative
                                 .with_extension("")
                                 .to_string_lossy()
@@ -4117,9 +4141,17 @@ texture=wide",
         // Downloading touch assets does not rewrite the large vanilla archive.
         write_png(&root, "gui/bedrock/gui", 256, 256);
         write_png(&root, "gui/bedrock/ui/attack", 32, 32);
+        let utilities = root.join("assets/starling/textures/gui/sprites/touch");
+        fs::create_dir_all(&utilities).unwrap();
+        fs::copy(
+            root.join("assets/minecraft/textures/gui/bedrock/ui/attack.png"),
+            utilities.join("pause.png"),
+        )
+        .unwrap();
         let atlas = HudAtlas::build(&root).unwrap();
         assert_eq!(atlas.sprites["gui/bedrock/gui"].w, 256);
         assert_eq!(atlas.sprites["gui/bedrock/ui/attack"].h, 32);
+        assert_eq!(atlas.sprites["starling:gui/sprites/touch/pause"].w, 32);
         let _ = fs::remove_dir_all(root);
     }
     #[test]
