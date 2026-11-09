@@ -799,6 +799,10 @@ pub struct Frame<'a> {
     /// `Screen.extractBlurredBackground`: blur the frame by this radius
     /// (`menuBackgroundBlurriness`) before the screen is drawn over it.
     pub menu_blur: Option<f32>,
+    /// The world under this blurred menu does not move (a paused single-player game): the
+    /// blurred frame may be kept, and once kept, drawn again in place of the world and the blur
+    /// (`Renderer::has_menu_blur_cache`).
+    pub menu_blur_cache: bool,
     /// `Options.chunkSectionFadeInTime`, in seconds: how long a section takes to fade in once
     /// uploaded (0 draws it whole at once).
     pub chunk_fade: f32,
@@ -4600,6 +4604,26 @@ impl Renderer {
         self.flat_on = on;
         Ok(())
     }
+    /// Drops the blurred menu frame kept for `Frame::menu_blur_cache`: the next blurred
+    /// frame draws the world again (the menu was left, or a setting changed under it).
+    pub fn forget_menu_blur(&mut self) {
+        if let Some(blur) = &mut self.menu_blur {
+            blur.forget();
+        }
+    }
+    /// Whether a frame of a menu blurred by `radius` with `Frame::menu_blur_cache` draws the
+    /// kept blurred frame, without the world: one is kept for this window's size and radius,
+    /// and no screenshot or HDR output needs the whole frame. Adapted from
+    /// Vasysik/horizon-android (`has_cached_menu_blur`, its commit 77b9e17f76), MIT.
+    pub fn has_menu_blur_cache(&self, radius: f32) -> bool {
+        self.config.usage.contains(wgpu::TextureUsages::COPY_SRC)
+            && self.screenshot.is_none()
+            && self.hdr.is_none()
+            && self
+                .menu_blur
+                .as_ref()
+                .is_some_and(|b| b.kept([self.config.width, self.config.height], radius))
+    }
     /// Whether frames that may take it draw the sky after solid terrain (`late_sky`).
     pub fn late_sky_on(&self) -> bool {
         self.late_sky_on
@@ -6433,6 +6457,21 @@ impl Renderer {
                     label: Some("Horizon frame"),
                 })
         });
+        if frame.menu_blur_cache
+            && fg_frames.is_none()
+            && checks.is_none()
+            && frame.menu_blur.is_some_and(|r| self.has_menu_blur_cache(r))
+        {
+            return self.draw_kept_menu(
+                frame,
+                encoder,
+                has_section_copies,
+                &target_texture,
+                surface_frame,
+                reconfigure,
+                started,
+            );
+        }
         // Horizon's own passes are timed like a shader pack's, from the frame's first pass.
         if self.own_timing.is_some() != self.pass_timing {
             self.own_timing = self
@@ -9485,6 +9524,79 @@ impl Renderer {
     }
 }
 impl Renderer {
+    /// A frame of a paused menu from the blurred frame `MenuBlur::keep` kept: that frame, then
+    /// the menu over it, with the section copies and HUD uploads of the frame, submitted and
+    /// presented as `draw_frame` presents a plain one. The world and the blur are not drawn.
+    /// Adapted from Vasysik/horizon-android (the cached path of its `Renderer::render`, commit
+    /// 77b9e17f76), MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_kept_menu(
+        &mut self,
+        frame: &Frame,
+        mut encoder: wgpu::CommandEncoder,
+        has_section_copies: bool,
+        target_texture: &wgpu::Texture,
+        surface_frame: Option<wgpu::SurfaceTexture>,
+        reconfigure: bool,
+        started: Instant,
+    ) -> Result<bool> {
+        let size = [self.config.width, self.config.height];
+        self.hud.prepare(
+            &self.device,
+            &mut self.uploads,
+            &mut encoder,
+            frame.hud,
+            size,
+        );
+        let view_target = target_texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.config.format.remove_srgb_suffix()),
+            ..Default::default()
+        });
+        if let Some(blur) = &self.menu_blur {
+            blur.draw_kept(&self.device, &self.queue, &mut encoder, &view_target);
+        }
+        self.hud.draw_range(
+            &mut encoder,
+            &view_target,
+            &self.depth,
+            frame.hud,
+            size,
+            frame.hud.blur_at..frame.hud.vertices.len() as u32,
+            None,
+        );
+        self.uploads.finish(&encoder);
+        if has_section_copies {
+            self.section_copy_bytes = 0;
+            self.section_uploads.finish(&encoder);
+        }
+        if let Some(f) = &surface_frame {
+            self.readback
+                .present(&self.device, &mut encoder, &f.texture);
+        }
+        let commands = crate::spans::time("encode", || encoder.finish());
+        let submission = crate::spans::time("submit", || self.queue.submit([commands]));
+        self.last_wait += self.queue.take_waited();
+        let present = Instant::now();
+        if let Some(surface_frame) = surface_frame {
+            if self.config.present_mode == wgpu::PresentMode::Fifo {
+                self.window.pre_present_notify();
+            }
+            self.queue.present(surface_frame);
+            if reconfigure {
+                self.configure_surface();
+            }
+        }
+        if self.surface.is_none() {
+            self.in_flight.push_back(submission);
+            if !self.paced_elsewhere {
+                self.wait_in_flight();
+            }
+        }
+        self.last_wait += present.elapsed();
+        self.queue.take_waited();
+        self.last_encode = started.elapsed().saturating_sub(self.last_wait);
+        Ok(true)
+    }
     /// What draws over the world, on the real frame and frame generation's made one:
     /// the hand, entity outlines, post effects, screen effects, the debug crosshair and
     /// the HUD. Returns the world icon's readback, taken on the real frame.
@@ -9761,18 +9873,27 @@ impl Renderer {
             let format = self.config.format;
             let device = &self.device;
             let software = is_software(self.info.device_type);
-            self.menu_blur
-                .get_or_insert_with(|| crate::menu_blur::MenuBlur::new(device, format, software))
-                .apply(
-                    &self.device,
-                    &self.queue,
+            let blur = self
+                .menu_blur
+                .get_or_insert_with(|| crate::menu_blur::MenuBlur::new(device, format, software));
+            blur.apply(
+                &self.device,
+                &self.queue,
+                encoder,
+                target_texture,
+                view_target,
+                [self.config.width, self.config.height],
+                radius,
+                timing.as_mut(),
+            );
+            if frame.menu_blur_cache && overlay.real {
+                blur.keep(
                     encoder,
                     target_texture,
-                    view_target,
                     [self.config.width, self.config.height],
                     radius,
-                    timing.as_mut(),
                 );
+            }
         } else if let Some(blur) = &mut self.menu_blur {
             blur.release();
         }

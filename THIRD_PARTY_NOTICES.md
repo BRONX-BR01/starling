@@ -274,3 +274,14 @@ profiles and fixed folders that its launcher screens share.
 ## Horizon Android account profiles and Ely.by
 
 Provider-aware profile selection and Ely.by authentication, refresh, 2FA and session routing are adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606), specifically `launcher/src/account.rs`, `launcher/src/account/ely.rs`, `crates/horizon-client/src/android/login.rs` (behavior reference) and `crates/horizon-client-render/src/auth.rs`. MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors; the repository LICENSE retains the license text. The integration preserves Starling's Microsoft public client and sealed secret store, adds provider-separated keys and offline profile metadata, and uses Starling's existing title widgets rather than the Android launcher's panel.
+
+## Horizon Android performance work
+
+Adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606/crates),
+under the MIT license (the same [LICENSE](LICENSE) as this repository).
+Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+
+- The blurred backdrop a paused menu keeps and draws again in place of the world and the blur
+  (`menu_blur.rs` `keep` and `draw_kept`, `Renderer::draw_kept_menu`, `Game::menu_blur_cache`),
+  from its commit 77b9e17f76 (`menu_blur_cache`, `blit_cached`). Here only a paused single-player
+  game keeps it, and a changed setting forgets it.

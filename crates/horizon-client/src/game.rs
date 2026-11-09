@@ -2546,6 +2546,8 @@ struct Game<'a> {
     /// (game/input_mode.rs).
     input_mode: horizon_client::input_mode::InputMode,
     frames: u64,
+    /// The last frame's blurred menu could be kept (`Game::menu_blur_cache`).
+    menu_blur_kept: bool,
     /// The glint clock and options, read once at the start of each frame
     /// (game/item_draw.rs).
     glint_frame: horizon_client::item_render::GlintFrame,
@@ -14241,6 +14243,10 @@ impl Game<'_> {
         )
     }
     fn apply_settings(&mut self) {
+        // A paused menu's kept blurred frame shows the world as the old settings drew it.
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.forget_menu_blur();
+        }
         // LocalPlayer.refreshChatAbilities: the chat shows what the Chat option allows.
         let abilities = self.chat_abilities();
         self.ui.chat.set_abilities(&self.gui.atlas.font, abilities);
@@ -15719,9 +15725,11 @@ impl Game<'_> {
                 .facts()
                 .get(self.world.block(block[0], block[1], block[2]))
                 .solid_render;
+        let (menu_blur_cache, kept_menu) = self.menu_blur_cache();
         // The cave culling search runs on its worker while the frame is prepared.
         if cave_culling
             && self.title.is_none()
+            && !kept_menu
             && let Some(renderer) = self.renderer.as_mut()
         {
             horizon_client::spans::time("occlusion", || {
@@ -15961,7 +15969,7 @@ impl Game<'_> {
         self.see_through_vertices.clear();
         self.glowing_vertices.get_mut().clear();
         self.shadow_only_vertices.get_mut().clear();
-        if !title {
+        if !title && !kept_menu {
             let (built, static_sections, visible_static_sections, static_stats) =
                 spans::time("entity_geometry", || {
                     self.entity_geometry(camera, alpha, entities)
@@ -16183,6 +16191,7 @@ impl Game<'_> {
                 .boss_overlay
                 .darken_amount(self.clock.fraction() as f32),
             menu_blur: self.menu_blur(),
+            menu_blur_cache,
             post_effects: horizon_client::post_chain::Request {
                 effects: &requested_post_effects,
                 root: &self.options.resources,
@@ -16290,6 +16299,29 @@ impl Game<'_> {
                     || (self.screen == Screen::Win && self.win_screen_pauses())));
         let radius = self.settings.menu_blur as f32;
         (blurred && radius >= 1.0).then_some(radius)
+    }
+    /// Whether this frame's blurred menu may be kept (`Frame::menu_blur_cache`): a paused
+    /// single-player game, whose world does not move under the menu. Then whether the frame
+    /// is drawn from the kept one, without the world: only from the second frame of such a
+    /// menu on, so the first one blurs the world as it is. Any other frame forgets the kept
+    /// one. Adapted from Vasysik/horizon-android (`was_menu_blurred`, `skip_world_for_blur`,
+    /// its commit 77b9e17f76), MIT, copyright (c) 2026 Ludovic Marie and the Horizon
+    /// contributors.
+    fn menu_blur_cache(&mut self) -> (bool, bool) {
+        let radius = self.menu_blur();
+        let keep = radius.is_some() && self.pauses_game() && !self.shows_panorama();
+        let was = std::mem::replace(&mut self.menu_blur_kept, keep);
+        let Some(renderer) = self.renderer.as_mut() else {
+            return (keep, false);
+        };
+        if !keep || !was {
+            renderer.forget_menu_blur();
+            return (keep, false);
+        }
+        (
+            keep,
+            radius.is_some_and(|r| renderer.has_menu_blur_cache(r)),
+        )
     }
     /// `LevelExtractor` / `LevelRenderer`: the world border wall this frame.
     fn border_draw(
@@ -19040,6 +19072,7 @@ impl<'a> Game<'a> {
             touch: Default::default(),
             input_mode: horizon_client::input_mode::InputMode::first(cfg!(target_os = "android")),
             frames: 0,
+            menu_blur_kept: false,
             glint_frame: Default::default(),
             kept_block_entities: Default::default(),
             item_level_cache: Default::default(),
@@ -20906,6 +20939,7 @@ fn loading_frame(hud: &HudBatch) -> Frame<'_> {
         chunk_fade: 0.0,
         post_effects: horizon_client::post_chain::Request::none(),
         menu_blur: None,
+        menu_blur_cache: false,
     }
 }
 
