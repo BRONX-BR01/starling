@@ -205,6 +205,7 @@ impl Game<'_> {
         let ui = &mut self.ui.options;
         // The game puts the skin on (game/own_skin.rs).
         ui.skin_page = true;
+        ui.profile_name = horizon_client::accounts::player_name();
         ui.offer_catalog();
         ui.open_at(!from_title && self.title.is_none(), page);
         ui.minecart_improvements = minecart_improvements;

@@ -3,12 +3,14 @@ import hashlib
 import http.client
 import http.server
 import importlib.util
+import io
 import json
 import os
 import tempfile
 import threading
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -173,6 +175,59 @@ class FakeService(http.server.BaseHTTPRequestHandler):
 JOB = "0123456789abcdef01234567"
 
 
+class FakeGitHub(http.server.BaseHTTPRequestHandler):
+    """The mod-builds repository as the gateway sees it. The runs are set by the test."""
+
+    dispatched = []
+    runs = []
+    artifact = b""
+    token_at_the_blob = None
+
+    def log_message(self, *args):
+        pass
+
+    def send(self, value, code=200):
+        data = json.dumps(value).encode() if value is not None else b""
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_POST(self):
+        size = int(self.headers.get("Content-Length") or 0)
+        type(self).dispatched.append(json.loads(self.rfile.read(size))["inputs"])
+        self.send(None, 204)
+
+    def do_GET(self):
+        cls = type(self)
+        port = self.server.server_address[1]
+        if "/runs?" in self.path:
+            self.send({"workflow_runs": cls.runs})
+        elif self.path.endswith("/artifacts"):
+            url = f"http://127.0.0.1:{port}/artifact"
+            self.send({"artifacts": [{"name": "result", "archive_download_url": url}]})
+        elif self.path == "/artifact":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{port}/blob")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        else:
+            cls.token_at_the_blob = self.headers.get("Authorization")
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(cls.artifact)))
+            self.end_headers()
+            self.wfile.write(cls.artifact)
+
+
+def result_zip(status, library=None):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("status.json", json.dumps(status))
+        if library is not None:
+            z.writestr("libhorizon_android.so", library)
+    return buffer.getvalue()
+
+
 class Stored(unittest.TestCase):
     """Through real sockets: the gateway in front of a fake service."""
 
@@ -316,6 +371,207 @@ class Stored(unittest.TestCase):
         self.assertIsNone(gateway.kept_status(JOB))
         gateway.keep_result(JOB, {"sha256": "", "size": 0})
         self.assertEqual(gateway.copying, {})
+
+
+class OnGitHub(unittest.TestCase):
+    """Through real sockets: the gateway between a fake service, which must stay out of it, and a
+    fake GitHub."""
+
+    LIBRARY = b"a game built on GitHub" * 100
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        secrets_folder = Path(self.folder.name) / "credentials"
+        secrets_folder.mkdir()
+        (secrets_folder / "github-token").write_text("a-token\n")
+        store = Path(self.folder.name) / "store"
+        store.mkdir()
+        self.fake = type("Fake", (FakeService,), {"asked": 0})
+        self.service = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self.fake)
+        threading.Thread(target=self.service.serve_forever, daemon=True).start()
+        self.addCleanup(self.service.server_close)
+        self.addCleanup(self.service.shutdown)
+        self.github = type("GitHub", (FakeGitHub,), {"dispatched": [], "runs": [], "artifact": b""})
+        self.github_server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self.github)
+        threading.Thread(target=self.github_server.serve_forever, daemon=True).start()
+        self.addCleanup(self.github_server.server_close)
+        self.addCleanup(self.github_server.shutdown)
+        self.env = dict(
+            BUILD_BACKEND=f"http://127.0.0.1:{self.service.server_address[1]}",
+            STATE_DIRECTORY=str(store),
+            GATEWAY_PUBLIC_URL="https://gateway.example",
+            GITHUB_API=f"http://127.0.0.1:{self.github_server.server_address[1]}",
+            CREDENTIALS_DIRECTORY=str(secrets_folder),
+        )
+        patcher = mock.patch.dict(os.environ, {"CREDENTIALS_DIRECTORY": str(secrets_folder)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.start_gateway()
+
+    def start_gateway(self):
+        self.gateway = load(**self.env)
+        self.gateway.MIN_FREE_BYTES = 0
+        self.gateway.power = mock.Mock(return_value=True)
+        self.door = http.server.ThreadingHTTPServer(("127.0.0.1", 0), self.gateway.Handler)
+        threading.Thread(target=self.door.serve_forever, daemon=True).start()
+        self.addCleanup(self.door.server_close)
+        self.addCleanup(self.door.shutdown)
+
+    def call(self, method, path, body=None):
+        c = http.client.HTTPConnection("127.0.0.1", self.door.server_address[1], timeout=20)
+        c.request(method, path, body)
+        response = c.getresponse()
+        return response.status, response.read()
+
+    def ask(self, body=b"mods", via="&via=github"):
+        status, data = self.call("POST", f"/v1/build?version=0.8.0{via}", body)
+        return status, json.loads(data)
+
+    def poll(self, job):
+        return json.loads(self.call("GET", f"/v1/job/{job}")[1])
+
+    def run_is(self, status, conclusion=None):
+        ask = self.github.dispatched[-1]["ask"]
+        self.github.runs = [
+            {
+                "id": 7,
+                "display_title": f"build {ask}",
+                "status": status,
+                "conclusion": conclusion,
+                "run_started_at": "2026-11-09T12:00:00Z",
+            }
+        ]
+
+    def finished_run(self, job):
+        """Asked for, run and done: the library is here."""
+        library = self.LIBRARY
+        self.github.artifact = result_zip(
+            {
+                "state": "done",
+                "sha256": hashlib.sha256(library).hexdigest(),
+                "size": len(library),
+                "build": {"version": "0.8.0"},
+            },
+            library,
+        )
+        self.gateway.github_round()
+        self.run_is("completed", "success")
+        self.gateway.github_round()
+        return self.poll(job)
+
+    def test_without_the_token_the_door_is_shut_and_the_machine_stays_out_of_it(self):
+        (Path(self.env["CREDENTIALS_DIRECTORY"]) / "github-token").unlink()
+        status, data = self.ask()
+        self.assertEqual(status, 429)
+        self.assertIn("GitHub", data["error"])
+        self.assertEqual(self.fake.asked, 0)
+        self.gateway.power.assert_not_called()
+
+    def test_a_build_from_the_asking_to_the_library(self):
+        status, data = self.ask()
+        self.assertEqual(status, 200)
+        job = data["job"]
+        self.assertEqual(self.poll(job), {"state": "queued", "ahead": 0})
+        self.gateway.github_round()
+        inputs = self.github.dispatched[0]
+        self.assertEqual(inputs["version"], "0.8.0")
+        self.assertEqual(inputs["gateway"], "https://gateway.example")
+        # The runner fetches the mods by a name it was given.
+        self.assertEqual(self.call("GET", f"/v1/github/{inputs['ask']}")[1], b"mods")
+        self.assertEqual(self.call("GET", "/v1/github/" + "0" * 32)[0], 404)
+        self.run_is("in_progress")
+        self.gateway.github_round()
+        self.assertEqual(self.poll(job)["state"], "building")
+        self.assertEqual(self.call("GET", f"/v1/job/{job}/lib")[0], 404)
+        done = self.finished_run(job)
+        self.assertEqual(done["state"], "done")
+        self.assertEqual(self.call("GET", f"/v1/job/{job}/lib")[1], self.LIBRARY)
+        # The token stayed at GitHub, the mods are gone, and the machine never woke.
+        self.assertIsNone(self.github.token_at_the_blob)
+        self.assertEqual(self.call("GET", f"/v1/github/{inputs['ask']}")[0], 404)
+        self.assertEqual(self.fake.asked, 0)
+        self.gateway.power.assert_not_called()
+
+    def test_what_github_built_answers_both_ways_of_asking_with_no_build(self):
+        job = self.ask()[1]["job"]
+        self.finished_run(job)
+        self.assertEqual(self.ask()[1]["job"], job)
+        self.assertEqual(self.ask(via="")[1]["job"], job)
+        self.assertEqual(len(self.github.dispatched), 1)
+        self.assertEqual(self.fake.asked, 0)
+
+    def test_asking_twice_while_it_builds_is_one_build(self):
+        job = self.ask()[1]["job"]
+        self.gateway.github_round()
+        self.assertEqual(self.ask()[1]["job"], job)
+        self.gateway.github_round()
+        self.assertEqual(len(self.github.dispatched), 1)
+
+    def test_the_mods_own_fault_is_remembered_without_building_again(self):
+        job = self.ask()[1]["job"]
+        self.github.artifact = result_zip(
+            {"state": "failed", "error": "does not fit (E_X): no", "settled": True}
+        )
+        self.gateway.github_round()
+        self.run_is("completed", "success")
+        self.gateway.github_round()
+        self.assertEqual(self.poll(job)["error"], "does not fit (E_X): no")
+        self.assertEqual(self.ask()[1]["job"], job)
+        self.gateway.github_round()
+        self.assertEqual(len(self.github.dispatched), 1)
+
+    def test_a_run_that_breaks_is_told_and_asking_again_builds_again(self):
+        job = self.ask()[1]["job"]
+        self.gateway.github_round()
+        self.run_is("completed", "failure")
+        self.gateway.github_round()
+        failed = self.poll(job)
+        self.assertEqual(failed["state"], "failed")
+        self.assertFalse(failed["settled"])
+        self.assertEqual(self.ask()[1]["job"], job)
+        self.gateway.github_round()
+        self.assertEqual(len(self.github.dispatched), 2)
+        self.assertNotEqual(self.github.dispatched[0]["ask"], self.github.dispatched[1]["ask"])
+
+    def test_a_library_that_differs_from_what_the_run_said_is_not_kept(self):
+        job = self.ask()[1]["job"]
+        self.github.artifact = result_zip(
+            {"state": "done", "sha256": "0" * 64, "size": len(self.LIBRARY), "build": {}},
+            self.LIBRARY,
+        )
+        self.gateway.github_round()
+        self.run_is("completed", "success")
+        self.gateway.github_round()
+        self.assertEqual(self.poll(job)["state"], "failed")
+        self.assertEqual(self.call("GET", f"/v1/job/{job}/lib")[0], 404)
+
+    def test_a_few_run_at_once_and_the_rest_know_their_place(self):
+        self.gateway.GITHUB_AT_ONCE = 1
+        first = self.ask(b"first")[1]["job"]
+        second = self.ask(b"second")[1]["job"]
+        third = self.ask(b"third")[1]["job"]
+        self.gateway.github_round()
+        self.assertEqual(len(self.github.dispatched), 1)
+        self.assertEqual(self.poll(first), {"state": "queued", "ahead": 0})
+        self.assertEqual(self.poll(second), {"state": "queued", "ahead": 0})
+        self.assertEqual(self.poll(third), {"state": "queued", "ahead": 1})
+
+    def test_an_address_has_a_limit_of_its_own_here(self):
+        self.gateway.GITHUB_PER_ADDRESS = 2
+        self.assertEqual(self.ask(b"one")[0], 200)
+        self.assertEqual(self.ask(b"two")[0], 200)
+        status, data = self.ask(b"three")
+        self.assertEqual(status, 429)
+        self.assertEqual(data["error"], self.gateway.YOUR_LIMIT)
+
+    def test_a_build_under_way_is_still_followed_after_a_restart(self):
+        job = self.ask()[1]["job"]
+        self.gateway.github_round()
+        self.start_gateway()
+        self.gateway.load_index()
+        self.assertEqual(self.poll(job)["state"], "queued")
+        self.assertEqual(self.finished_run(job)["state"], "done")
 
 
 if __name__ == "__main__":

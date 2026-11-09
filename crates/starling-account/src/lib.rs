@@ -14,8 +14,21 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+pub mod ely;
 pub mod files;
 pub mod java;
+mod profiles;
+pub use profiles::{
+    Player, activate_profile, add_offline, add_offline_if, keep_ely, remove_profile,
+    remove_profile_if, select_profile, select_profile_if, valid_offline_name,
+};
+
+static ACCOUNT_LOCK: Mutex<()> = Mutex::new(());
+fn account_lock() -> std::sync::MutexGuard<'static, ()> {
+    ACCOUNT_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 /// Starling's Azure app (a public client: its ID is no secret).
 pub const CLIENT_ID: &str = "f2719b6f-5617-4631-b2d7-a21defa191fc";
@@ -345,7 +358,12 @@ struct Minecraft {
     xuid: Option<String>,
 }
 
-fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String> {
+fn minecraft_login_progress(
+    ep: &Endpoints,
+    ms_access: &str,
+    progress: &dyn Fn(SignInStage),
+) -> Result<Minecraft, String> {
+    progress(SignInStage::Xbox);
     let (status, xbl) = send(
         agent().post(&ep.xbox_user),
         Some(Body::Json(json!({
@@ -362,6 +380,7 @@ fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String>
     let xbl_token = str_field(&xbl, "Token")
         .filter(|_| status == 200)
         .ok_or("Xbox Live refused the sign-in.")?;
+    progress(SignInStage::XboxSecurity);
     let (status, xsts) = send(
         agent().post(&ep.xsts),
         Some(Body::Json(json!({
@@ -382,6 +401,7 @@ fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String>
         return Err("Xbox Live refused the sign-in.".into());
     };
     let xuid = claims.and_then(|c| str_field(c, "xid"));
+    progress(SignInStage::Minecraft);
     let (status, mc) = send(
         agent().post(&format!("{}/authentication/login_with_xbox", ep.minecraft)),
         Some(Body::Json(
@@ -436,9 +456,20 @@ fn owns_game(ep: &Endpoints, token: &str) -> Result<bool, String> {
         }))
 }
 
+/// Provider is persisted explicitly; legacy account files default to Microsoft.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Provider {
+    #[default]
+    Microsoft,
+    Ely,
+}
+
 /// A Minecraft profile, as the game shows and remembers it (no secrets).
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Account {
+    #[serde(default)]
+    pub provider: Provider,
     /// The profile UUID without dashes.
     pub uuid: String,
     pub name: String,
@@ -450,6 +481,12 @@ pub struct Account {
 }
 
 impl Account {
+    pub fn key(&self) -> String {
+        match self.provider {
+            Provider::Microsoft => self.uuid.clone(),
+            Provider::Ely => format!("ely{}", self.uuid),
+        }
+    }
     /// The UUID as a number, as the game keeps a player's.
     pub fn uuid_u128(&self) -> Option<u128> {
         u128::from_str_radix(&self.uuid, 16).ok()
@@ -481,6 +518,7 @@ fn profile(ep: &Endpoints, token: &str) -> Result<Account, String> {
             .cloned()
     };
     Ok(Account {
+        provider: Provider::Microsoft,
         uuid: uuid.replace('-', "").to_lowercase(),
         name,
         skin: active("skins").and_then(|s| {
@@ -498,6 +536,8 @@ fn profile(ep: &Endpoints, token: &str) -> Result<Account, String> {
 /// What the secret store keeps for one account.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Secrets {
+    #[serde(default)]
+    provider: Provider,
     refresh_token: String,
     minecraft_token: String,
     minecraft_expires_at: u64,
@@ -526,14 +566,24 @@ impl Secrets {
 
 /// From Microsoft tokens to a ready account: Xbox, XSTS, Minecraft, ownership, profile.
 pub fn finish_sign_in(ep: &Endpoints, ms: MsTokens) -> Result<(Account, Secrets), String> {
-    let mc = minecraft_login(ep, &ms.access)?;
+    finish_sign_in_progress(ep, ms, &|_| {})
+}
+fn finish_sign_in_progress(
+    ep: &Endpoints,
+    ms: MsTokens,
+    progress: &dyn Fn(SignInStage),
+) -> Result<(Account, Secrets), String> {
+    let mc = minecraft_login_progress(ep, &ms.access, progress)?;
+    progress(SignInStage::Ownership);
     if !owns_game(ep, &mc.token)? {
         return Err("This account doesn't own Minecraft: Java Edition.".into());
     }
+    progress(SignInStage::Profile);
     let account = profile(ep, &mc.token)?;
     Ok((
         account,
         Secrets {
+            provider: Provider::Microsoft,
             refresh_token: ms.refresh,
             minecraft_token: mc.token,
             minecraft_expires_at: mc.expires_at,
@@ -550,6 +600,12 @@ pub fn fresh(
     account: &Account,
     secrets: Secrets,
 ) -> Result<(Account, Secrets), String> {
+    if account.provider != secrets.provider {
+        return Err("starling.account.error.provider_mismatch".into());
+    }
+    if account.provider == Provider::Ely {
+        return ely::fresh(account, secrets);
+    }
     if secrets.minecraft_expires_at > now() + RENEW_BEFORE {
         return Ok((account.clone(), secrets));
     }
@@ -602,6 +658,10 @@ pub struct Accounts {
     pub accounts: Vec<Account>,
     /// The UUID of the account the game plays as; none plays offline.
     pub selected: Option<String>,
+    #[serde(default)]
+    pub offline: Vec<String>,
+    #[serde(default)]
+    pub offline_selected: Option<String>,
 }
 
 impl Accounts {
@@ -617,11 +677,13 @@ impl Accounts {
     pub fn save(&self, dir: &Path) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let text = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        std::fs::write(Self::path(dir), text + "\n").map_err(|e| e.to_string())
+        let part = dir.join("accounts.json.part");
+        std::fs::write(&part, text + "\n").map_err(|e| e.to_string())?;
+        std::fs::rename(part, Self::path(dir)).map_err(|e| e.to_string())
     }
     pub fn selected(&self) -> Option<&Account> {
         let uuid = self.selected.as_ref()?;
-        self.accounts.iter().find(|a| &a.uuid == uuid)
+        self.accounts.iter().find(|a| &a.key() == uuid)
     }
     /// Find an account by name (any case) or UUID (with or without dashes).
     pub fn find(&self, who: &str) -> Option<&Account> {
@@ -637,12 +699,16 @@ impl Accounts {
         account: Account,
         secrets: &Secrets,
     ) -> Result<(), String> {
+        if account.provider != secrets.provider {
+            return Err("starling.account.error.provider_mismatch".into());
+        }
         store.set(
-            &account.uuid,
+            &account.key(),
             &serde_json::to_string(secrets).map_err(|e| e.to_string())?,
         )?;
-        self.selected = Some(account.uuid.clone());
-        match self.accounts.iter_mut().find(|a| a.uuid == account.uuid) {
+        self.selected = Some(account.key());
+        self.offline_selected = None;
+        match self.accounts.iter_mut().find(|a| a.key() == account.key()) {
             Some(a) => *a = account,
             None => self.accounts.push(account),
         }
@@ -651,7 +717,7 @@ impl Accounts {
     /// Sign out: the secrets leave the store, the account the list.
     pub fn remove(&mut self, store: &dyn SecretStore, uuid: &str) -> Result<(), String> {
         store.delete(uuid)?;
-        self.accounts.retain(|a| a.uuid != uuid);
+        self.accounts.retain(|a| a.key() != uuid);
         if self.selected.as_deref() == Some(uuid) {
             self.selected = None;
         }
@@ -666,12 +732,13 @@ pub fn session(
     store: &dyn SecretStore,
     dir: &Path,
 ) -> Result<Option<(Account, Secrets)>, String> {
+    let _lock = account_lock();
     let mut accounts = Accounts::load(dir);
     let Some(account) = accounts.selected().cloned() else {
         return Ok(None);
     };
     let secrets: Secrets = store
-        .get(&account.uuid)?
+        .get(&account.key())?
         .and_then(|s| serde_json::from_str(&s).ok())
         .ok_or_else(|| {
             format!(
@@ -679,7 +746,11 @@ pub fn session(
                 account.name
             )
         })?;
-    let client_id = client_id().ok_or("Microsoft sign-in has no app configured.")?;
+    let client_id = if account.provider == Provider::Microsoft {
+        client_id().ok_or("Microsoft sign-in has no app configured.")?
+    } else {
+        String::new()
+    };
     let before = secrets.minecraft_token.clone();
     let (renewed, secrets) = fresh(ep, &client_id, &account, secrets)?;
     if renewed != account || secrets.minecraft_token != before {
@@ -691,6 +762,7 @@ pub fn session(
 
 /// Sign out the selected account (its secrets leave the store): the game plays offline.
 pub fn sign_out(store: &dyn SecretStore, dir: &Path) -> Result<(), String> {
+    let _lock = account_lock();
     let mut accounts = Accounts::load(dir);
     if let Some(uuid) = accounts.selected.clone() {
         accounts.remove(store, &uuid)?;
@@ -699,10 +771,34 @@ pub fn sign_out(store: &dyn SecretStore, dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Network stages after the browser authorizes Microsoft sign-in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignInStage {
+    Xbox,
+    XboxSecurity,
+    Minecraft,
+    Ownership,
+    Profile,
+    Saving,
+}
+impl SignInStage {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Xbox => "starling.account.progress.xbox",
+            Self::XboxSecurity => "starling.account.progress.xbox_security",
+            Self::Minecraft => "starling.account.progress.minecraft",
+            Self::Ownership => "starling.account.progress.ownership",
+            Self::Profile => "starling.account.progress.profile",
+            Self::Saving => "starling.account.progress.saving",
+        }
+    }
+}
+
 /// Where a background sign-in is (the game's account screen shows it).
 #[derive(Clone, Debug)]
 pub enum SignInState {
     Starting,
+    Progress(SignInStage),
     /// Waiting for the player at `verification_uri` with `user_code`.
     Code(DeviceCode),
     Done(Result<Account, String>),
@@ -717,9 +813,21 @@ pub struct SignIn {
 impl SignIn {
     /// Signs in against `ep`, keeping the account in `dir` and its secrets in `store`.
     pub fn start(ep: Endpoints, store: Arc<dyn SecretStore>, dir: PathBuf) -> Self {
+        Self::start_cancellable(
+            ep,
+            store,
+            dir,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+    }
+    pub fn start_cancellable(
+        ep: Endpoints,
+        store: Arc<dyn SecretStore>,
+        dir: PathBuf,
+        cancel: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
         use std::sync::atomic::Ordering;
         let state = Arc::new(Mutex::new(SignInState::Starting));
-        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (thread_state, thread_cancel) = (state.clone(), cancel.clone());
         std::thread::spawn(move || {
             let set = |s| *thread_state.lock().unwrap() = s;
@@ -731,8 +839,19 @@ impl SignIn {
                 let ms = wait_for_sign_in(&ep, &client_id, &code, &cancelled)?;
                 // The player may still be in the browser: Xbox, XSTS and Minecraft too are asked
                 // again while the network fails.
-                let (account, secrets) =
-                    while_unreachable(|| finish_sign_in(&ep, ms.clone()), &cancelled)?;
+                let (account, secrets) = while_unreachable(
+                    || {
+                        finish_sign_in_progress(&ep, ms.clone(), &|stage| {
+                            set(SignInState::Progress(stage))
+                        })
+                    },
+                    &cancelled,
+                )?;
+                set(SignInState::Progress(SignInStage::Saving));
+                let _lock = account_lock();
+                if cancelled() {
+                    return Err("starling.account.error.sign_in_cancelled".into());
+                }
                 let mut accounts = Accounts::load(&dir);
                 accounts.add(store.as_ref(), account.clone(), &secrets)?;
                 accounts.save(&dir)?;

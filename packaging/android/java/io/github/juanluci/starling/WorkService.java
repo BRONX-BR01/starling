@@ -47,7 +47,10 @@ public final class WorkService extends Service {
                     context.startService(intent);
                 }
             } else {
-                context.stopService(intent);
+                // A quick operation can end before onStartCommand runs. Let that command
+                // enter the foreground before stopping: stopService here can leave Android's
+                // pending startForegroundService deadline armed and kill the whole game.
+                context.startService(intent);
             }
         } catch (RuntimeException e) {
             // Android refused (started from the background): the wait goes on without it.
@@ -93,6 +96,14 @@ public final class WorkService extends Service {
             }
         } catch (RuntimeException e) {
             stopSelf();
+            return START_NOT_STICKY;
+        }
+        synchronized (REASONS) {
+            if (REASONS.isEmpty()) {
+                stopForeground(true);
+                // A later request must not be stopped by this command's completion.
+                stopSelfResult(startId);
+            }
         }
         return START_NOT_STICKY;
     }

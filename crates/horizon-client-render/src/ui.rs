@@ -1116,7 +1116,7 @@ pub struct EditBox {
 /// The focused text field of a screen that keeps its values as `String`s
 /// (the world list's search, world names, seeds, and the server screens): the `EditBox` state that
 /// outlives a frame, its cursor, selection and scroll.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Caret {
     field: Option<crate::clipboard::FieldId>,
     edit: EditBox,
@@ -1135,7 +1135,40 @@ impl Default for Caret {
         }
     }
 }
+impl std::fmt::Debug for Caret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Caret")
+            .field("field", &self.field)
+            .field("text", &"<hidden>")
+            .finish()
+    }
+}
 impl Caret {
+    /// Draw only a masked copy; editing retains the original text and cursor.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_password(
+        &mut self,
+        batch: &mut HudBatch,
+        atlas: &HudAtlas,
+        (id, value, max): (crate::clipboard::FieldId, &str, usize),
+        rect: [f32; 4],
+        focused: bool,
+        focused_at: Instant,
+    ) {
+        let mut masked = if focused {
+            self.sync(id, value, max).clone()
+        } else {
+            let mut idle = EditBox::new(0.0, 0.0, 0.0, 0.0);
+            idle.max_length = max;
+            idle.set_value(value);
+            idle
+        };
+        masked.value = "*".repeat(value.chars().count());
+        [masked.x, masked.y, masked.width, masked.height] = rect;
+        masked.focused = focused;
+        masked.focused_at = focused_at;
+        masked.draw(batch, atlas, None);
+    }
     /// The box for field `id` holding `value`. A field newly focused, or
     /// whose value changed elsewhere, starts with its cursor at the end.
     fn sync(&mut self, id: crate::clipboard::FieldId, value: &str, max: usize) -> &mut EditBox {
@@ -1185,6 +1218,32 @@ impl Caret {
         });
     }
     /// The pointer moved with the button held after a press on field `id`.
+    pub fn press_password(
+        &mut self,
+        atlas: &HudAtlas,
+        (id, value, max): (crate::clipboard::FieldId, &mut String, usize),
+        rect: [f32; 4],
+        x: f32,
+        shift: bool,
+    ) {
+        let mut mask = "*".repeat(value.chars().count());
+        self.press(atlas, (id, &mut mask, max), rect, x, shift);
+        self.edit.value.clone_from(value);
+    }
+    pub fn drag_password(
+        &mut self,
+        atlas: &HudAtlas,
+        (id, value, max): (crate::clipboard::FieldId, &mut String, usize),
+        x: f32,
+    ) {
+        if !self.held || self.last_click.is_none_or(|(_, field)| field != id) {
+            return;
+        }
+        let mut mask = "*".repeat(value.chars().count());
+        self.edit.value.clone_from(&mask);
+        self.drag(atlas, (id, &mut mask, max), x);
+        self.edit.value.clone_from(value);
+    }
     pub fn drag(
         &mut self,
         atlas: &HudAtlas,
@@ -1416,8 +1475,16 @@ impl EditBox {
     }
     /// EditBox.insertText: replace the selection, respecting the maximum length.
     pub fn insert_text(&mut self, text: &str) {
-        let (a, b) = self.selected();
         let filtered = crate::clipboard::filter_text(text, self.multiline);
+        self.insert_filtered(&filtered);
+    }
+    /// Passwords are not Minecraft chat: a section sign is a legal credential.
+    pub fn insert_password(&mut self, text: &str) {
+        let filtered: String = text.chars().filter(|c| !c.is_control()).collect();
+        self.insert_filtered(&filtered);
+    }
+    fn insert_filtered(&mut self, filtered: &str) {
+        let (a, b) = self.selected();
         let room = self
             .max_length
             .saturating_sub(char_len(&self.value) - (b - a));

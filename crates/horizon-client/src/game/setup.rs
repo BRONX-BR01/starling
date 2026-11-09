@@ -4,7 +4,9 @@
 //! (preparer.rs); or the resources prepared on a computer, picked as before. Drawn with the
 //! embedded Horizon font: the game's own is part of what is missing. While it waits, water to fish in (fishing.rs), and the
 //! game's settings, drawn in the low-budget skin the app carries (packaging/lowbudget).
+mod account_form;
 pub(super) mod fishing;
+use account_form::{Form, Kind};
 
 use super::{Audio, Loading, UiResources};
 use horizon_client::{
@@ -32,8 +34,10 @@ enum Step {
     Start,
     /// Play offline chosen: whether the player is sure (most servers need a sign-in).
     Offline,
-    /// Asking Microsoft (or renewing the saved sign-in).
-    Talking,
+    /// The active provider's request or saved sign-in renewal.
+    Talking(String),
+    AccountForm,
+
     /// The player signs in elsewhere with `code`.
     Code {
         code: String,
@@ -71,6 +75,12 @@ enum Action {
     #[cfg(target_os = "android")]
     HorizonDone,
     SignIn,
+    Ely,
+    AccountBack,
+    SubmitForm,
+    Register,
+    Reveal,
+    CancelSignIn,
     /// Play offline: asks first, then the files are fetched without a sign-in.
     Offline,
     PlayOffline,
@@ -107,6 +117,12 @@ pub(super) struct Setup {
     horizon_picked: bool,
     /// Play offline tapped: the question shows.
     offline_asked: bool,
+    form: Option<Form>,
+    provider: Option<Kind>,
+    dismiss_signin_error: bool,
+    cancelled: bool,
+    offline_saved: bool,
+    held: std::collections::HashSet<winit::keyboard::KeyCode>,
     /// Prepared once already: what it made did not load either (the failure says why), so it is
     /// not prepared again unasked.
     prepared: bool,
@@ -114,7 +130,7 @@ pub(super) struct Setup {
     /// screen without it draws every letter as an empty box).
     pub(super) starting: bool,
     /// The buttons as last drawn (dp): rectangle and what it does.
-    buttons: Cell<[Option<([f32; 4], Action)>; 4]>,
+    buttons: Cell<[Option<([f32; 4], Action)>; 5]>,
     fishing: fishing::Fishing,
     /// The water as last drawn (dp), while there is a wait to pass.
     pond: Cell<Option<[f32; 4]>>,
@@ -165,10 +181,30 @@ fn step(setup: &Setup, failure: &str) -> Step {
         Files::Ready => return Step::Java(0, 0),
         Files::Missing => {}
     }
-    match accounts::state() {
+    if setup.form.is_some() {
+        return Step::AccountForm;
+    }
+    account_step(setup, accounts::state())
+}
+fn account_step(setup: &Setup, state: State) -> Step {
+    if setup.offline_asked {
+        return Step::Offline;
+    }
+    if setup.cancelled
+        && matches!(
+            state,
+            State::Offline | State::OfflineProfile(_) | State::SignedIn(_)
+        )
+    {
+        return Step::Start;
+    }
+    match state {
+        State::Failed(_) if setup.dismiss_signin_error => Step::Start,
         // Play offline tapped, at the start or after a failed sign-in: the question.
-        State::Offline | State::Failed(_) if setup.offline_asked => Step::Offline,
-        State::Offline => {
+        State::Offline | State::OfflineProfile(_) | State::Failed(_) if setup.offline_asked => {
+            Step::Offline
+        }
+        State::Offline | State::OfflineProfile(_) => {
             #[cfg(target_os = "android")]
             if let Some(stage) = folder_offer(setup) {
                 return Step::Folder(stage);
@@ -180,9 +216,20 @@ fn step(setup: &Setup, failure: &str) -> Step {
             }
             Step::Start
         }
-        State::Resuming | State::Starting | State::SignedIn(_) => Step::Talking,
+        State::Resuming => Step::Talking(tr("restoring")),
+        State::Starting => Step::Talking(tr(if setup.provider == Some(Kind::Ely) {
+            "ely_working"
+        } else {
+            "requesting_code"
+        })),
+        State::Progress(stage) => Step::Talking(horizon_client::lang::get(stage.key())),
+        State::SignedIn(_) => Step::Talking(tr("setup.preparing")),
         State::Code { code, link } => Step::Code { code, link },
-        State::Failed(e) => Step::SignInFailed(e),
+        State::Failed(e) => Step::SignInFailed(if e.starts_with("starling.account.") {
+            horizon_client::lang::get(&e)
+        } else {
+            e
+        }),
     }
 }
 
@@ -259,14 +306,7 @@ fn texts(step: &Step) -> (&'static str, String, Option<String>) {
                 .into(),
             None,
         ),
-        Step::Start => (
-            "Set up Starling",
-            "Sign in with the Microsoft account that owns Minecraft: Java Edition, or play \
-             offline: Starling downloads the game from Mojang and prepares it on this phone, once \
-             (about 1.5 GB, a few minutes)."
-                .into(),
-            None,
-        ),
+        Step::Start => ("Set up Starling", tr("setup.intro"), None),
         Step::Offline => (
             "Are you sure?",
             "You will not be able to play on most servers! We highly recommend signing in with \
@@ -274,11 +314,12 @@ fn texts(step: &Step) -> (&'static str, String, Option<String>) {
                 .into(),
             None,
         ),
-        Step::Talking => ("Set up Starling", "Talking to Microsoft...".into(), None),
+        Step::Talking(message) => ("Set up Starling", message.clone(), None),
+        Step::AccountForm => ("Set up Starling", String::new(), None),
         Step::Code { link, .. } => (
             "Sign in with Microsoft",
             format!("On {link}, enter this code:"),
-            Some("Starling goes on by itself once you have signed in.".into()),
+            Some(tr("waiting_browser")),
         ),
         Step::Download([files, files_total, bytes, bytes_total]) => (
             "Downloading the game",
@@ -324,61 +365,61 @@ fn fraction(step: &Step) -> Option<f32> {
 }
 
 /// The buttons, the main one first (drawn on the right).
-fn buttons(step: &Step) -> [Option<(&'static str, Action)>; 3] {
+fn buttons(step: &Step) -> Vec<(String, Action)> {
+    let literal = |text: &str, action| (text.to_owned(), action);
     match step {
         #[cfg(target_os = "android")]
         Step::Folder(stage) => {
             let [_, _, primary, other] = super::files_offer::texts(*stage);
-            [
-                Some((primary, Action::Folder)),
-                Some((other, Action::FolderLater)),
-                None,
+            vec![
+                literal(primary, Action::Folder),
+                literal(other, Action::FolderLater),
             ]
         }
         #[cfg(target_os = "android")]
-        Step::Horizon(false) => [
-            Some(("Bring them over", Action::Horizon)),
-            Some(("Skip", Action::HorizonDone)),
-            None,
+        Step::Horizon(false) => vec![
+            literal("Bring them over", Action::Horizon),
+            literal("Skip", Action::HorizonDone),
         ],
         #[cfg(target_os = "android")]
-        Step::Horizon(true) => [
-            Some(("Next", Action::HorizonDone)),
-            Some(("Pick the folder again", Action::Horizon)),
-            None,
+        Step::Horizon(true) => vec![
+            literal("Next", Action::HorizonDone),
+            literal("Pick the folder again", Action::Horizon),
         ],
-        Step::Start => [
-            Some(("Sign in with Microsoft", Action::SignIn)),
-            Some(("Play offline", Action::Offline)),
-            Some(("Files from a computer", Action::Pick)),
+        Step::Start => vec![
+            (tr("setup.microsoft"), Action::SignIn),
+            (tr("setup.ely_title"), Action::Ely),
+            (tr("setup.offline_title"), Action::Offline),
+            (tr("setup.import"), Action::Pick),
         ],
-        Step::Offline => [
-            Some(("Sign in with Microsoft", Action::SignIn)),
-            Some(("Play offline", Action::PlayOffline)),
-            Some(("Back", Action::NotOffline)),
+        Step::Offline => vec![
+            (tr("setup.offline_title"), Action::PlayOffline),
+            (tr("back"), Action::NotOffline),
         ],
-        Step::Code { .. } => [
-            Some(("Open the page", Action::OpenLink)),
-            Some(("Copy the code", Action::CopyCode)),
-            None,
+        Step::Code { .. } => vec![
+            (tr("open"), Action::OpenLink),
+            (tr("copy"), Action::CopyCode),
+            (tr("cancel"), Action::CancelSignIn),
         ],
-        Step::Failed(_) => [
-            Some(("Try again", Action::Retry)),
-            Some(("Files from a computer", Action::Pick)),
-            None,
+        Step::Talking(_) => vec![(tr("cancel"), Action::CancelSignIn)],
+        Step::Failed(_) => vec![
+            literal("Try again", Action::Retry),
+            (tr("setup.import"), Action::Pick),
         ],
-        Step::SignInFailed(_) => [
-            Some(("Try again", Action::Retry)),
-            Some(("Play offline", Action::Offline)),
-            Some(("Files from a computer", Action::Pick)),
+        Step::SignInFailed(_) => vec![
+            literal("Try again", Action::Retry),
+            (tr("back"), Action::AccountBack),
+            (tr("setup.offline_title"), Action::Offline),
         ],
-        step if waiting(step) => [
-            Some(("Go fishing", Action::Fish)),
-            Some(("Settings", Action::Settings)),
-            None,
+        step if waiting(step) => vec![
+            literal("Go fishing", Action::Fish),
+            literal("Settings", Action::Settings),
         ],
-        _ => [None, None, None],
+        _ => Vec::new(),
     }
+}
+fn tr(key: &str) -> String {
+    horizon_client::lang::get(&format!("starling.account.{key}"))
 }
 
 /// Words of `text` in lines no wider than `max` dp; a word wider than that (a path) is cut where
@@ -421,6 +462,13 @@ impl Loading {
     /// preparing once the files are there, and the game loaded once they are prepared.
     pub(super) fn poll_setup(&mut self) {
         self.setup.fishing.update(Instant::now());
+        if self.setup.form.as_mut().is_some_and(Form::poll) {
+            self.setup_action(Action::SubmitForm);
+        }
+        if self.setup.offline_saved && matches!(accounts::state(), State::OfflineProfile(_)) {
+            self.setup.offline_saved = false;
+            accounts::download_files();
+        }
         // The fishing's sounds, on an output of its own: the game's sounds are not there yet.
         if self.audio.is_none() && self.setup.pond.get().is_some() {
             let mut audio = Audio::with_registry(&self.vanilla_root, Default::default());
@@ -464,7 +512,11 @@ impl Loading {
             (Files::Ready, _) if preparer::stage() == Stage::Idle && !self.setup.prepared => {
                 preparer::start(self.vanilla_root.clone());
             }
-            (Files::Missing, State::SignedIn(_)) => accounts::download_files(),
+            (Files::Missing, State::SignedIn(_))
+                if !self.setup.cancelled && self.setup.form.is_none() =>
+            {
+                accounts::download_files()
+            }
             _ => {}
         }
     }
@@ -475,6 +527,31 @@ impl Loading {
         let (title, body, note) = texts(&step);
         let mut ui = Ui::new(&gui.atlas, batch, (-1.0, -1.0));
         let (w, h) = (ui.w, ui.h);
+        if let Some(form) = &self.setup.form {
+            ui.fill(0., 0., w, h, color::BG);
+            let mut drawn = [None; 5];
+            #[cfg(target_os = "android")]
+            let available_h =
+                (h - horizon_client::android::ime_height() as f32 / ui.density).max(320.);
+            #[cfg(not(target_os = "android"))]
+            let available_h = h;
+            form.draw(&mut ui, &mut drawn, available_h);
+            let rect = [(w - 160.).max(16.), 8., 144., 32.];
+            ui.rounded(rect[0], rect[1], rect[2], rect[3], 8., color::RAISED);
+            ui.text_centered(
+                Face::Semibold,
+                13.,
+                rect[0] + 72.,
+                rect[1] + 8.,
+                color::TEXT,
+                &horizon_client::lang::get("starling.diagnostics.title"),
+            );
+            drawn[4] = Some((rect, Action::Diagnostics));
+            ui.finish();
+            self.setup.buttons.set(drawn);
+            self.setup.pond.set(None);
+            return;
+        }
         let now = Instant::now();
         let pond = (waiting(&step) && self.setup.fishing_open).then_some([0.0, 0.0, w, h]);
         if pond.is_some() {
@@ -484,12 +561,12 @@ impl Loading {
         }
         // Out fishing, the card only says how far it is; Back is in the corner.
         let actions = if pond.is_some() {
-            [None, None, None]
+            Vec::new()
         } else {
             buttons(&step)
         };
         // Wider for three buttons, so "Sign in with Microsoft" fits in a third.
-        let three = actions.iter().all(Option::is_some);
+        let three = actions.len() >= 3;
         let card_w = (w - 48.0).min(if three { 660.0 } else { 520.0 });
         let pad = 24.0;
         let inner = card_w - 2.0 * pad;
@@ -515,8 +592,11 @@ impl Loading {
         if let Some(note) = &note {
             card_h += 8.0 + note.len() as f32 * 18.0;
         }
-        if actions.iter().any(Option::is_some) {
+        if !actions.is_empty() {
             card_h += 22.0 + button_h;
+            if actions.len() > 3 {
+                card_h += button_h + 12.;
+            }
         }
         card_h += pad;
         // With a wait to pass, the card goes up, over the water.
@@ -569,15 +649,22 @@ impl Loading {
                 ty += 18.0;
             }
         }
-        let mut drawn = [None, None, None, None];
-        let shown: Vec<_> = actions.iter().flatten().collect();
+        let mut drawn = [None; 5];
+        let shown: Vec<_> = actions.iter().collect();
         if !shown.is_empty() {
-            let by = y + card_h - pad - button_h;
-            let bw = (inner - 12.0 * (shown.len() - 1) as f32) / shown.len() as f32;
+            let by =
+                y + card_h - pad - button_h - if shown.len() > 3 { button_h + 12. } else { 0. };
+            let columns = if shown.len() > 3 { 2 } else { shown.len() };
+            let bw = (inner - 12.0 * (columns - 1) as f32) / columns as f32;
             for (i, (text, action)) in shown.iter().enumerate() {
                 // The first is the main one, on the right.
-                let bx = x + card_w - pad - bw - (bw + 12.0) * i as f32;
-                let rect = [bx, by, bw, button_h];
+                let bx = x + card_w - pad - bw - (bw + 12.0) * (i % columns) as f32;
+                let rect = [
+                    bx,
+                    by + (i / columns) as f32 * (button_h + 12.),
+                    bw,
+                    button_h,
+                ];
                 let (fill, ink) = if i == 0 {
                     (color::ACCENT, color::ON_ACCENT)
                 } else {
@@ -642,7 +729,7 @@ impl Loading {
             color::TEXT,
             &horizon_client::lang::get("starling.diagnostics.title"),
         );
-        drawn[3] = Some((rect, Action::Diagnostics));
+        drawn[4] = Some((rect, Action::Diagnostics));
         ui.finish();
         self.setup.buttons.set(drawn);
         // Fishing under the card: the card itself takes no cast.
@@ -653,6 +740,46 @@ impl Loading {
         // The inbox's banner over it all, since the setup polls the inbox too: what its file
         // picker, or Horizon Android's folder, added.
         self.imports.draw(&gui.atlas, batch);
+    }
+
+    pub(super) fn setup_key_event(&mut self, event: &winit::event::KeyEvent) -> bool {
+        use winit::keyboard::{KeyCode, PhysicalKey};
+        let PhysicalKey::Code(key) = event.physical_key else {
+            return self.setup.form.is_some();
+        };
+        if event.state != winit::event::ElementState::Pressed {
+            self.setup.held.remove(&key);
+            return self.setup.form.is_some();
+        }
+        self.setup.held.insert(key);
+        if self.setup.form.is_some() {
+            match key {
+                KeyCode::Escape => self.setup_action(Action::AccountBack),
+                KeyCode::Enter | KeyCode::NumpadEnter => self.setup_action(Action::SubmitForm),
+                _ => {
+                    let ctrl = self.setup.held.contains(&KeyCode::ControlLeft)
+                        || self.setup.held.contains(&KeyCode::ControlRight);
+                    let shift = self.setup.held.contains(&KeyCode::ShiftLeft)
+                        || self.setup.held.contains(&KeyCode::ShiftRight);
+                    self.setup
+                        .form
+                        .as_mut()
+                        .unwrap()
+                        .key(key, event.text.as_deref(), ctrl, shift);
+                }
+            }
+            return true;
+        }
+        if key == KeyCode::Escape
+            && matches!(
+                accounts::state(),
+                State::Starting | State::Progress(_) | State::Code { .. }
+            )
+        {
+            self.setup_action(Action::CancelSignIn);
+            return true;
+        }
+        false
     }
 
     /// A finger lifted on a button acts.
@@ -687,6 +814,22 @@ impl Loading {
         if touch.phase != TouchPhase::Ended {
             return;
         }
+        if touch.phase == TouchPhase::Ended
+            && !on_button
+            && let Some(form) = &mut self.setup.form
+        {
+            if let Some(i) = form
+                .rects
+                .get()
+                .iter()
+                .position(|r| r[2] > 0. && inside(*r))
+            {
+                form.focus(i);
+            } else {
+                form.hide();
+            }
+            return;
+        }
         let hit = self
             .setup
             .buttons
@@ -695,7 +838,47 @@ impl Loading {
             .flatten()
             .find(|(r, _)| inside(*r));
         let Some((_, action)) = hit else { return };
+        self.setup_action(action);
+    }
+    fn setup_action(&mut self, action: Action) {
         match action {
+            Action::Ely => {
+                self.setup.provider = Some(Kind::Ely);
+                self.setup.dismiss_signin_error = true;
+                self.setup.cancelled = true;
+                self.setup.form = Some(Form::new(Kind::Ely));
+            }
+            Action::SubmitForm => {
+                if let Some(form) = &mut self.setup.form {
+                    let kind = form.kind;
+                    if form.submit() {
+                        self.setup.form = None;
+                        self.setup.dismiss_signin_error = false;
+                        self.setup.cancelled = false;
+                        self.setup.provider = Some(kind);
+                        self.setup.offline_saved = kind == Kind::Offline;
+                    }
+                }
+            }
+            Action::AccountBack => {
+                self.setup.form = None;
+                self.setup.dismiss_signin_error = true;
+                self.setup.offline_asked = false;
+                self.setup.cancelled = true;
+            }
+            Action::Reveal => {
+                if let Some(form) = &mut self.setup.form {
+                    form.reveal();
+                }
+            }
+            Action::Register => {
+                let _ = horizon_client::platform::open_link("https://account.ely.by/register");
+            }
+            Action::CancelSignIn => {
+                accounts::cancel();
+                self.setup.cancelled = true;
+                self.setup.dismiss_signin_error = true;
+            }
             #[cfg(target_os = "android")]
             Action::Folder => match folder_offer(&self.setup) {
                 Some(super::files_offer::Stage::Restart) => crate::android::restart_app(),
@@ -730,13 +913,18 @@ impl Loading {
                 }
             }
             Action::SignIn => {
+                self.setup.form = None;
+                self.setup.provider = None;
+                self.setup.dismiss_signin_error = false;
+                self.setup.cancelled = false;
                 self.setup.offline_asked = false;
                 accounts::sign_in();
             }
             Action::Offline => self.setup.offline_asked = true,
             Action::PlayOffline => {
                 self.setup.offline_asked = false;
-                accounts::download_files();
+                self.setup.form = Some(Form::new(Kind::Offline));
+                self.setup.provider = Some(Kind::Offline);
             }
             Action::NotOffline => self.setup.offline_asked = false,
             Action::OpenLink => {
@@ -763,6 +951,9 @@ impl Loading {
             }
             Action::Settings => self.open_menu_options(horizon_client::options_ui::Page::Main),
             Action::Diagnostics => {
+                if let Some(form) = &mut self.setup.form {
+                    form.hide();
+                }
                 #[cfg(target_os = "android")]
                 crate::android::open_recovery();
                 #[cfg(not(target_os = "android"))]
@@ -773,8 +964,68 @@ impl Loading {
                     preparer::start(self.vanilla_root.clone())
                 }
                 (_, Files::Failed(_)) => accounts::download_files(),
-                _ => accounts::sign_in(),
+                _ if self.setup.provider == Some(Kind::Ely) => self.setup_action(Action::Ely),
+                _ if self.setup.provider == Some(Kind::Offline) => {
+                    self.setup.form = Some(Form::new(Kind::Offline));
+                }
+                _ => self.setup_action(Action::SignIn),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod account_tests {
+    use super::*;
+    #[test]
+    fn first_start_offers_both_providers_offline_and_import_without_losing_diagnostics_slot() {
+        let actions: Vec<_> = buttons(&Step::Start).into_iter().map(|(_, a)| a).collect();
+        assert!(actions.contains(&Action::SignIn));
+        assert!(actions.contains(&Action::Ely));
+        assert!(actions.contains(&Action::Offline));
+        assert!(actions.contains(&Action::Pick));
+        assert_eq!(actions.len(), 4);
+    }
+    #[test]
+    fn cancelled_setup_does_not_trap_a_saved_profile_in_talking() {
+        let setup = Setup {
+            cancelled: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            account_step(&setup, State::OfflineProfile("Local".into())),
+            Step::Start
+        );
+        let a = accounts::Account {
+            provider: accounts::Provider::Ely,
+            uuid: "0123456789abcdef0123456789abcdef".into(),
+            name: "Player".into(),
+            skin: None,
+            cape: None,
+        };
+        assert_eq!(account_step(&setup, State::SignedIn(a)), Step::Start);
+    }
+    #[test]
+    fn setup_keeps_the_actual_provider_progress_and_error() {
+        let setup = Setup {
+            provider: Some(Kind::Ely),
+            ..Default::default()
+        };
+        assert_eq!(
+            account_step(&setup, State::Starting),
+            Step::Talking(tr("ely_working"))
+        );
+        let error = account_step(
+            &setup,
+            State::Failed("starling.account.error.ely_otp_needed".into()),
+        );
+        assert!(matches!(error, Step::SignInFailed(_)));
+        let actions = buttons(&error);
+        assert!(actions.iter().any(|(_, a)| *a == Action::AccountBack));
+        let stage = accounts::SignInStage::Ownership;
+        assert_eq!(
+            account_step(&Setup::default(), State::Progress(stage)),
+            Step::Talking(horizon_client::lang::get(stage.key()))
+        );
     }
 }

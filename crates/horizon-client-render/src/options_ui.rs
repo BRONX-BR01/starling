@@ -2169,6 +2169,8 @@ pub struct OptionsUi {
     /// Whether Options opens Skin Customization: the game's options do; the menus before the
     /// game, which can't put a skin on, keep vanilla's greyed button.
     pub skin_page: bool,
+    /// A profile selected by the host: names are managed in Accounts, not the legacy alias box.
+    pub profile_name: Option<String>,
     /// Whether the Mods, Resource Packs and Shader Packs pages have their Catalog button: the
     /// game's options on a phone (`offer_catalog`). The menus before the game can't show it.
     catalog_buttons: bool,
@@ -2267,6 +2269,7 @@ impl Default for OptionsUi {
             row_bands: Vec::new(),
             shader_profiles: Vec::new(),
             skin_page: false,
+            profile_name: None,
             catalog_buttons: false,
             skin: SkinPage::default(),
         }
@@ -2707,7 +2710,7 @@ impl OptionsUi {
                 .pack_screen
                 .as_ref()
                 .is_some_and(|p| p.search_focused()),
-            Page::Skin => self.skin.name.focused,
+            Page::Skin => self.profile_name.is_none() && self.skin.name.focused,
             Page::CustomButton(_) => self.custom_send.focused,
             _ => self.settings_search_active(),
         }
@@ -2720,7 +2723,7 @@ impl OptionsUi {
         match self.page() {
             Page::Language => on(&self.language_search),
             Page::Packs => self.pack_screen.as_ref().is_some_and(|p| p.search_at(x, y)),
-            Page::Skin => on(&self.skin.name),
+            Page::Skin => self.profile_name.is_none() && on(&self.skin.name),
             Page::CustomButton(_) => on(&self.custom_send),
             _ => self.settings_search_active() && on(&self.settings_search),
         }
@@ -2730,7 +2733,13 @@ impl OptionsUi {
     pub fn refresh_skin_page(&mut self) {
         let dir = std::env::current_dir().unwrap_or_default();
         let page = &mut self.skin;
-        page.saved = crate::offline_name::for_worlds(&dir);
+        page.saved = self
+            .profile_name
+            .clone()
+            .unwrap_or_else(|| crate::offline_name::for_worlds(&dir));
+        if self.profile_name.is_some() {
+            page.name.focused = false;
+        }
         page.account = crate::auth::current().map(|a| a.name.clone());
         page.files = crate::own_skin::list(&dir.join(crate::own_skin::DIR));
         page.choice = crate::own_skin::SkinChoice::load(&dir);
@@ -2751,6 +2760,10 @@ impl OptionsUi {
     /// The name box loses the focus: a changed name is kept when it is one, else refused and
     /// the old one back in the box.
     fn commit_name(&mut self) {
+        if self.profile_name.is_some() {
+            self.skin.name.focused = false;
+            return;
+        }
         let page = &mut self.skin;
         page.name.focused = false;
         let typed = page.name.value.clone();
@@ -3295,18 +3308,31 @@ impl OptionsUi {
                     return layers;
                 }
                 let page = &self.skin;
-                let mut rows = vec![Row::Field];
-                rows.push(match (&page.warning, &page.account) {
-                    (Some(warning), _) => Row::Warning(warning.clone()),
-                    // Online-mode servers take only the account's name, and the game can't tell
-                    // them from the others before it joins.
-                    (None, Some(account)) => {
-                        Row::Note(format!("Worlds use this name; servers use {account}"))
-                    }
-                    (None, None) => {
-                        Row::Note("Your name in worlds and on servers, from the next one".into())
-                    }
-                });
+                let mut rows = if let Some(name) = &self.profile_name {
+                    vec![
+                        Row::Note(
+                            tr("starling.account.active")
+                                .plain()
+                                .replacen("%s", name, 1),
+                        ),
+                        Row::Note(tr("starling.account.name_in_accounts").plain()),
+                    ]
+                } else {
+                    vec![Row::Field]
+                };
+                if self.profile_name.is_none() || page.warning.is_some() {
+                    rows.push(match (&page.warning, &page.account) {
+                        (Some(warning), _) => Row::Warning(warning.clone()),
+                        // Online-mode servers take only the account's name, and the game can't tell
+                        // them from the others before it joins.
+                        (None, Some(account)) => {
+                            Row::Note(format!("Worlds use this name; servers use {account}"))
+                        }
+                        (None, None) => Row::Note(
+                            "Your name in worlds and on servers, from the next one".into(),
+                        ),
+                    });
+                }
                 let skin = page
                     .choice
                     .file
@@ -5258,7 +5284,7 @@ impl OptionsUi {
             }
             self.settings_search = search;
         }
-        if self.page() == Page::Skin && self.skin_page {
+        if self.page() == Page::Skin && self.skin_page && self.profile_name.is_none() {
             let mut name = self.skin.name.clone();
             if name.y >= top && name.y + name.height <= bottom {
                 // Red while what is typed is no name, which leaving the box refuses.
@@ -5433,7 +5459,12 @@ impl OptionsUi {
                 return events;
             }
         }
-        if !drag && !right && self.page() == Page::Skin && self.skin_page {
+        if !drag
+            && !right
+            && self.page() == Page::Skin
+            && self.skin_page
+            && self.profile_name.is_none()
+        {
             let field = &mut self.skin.name;
             if ui::hovered((x, y), field.x, field.y, field.width, field.height)
                 && y >= top
@@ -6246,7 +6277,9 @@ impl OptionsUi {
                 }
             }
             // Done or Escape with the name box focused keeps what it holds, as leaving it does.
-            Page::Skin if self.skin.name.focused => self.commit_name(),
+            Page::Skin if self.profile_name.is_none() && self.skin.name.focused => {
+                self.commit_name()
+            }
             // Done keeps a canvas that changed: the file, the atlas's slot, and the button's look.
             Page::CustomDraw(id) => {
                 if std::mem::take(&mut self.painter.dirty) {
@@ -6352,7 +6385,8 @@ impl OptionsUi {
         } else if self.settings_search_active() {
             self.settings_search.insert_text(text);
             self.scroll = 0.0;
-        } else if self.page() == Page::Skin && self.skin.name.focused {
+        } else if self.page() == Page::Skin && self.profile_name.is_none() && self.skin.name.focused
+        {
             self.skin.name.insert_text(text);
         } else if matches!(self.page(), Page::CustomButton(_)) && self.custom_send.focused {
             self.custom_send.insert_text(text);
@@ -6393,7 +6427,7 @@ impl OptionsUi {
             }
             return true;
         }
-        if self.page() == Page::Skin && self.skin.name.focused {
+        if self.page() == Page::Skin && self.profile_name.is_none() && self.skin.name.focused {
             self.skin.name.shortcut(shortcut, clipboard);
             return true;
         }
@@ -6563,7 +6597,8 @@ impl OptionsUi {
                 }
             }
             self.scroll = 0.0;
-        } else if self.page() == Page::Skin && self.skin.name.focused {
+        } else if self.page() == Page::Skin && self.profile_name.is_none() && self.skin.name.focused
+        {
             // Enter (the on-screen keyboard's Done) keeps the name.
             if matches!(key, K::Enter | K::NumpadEnter) {
                 self.commit_name();
@@ -9078,6 +9113,33 @@ mod tests {
         // And it can be taken away.
         assert!(press(&mut ui, &mut s, Act::CustomDelete(id)).contains(&Event::CustomButtons));
         assert!(s.custom_buttons.is_empty());
+    }
+
+    #[test]
+    fn a_selected_profile_prevents_the_legacy_skin_page_from_changing_its_name() {
+        let atlas = atlas();
+        let mut settings = Settings::default();
+        let mut ui = OptionsUi {
+            skin_page: true,
+            profile_name: Some("TabletAlpha".into()),
+            ..Default::default()
+        };
+        ui.stack.push(Page::Skin);
+        ui.skin.saved = "OldAlias".into();
+        ui.skin.name.set_value("OldAlias");
+        ui.skin.name.focused = true;
+        assert!(!ui.text_focused());
+        assert!(!ui.text_field_at(ui.skin.name.x, ui.skin.name.y));
+        ui.type_text(&atlas, "X");
+        ui.key(
+            &mut settings,
+            &atlas,
+            winit::keyboard::KeyCode::KeyA,
+            Some("X"),
+        );
+        ui.commit_name();
+        assert_eq!(ui.skin.name.value, "OldAlias");
+        assert!(ui.take_skin_actions().is_empty());
     }
 
     #[test]

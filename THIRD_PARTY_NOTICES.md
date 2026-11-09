@@ -286,3 +286,7 @@ The port uses Starling's input, IME, inventory, controller and renderer interfac
 Its UI rasterization shares Starling's existing runtime atlas allocator; it does
 not add a second font texture. Starling's chat shortcuts and slot gestures are
 retained. No Minecraft textures or prepared resources are included by this port.
+
+## Horizon Android account profiles and Ely.by
+
+Provider-aware profile selection and Ely.by authentication, refresh, 2FA and session routing are adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606), specifically `launcher/src/account.rs`, `launcher/src/account/ely.rs`, `crates/horizon-client/src/android/login.rs` (behavior reference) and `crates/horizon-client-render/src/auth.rs`. MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors; the repository LICENSE retains the license text. The integration preserves Starling's Microsoft public client and sealed secret store, adds provider-separated keys and offline profile metadata, and uses Starling's existing title widgets rather than the Android launcher's panel.
