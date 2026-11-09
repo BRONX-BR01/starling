@@ -442,6 +442,8 @@ impl Game<'_> {
         if yaw == 0.0 && pitch == 0.0 {
             return;
         }
+        self.tutorial
+            .mouse(f64::from(yaw / 0.15), f64::from(pitch / 0.15));
         self.turn_player(f64::from(yaw / 0.15), f64::from(pitch / 0.15));
     }
 

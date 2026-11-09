@@ -480,6 +480,7 @@ impl Game<'_> {
         #[cfg(target_os = "android")]
         if self.mobile_controls_enabled() {
             return self.touch.live
+                && self.touch_shown()
                 && self.mobile.controls.editor.is_none()
                 && !self.mobile.ui.floating_menu;
         }
@@ -518,6 +519,7 @@ impl Game<'_> {
         #[cfg(target_os = "android")]
         if self.mobile_controls_enabled() {
             return self.touch.live
+                && self.touch_shown()
                 && !self.mobile.controls.crosshair()
                 && self.mobile.controls.editor.is_none()
                 && self.camera_type.first_person();
@@ -536,6 +538,9 @@ impl Game<'_> {
     /// The window pixel tap to interact aims through: a finger that may still tap or holds, or
     /// a tap whose click is still held.
     fn touch_aim_point(&self) -> Option<[f32; 2]> {
+        if !self.touch_taps() {
+            return None;
+        }
         #[cfg(target_os = "android")]
         if self.mobile_controls_enabled() {
             return self.mobile.controls.aim.or(self.mobile.touch_aim).map(|p| {
