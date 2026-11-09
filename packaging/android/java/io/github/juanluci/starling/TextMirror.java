@@ -32,6 +32,8 @@ final class TextMirror extends EditText {
     static final int SUGGEST = 1;
     /** Several lines: Enter is a line break, not the action key. */
     static final int MULTILINE = 2;
+    /** Password: no suggestions, personalized learning or extracted plaintext editor. */
+    static final int PASSWORD = 4;
 
     /**
      * The text after an edit, the cursor and the selection's other end (in code points), and the
@@ -187,6 +189,9 @@ final class TextMirror extends EditText {
         }
         this.flags = flags;
         int type = InputType.TYPE_CLASS_TEXT;
+        if ((flags & PASSWORD) != 0) {
+            type |= InputType.TYPE_TEXT_VARIATION_PASSWORD;
+        }
         // Commands, names and searches: no suggestions, so no autocorrect either.
         type |= (flags & SUGGEST) != 0
                 ? InputType.TYPE_TEXT_FLAG_AUTO_CORRECT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -196,6 +201,9 @@ final class TextMirror extends EditText {
         }
         // No full-screen editor in landscape: the game's field is the one on screen.
         int options = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+        if ((flags & PASSWORD) != 0) {
+            options |= EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING;
+        }
         options |= (flags & MULTILINE) != 0 ? EditorInfo.IME_FLAG_NO_ENTER_ACTION : flags >>> 8;
         setImeOptions(options);
         int start = getSelectionStart();

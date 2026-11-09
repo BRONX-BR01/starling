@@ -208,6 +208,9 @@ impl Game<'_> {
 
     /// The name worlds open with (`offline_name::for_worlds`), read at most every few seconds.
     fn worlds_name(&mut self) -> String {
+        if let Some(name) = horizon_client::accounts::player_name() {
+            return name;
+        }
         if let Some((name, read)) = &self.own_skin.worlds_name
             && read.elapsed() < Duration::from_secs(5)
         {

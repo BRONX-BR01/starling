@@ -16,3 +16,5 @@ sha2 = "0.10"
 # The Java runtime that prepares the game files on a phone comes as a .tar.xz.
 lzma-rs = "0.3"
 tar = { version = "0.4", default-features = false }
+
+getrandom = "0.3"

@@ -271,3 +271,6 @@ and its `crates/horizon-client/src/android/document_store.rs`, under the MIT lic
 [LICENSE](LICENSE) as this repository). Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
 The port is plain Java over Starling's one game folder, in place of the fork's Rust store of
 profiles and fixed folders that its launcher screens share.
+## Horizon Android account profiles and Ely.by
+
+Provider-aware profile selection and Ely.by authentication, refresh, 2FA and session routing are adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606), specifically `launcher/src/account.rs`, `launcher/src/account/ely.rs`, `crates/horizon-client/src/android/login.rs` (behavior reference) and `crates/horizon-client-render/src/auth.rs`. MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors; the repository LICENSE retains the license text. The integration preserves Starling's Microsoft public client and sealed secret store, adds provider-separated keys and offline profile metadata, and uses Starling's existing title widgets rather than the Android launcher's panel.
