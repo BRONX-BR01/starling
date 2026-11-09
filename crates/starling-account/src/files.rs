@@ -152,6 +152,12 @@ const TRIES: u32 = 5;
 /// The wait before the second try; it doubles before each one after.
 const FIRST_WAIT: Duration = Duration::from_secs(1);
 
+/// Whether a server's refusal may pass with time: its own trouble, or its limit on this address.
+/// A mobile network shares one address among many phones, and GitHub answers those with 403 or 429.
+pub(crate) fn may_pass(code: u16) -> bool {
+    code >= 500 || matches!(code, 403 | 408 | 429)
+}
+
 /// `attempt` until it succeeds, a final failure, or [`TRIES`] tries.
 pub(crate) fn retrying<T>(mut attempt: impl FnMut() -> Result<T, Failure>) -> Result<T, String> {
     let mut wait = FIRST_WAIT;
@@ -173,11 +179,12 @@ fn fetch_checked(url: &str, sha1: &str, name: &str) -> Result<Vec<u8>, String> {
     let body = retrying(|| {
         let response = agent().get(url).call().map_err(|e| match e {
             ureq::Error::Status(code, _) => {
-                let e = format!("Mojang's server refused {name} ({code}).");
-                if code >= 500 {
-                    Failure::Again(e)
+                if may_pass(code) {
+                    Failure::Again(format!(
+                        "Mojang's server refused {name} ({code}). Try again in a few minutes."
+                    ))
                 } else {
-                    Failure::Final(e)
+                    Failure::Final(format!("Mojang's server refused {name} ({code})."))
                 }
             }
             ureq::Error::Transport(t) => Failure::Again(format!(
