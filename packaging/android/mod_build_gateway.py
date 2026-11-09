@@ -41,7 +41,7 @@ START_SECONDS = 20 * 60
 # Between asks to start it, while it boots.
 START_AGAIN_SECONDS = 90
 # Builds a day, so one player or everyone together can't run the bill up.
-PER_ADDRESS = 16
+PER_ADDRESS = 32
 # A build that failed gives its place back, but it took the machine's time, so failing has its own limit.
 FAILED_PER_ADDRESS = 24
 PER_DAY = int(os.environ.get("BUILDS_PER_DAY", "80"))
@@ -425,6 +425,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.answer(200, {"job": job})
         refused = refusal(self.address(), request)
         if refused:
+            print(f"refused: {refused}", flush=True)
             return self.answer(429, {"error": refused})
         # Only now is there something for the machine to do: asking alone keeps nothing awake.
         self.seen()
