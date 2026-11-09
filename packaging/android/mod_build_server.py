@@ -121,6 +121,24 @@ def split_body(body):
     return mods
 
 
+def unpack(files, work):
+    """The request's mods, checked, as work/mods/<id>/. Nothing of them is run."""
+    (work / "mods").mkdir(parents=True)
+    seen = set()
+    for i, mod in enumerate(files):
+        path = work / f"{i}.hnmod"
+        path.write_bytes(mod)
+        mod_id, entries = read_bundle(path)
+        path.unlink()
+        if mod_id in seen:
+            raise Refused(f"Two mods are named {mod_id}.")
+        seen.add(mod_id)
+        for rest, data in entries.items():
+            target = work / "mods" / mod_id / rest
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+
+
 def commit_of(version):
     try:
         return json.loads((ROOT / "versions.json").read_text())[version]
@@ -156,20 +174,7 @@ def submit(version, body, client):
             raise Refused("You already have a build in line.")
     # Checked and written before it joins the line.
     shutil.rmtree(work, ignore_errors=True)
-    (work / "mods").mkdir(parents=True)
-    seen = set()
-    for i, mod in enumerate(files):
-        path = work / f"{i}.hnmod"
-        path.write_bytes(mod)
-        mod_id, entries = read_bundle(path)
-        path.unlink()
-        if mod_id in seen:
-            raise Refused(f"Two mods are named {mod_id}.")
-        seen.add(mod_id)
-        for rest, data in entries.items():
-            target = work / "mods" / mod_id / rest
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+    unpack(files, work)
     with lock:
         jobs[key] = {"state": "queued", "commit": commit, "client": client}
         line.append(key)

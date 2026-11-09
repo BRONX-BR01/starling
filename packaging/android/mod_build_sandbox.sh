@@ -14,7 +14,8 @@ set -uo pipefail
 root=$1
 commit=$2
 job=$3
-seconds=870
+# GitHub's runners have fewer cores (mod_build_once.py).
+seconds=${MOD_BUILD_SECONDS:-870}
 base_build=${MOD_BUILD_BASE:-0}
 
 git -C "$root/source" checkout -q --detach "$commit" || exit 1
