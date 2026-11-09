@@ -1763,6 +1763,8 @@ pub enum Event {
     OpenCatalog(CatalogShelf),
     /// The Shader Packs page opened: list `shaderpacks/` into `shader_packs`.
     ListShaderPacks,
+    /// The Mods page opened: the native mods folder read again, for a mod copied in meanwhile.
+    ListMods,
     /// A shader pack or its profile was picked, or the pack turned off: save and apply it.
     ShaderPack,
     /// The Shader Packs page's folder (on a phone without the Starling folder, its offer).
@@ -5353,6 +5355,9 @@ impl OptionsUi {
                                 events.push(Event::ListShaderPacks);
                                 self.refresh_shader_profiles(s);
                             }
+                            if p == Page::Mods {
+                                events.push(Event::ListMods);
+                            }
                             if p == Page::Music {
                                 events.push(Event::ListMusicTracks);
                             }
@@ -6529,6 +6534,9 @@ impl OptionsUi {
                             self.can_change_value = false;
                             if p == Page::ShaderPacks {
                                 events.push(Event::ListShaderPacks);
+                            }
+                            if p == Page::Mods {
+                                events.push(Event::ListMods);
                             }
                             if p == Page::Music {
                                 events.push(Event::ListMusicTracks);
