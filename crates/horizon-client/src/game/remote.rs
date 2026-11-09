@@ -5603,6 +5603,15 @@ impl Game<'_> {
         // Skin Customization's Ely.by Skins: on a server that sends no skin for a player (offline
         // mode), the one their name has on Ely.by, as offline launchers show it.
         let mut from_elyby = std::collections::HashSet::new();
+        // An Ely.by account's own skin where the server sent none: Ely.by's, as Mojang's profile
+        // is a Microsoft account's (`own_profile` asks Mojang nothing for it).
+        if !entries.iter().any(|(u, t)| *u == local && t.skin.is_some())
+            && let Some(textures) = self.own_elyby_textures()
+        {
+            entries.retain(|(u, _)| *u != local);
+            entries.push((local, textures));
+            from_elyby.insert(local);
+        }
         if !online_mode {
             for (uuid, name) in names {
                 if entries.iter().any(|(u, t)| *u == uuid && t.skin.is_some()) {
