@@ -289,7 +289,7 @@
   "starling.account.error.sign_in_cancelled": "Вход отменён.",
   "starling.account.add": "Добавить профиль",
   "starling.account.choose_type": "Выберите тип аккаунта",
-  "starling.account.files_missing": "Файлы игры ещё не загружены",
+  "starling.account.files_missing": "Оригинальные файлы здесь ещё не загружались. Подготовленные ресурсы при этом могут быть доступны.",
   "starling.account.files_checking": "Проверка файлов игры…",
   "starling.account.files_ready": "Файлы игры загружены и проверены",
   "starling.account.downloading": "Загрузка",
@@ -308,5 +308,11 @@
   "starling.account.progress.minecraft": "Входим в службы Minecraft…",
   "starling.account.progress.ownership": "Проверяем наличие Minecraft: Java Edition…",
   "starling.account.progress.profile": "Загружаем профиль Minecraft…",
-  "starling.account.progress.saving": "Сохраняем данные входа…"
+  "starling.account.progress.saving": "Сохраняем данные входа…",
+  "starling.account.setup.intro": "Войдите через Microsoft или Ely.by либо выберите офлайн-профиль. Starling загрузит оригинальные файлы Mojang и подготовит их на устройстве (около 1,5 ГБ).",
+  "starling.account.setup.microsoft": "Microsoft",
+  "starling.account.setup.ely_title": "Вход в Ely.by",
+  "starling.account.setup.offline_title": "Играть офлайн",
+  "starling.account.setup.import": "Файлы с компьютера",
+  "starling.account.setup.preparing": "Вход выполнен. Подготавливаем файлы игры…"
 }

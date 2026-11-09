@@ -5,7 +5,8 @@
 //! game's official files are fetched from Mojang's servers here too. Without a
 //! keystore (a desktop build, `STARLING_ACCOUNTS=1`) the secrets stay in memory for the run.
 use starling_account::files::{Pins, Progress, Sources, Wanted};
-use starling_account::{Account, Endpoints, MemoryStore, SecretStore, SignIn, SignInState};
+pub use starling_account::{Account, Provider, SignInStage};
+use starling_account::{Endpoints, MemoryStore, SecretStore, SignIn, SignInState};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};

@@ -21313,6 +21313,13 @@ impl Loading {
         if self.window.as_ref().is_none_or(|w| w.id() != id) {
             return;
         }
+        if self.failure.is_some()
+            && !self.menu.options_open
+            && let WindowEvent::KeyboardInput { event, .. } = &event
+            && self.setup_key_event(event)
+        {
+            return;
+        }
         if self.menu_touch_editor_event(&event) {
             return;
         }

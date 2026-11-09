@@ -560,7 +560,7 @@
   "starling.account.error.sign_in_cancelled": "Sign-in cancelled.",
   "starling.account.add": "Add profile",
   "starling.account.choose_type": "Choose an account type",
-  "starling.account.files_missing": "Game files: not fetched",
+  "starling.account.files_missing": "Original files have not been downloaded here. Prepared resources may already be available.",
   "starling.account.files_checking": "Checking game files…",
   "starling.account.files_ready": "Game files: fetched and checked",
   "starling.account.downloading": "Downloading",
@@ -579,5 +579,11 @@
   "starling.account.progress.minecraft": "Signing in to Minecraft services…",
   "starling.account.progress.ownership": "Checking Minecraft: Java Edition ownership…",
   "starling.account.progress.profile": "Loading your Minecraft profile…",
-  "starling.account.progress.saving": "Saving your sign-in securely…"
+  "starling.account.progress.saving": "Saving your sign-in securely…",
+  "starling.account.setup.intro": "Sign in with Microsoft or Ely.by, or choose an offline profile. Starling downloads the original files from Mojang and prepares them on this phone (about 1.5 GB).",
+  "starling.account.setup.microsoft": "Microsoft",
+  "starling.account.setup.ely_title": "Log in to Ely.by",
+  "starling.account.setup.offline_title": "Play offline",
+  "starling.account.setup.import": "Files from a computer",
+  "starling.account.setup.preparing": "Sign-in complete. Preparing the game files…"
 }

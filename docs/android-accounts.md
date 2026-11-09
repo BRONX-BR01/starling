@@ -40,3 +40,13 @@ launcher-managed desktop sessions keep their existing launch flow.
 
 The provider/profile model and Ely.by protocol are adapted from Horizon Android;
 see `THIRD_PARTY_NOTICES.md`. Skin editing and upload are separate work.
+
+On a fresh installation, **Set up Starling** offers Microsoft, Ely.by, offline
+profiles and importing prepared files. Ely.by and offline forms use the setup's
+resource-independent card and Android keyboard: no game assets are needed to
+sign in. Registration, password visibility and optional 2FA are available there
+too. Errors retry the chosen provider; Cancel or Back returns to the choice.
+Microsoft's actual authorization stages are shown in setup as in the title menu.
+After authentication (or a saved offline name), downloading and preparation
+continue through Starling's existing installer. Ely.by does not grant Microsoft
+server access or establish Minecraft ownership.
