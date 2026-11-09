@@ -17,13 +17,14 @@ use winit::keyboard::KeyCode;
 /// from 8 (EditorInfo.IME_ACTION_*).
 const SUGGEST: i32 = 1;
 const MULTILINE: i32 = 2;
+const PASSWORD: i32 = 4;
 const SEARCH: i32 = 3 << 8;
 const SEND: i32 = 4 << 8;
 const NEXT: i32 = 5 << 8;
 const DONE: i32 = 6 << 8;
 
 /// The field shown now, as the editor mirrors it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct Field {
     /// Which field: another one starts afresh in the editor.
     id: FieldId,
@@ -34,6 +35,24 @@ pub(super) struct Field {
     /// The most characters it takes, 0 where only its width limits it.
     max: usize,
     flags: i32,
+}
+impl std::fmt::Debug for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Field")
+            .field("id", &self.id)
+            .field(
+                "text",
+                &if self.flags & PASSWORD != 0 {
+                    "<hidden>"
+                } else {
+                    &self.text
+                },
+            )
+            .field("selection", &self.selection)
+            .field("max", &self.max)
+            .field("flags", &self.flags)
+            .finish()
+    }
 }
 
 /// What the editor is told this frame.
@@ -224,9 +243,17 @@ impl Game<'_> {
             #[cfg(target_os = "android")]
             "catalog" => field(("catalog", 0), self.catalog_query(), None, 0, SEARCH),
             "title" => {
+                let password = self.title.as_ref()?.password_focused();
+                let selection = self.title.as_mut()?.account_field_selection();
                 let (id, value, max) = self.title.as_mut()?.focused_field()?;
                 let value = value.clone();
-                field(id, &value, None, max, DONE)
+                field(
+                    id,
+                    &value,
+                    selection,
+                    max,
+                    DONE | if password { PASSWORD } else { 0 },
+                )
             }
             _ => return None,
         })
@@ -239,6 +266,11 @@ impl Game<'_> {
             return;
         };
         match field.id.0 {
+            id if id.starts_with("account-") => {
+                if let Some(title) = self.title.as_mut() {
+                    title.set_account_field(text, cursor, anchor);
+                }
+            }
             "chat" => self.chat_set_text(text, cursor, anchor),
             "command" => self.command_block_set_text(text, cursor, anchor),
             _ => {
@@ -517,5 +549,26 @@ mod tests {
         assert_eq!(android_key(67), Some(KeyCode::Backspace));
         assert_eq!(android_key(19), Some(KeyCode::ArrowUp));
         assert_eq!(android_key(29), None);
+    }
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::*;
+    #[test]
+    fn password_updates_keep_selection_but_redact_debug_output() {
+        let mut mirror = Mirror::default();
+        let field = Field {
+            id: ("account-password", 0),
+            text: "Secret§123".into(),
+            selection: Some((9, 9)),
+            max: 256,
+            flags: DONE | PASSWORD,
+        };
+        let first = mirror.sync(Some(field.clone())).unwrap();
+        assert!(!format!("{first:?}").contains("Secret"));
+        assert!(mirror.sync(Some(field)).is_none());
+        mirror.edited(1, "Secret§12!3", 9, 9);
+        assert!(!format!("{:?}", mirror.shown).contains("Secret"));
     }
 }

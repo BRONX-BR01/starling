@@ -404,6 +404,15 @@ impl Game<'_> {
     /// and mouse motion skips it, so a player who uses none of them pays
     /// nothing per input event.
     fn tracing_input(&self) -> bool {
+        // Even physical key names can reconstruct a password. Neither the trace ring nor a
+        // repro recording may keep input while a password or two-factor field is focused.
+        if self
+            .title
+            .as_ref()
+            .is_some_and(|title| title.password_focused())
+        {
+            return false;
+        }
         self.control.is_some() || self.settings.extras.repro_keys || self.repro.recording_active()
     }
 

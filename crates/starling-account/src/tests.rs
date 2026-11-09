@@ -195,6 +195,7 @@ fn mock(f: impl FnOnce(&mut Mock)) -> (Arc<Mutex<Mock>>, Endpoints) {
 
 fn notch() -> Account {
     Account {
+        provider: Provider::Microsoft,
         uuid: UUID.into(),
         name: "Notch".into(),
         skin: None,
@@ -211,10 +212,23 @@ fn the_whole_chain() {
         ("ABCD-EFGH", "https://www.microsoft.com/link")
     );
     let ms = wait_for_sign_in(&ep, "test-client", &code, &|| false).unwrap();
-    let (account, secrets) = finish_sign_in(&ep, ms).unwrap();
+    let stages = std::cell::RefCell::new(Vec::new());
+    let (account, secrets) =
+        finish_sign_in_progress(&ep, ms, &|stage| stages.borrow_mut().push(stage)).unwrap();
+    assert_eq!(
+        *stages.borrow(),
+        [
+            SignInStage::Xbox,
+            SignInStage::XboxSecurity,
+            SignInStage::Minecraft,
+            SignInStage::Ownership,
+            SignInStage::Profile
+        ]
+    );
     assert_eq!(
         account,
         Account {
+            provider: Provider::Microsoft,
             uuid: UUID.into(),
             name: "Notch".into(),
             skin: Some((
@@ -292,6 +306,7 @@ fn refresh_only_when_the_token_runs_out() {
     let (m, ep) = mock(|_| {});
     let account = notch();
     let good = Secrets {
+        provider: Provider::Microsoft,
         refresh_token: "ms-refresh-1".into(),
         minecraft_token: "old".into(),
         minecraft_expires_at: now() + 7200,
@@ -314,6 +329,7 @@ fn refresh_only_when_the_token_runs_out() {
     );
     assert!(renewed_account.skin.is_some());
     let revoked = Secrets {
+        provider: Provider::Microsoft,
         refresh_token: "revoked".into(),
         minecraft_expires_at: 0,
         ..kept
@@ -390,6 +406,7 @@ fn accounts_keep_secrets_in_the_store_only() {
     let mut accounts = Accounts::default();
     let account = notch();
     let secrets = Secrets {
+        provider: Provider::Microsoft,
         refresh_token: "r".into(),
         minecraft_token: "mc-secret".into(),
         minecraft_expires_at: 1,
@@ -421,6 +438,7 @@ fn the_session_renews_and_saves_itself() {
     assert!(session(&ep, &store, &dir).unwrap().is_none());
     let mut accounts = Accounts::default();
     let stale = Secrets {
+        provider: Provider::Microsoft,
         refresh_token: "ms-refresh-1".into(),
         minecraft_token: "old".into(),
         minecraft_expires_at: 0,
