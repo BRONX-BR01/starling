@@ -6,23 +6,33 @@ once it has had nothing to do for a while. Finished libraries and known failures
 them again doesn't wake it. Behind Caddy, which holds the HTTPS. The machine's own identity may only start,
 stop and read that one VM. Python's standard library only.
 
-    BUILD_BACKEND    http://host:8787
-    BUILD_VM         the VM's Azure resource id
-    GATEWAY_PORT     default 8788
-    STATE_DIRECTORY  where results stay (systemd's StateDirectory); without it nothing stays
-    STORE_BYTES      how much of them, default 10 GiB
+A player may ask for GitHub's machines instead (`via=github`): slower, with no machine of ours awake. The
+gateway keeps the request's mods for the runner to fetch, runs the mod-builds repository's workflow, and
+brings the library here when it ends, so it is served as any other.
+
+    BUILD_BACKEND          http://host:8787
+    BUILD_VM               the VM's Azure resource id
+    GATEWAY_PORT           default 8788
+    STATE_DIRECTORY        where results stay (systemd's StateDirectory); without it nothing stays
+    STORE_BYTES            how much of them, default 10 GiB
+    GATEWAY_PUBLIC_URL     where GitHub's runners reach this; without it, or the token, no GitHub builds
+    CREDENTIALS_DIRECTORY  systemd's LoadCredential: github-token, allowed to run mod-builds' workflows
 """
+import calendar
 import hashlib
 import http.client
 import http.server
 import json
 import os
 import re
+import secrets
 import shutil
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 
 BACKEND = urllib.parse.urlparse(os.environ["BUILD_BACKEND"])
 VM = os.environ["BUILD_VM"]
@@ -41,7 +51,7 @@ START_SECONDS = 20 * 60
 # Between asks to start it, while it boots.
 START_AGAIN_SECONDS = 90
 # Builds a day, so one player or everyone together can't run the bill up.
-PER_ADDRESS = 16
+PER_ADDRESS = 32
 # A build that failed gives its place back, but it took the machine's time, so failing has its own limit.
 FAILED_PER_ADDRESS = 24
 PER_DAY = int(os.environ.get("BUILDS_PER_DAY", "80"))
@@ -58,6 +68,23 @@ MIN_FREE_BYTES = 6 << 30
 JOB = re.compile(r"[0-9a-f]{24}")
 LIBRARY = "libhorizon_android.so"
 CHUNK = 256 * 1024
+GITHUB_API = os.environ.get("GITHUB_API", "https://api.github.com")
+GITHUB_REPO = os.environ.get("GITHUB_BUILDS_REPO", "starling-client/mod-builds")
+GITHUB_WORKFLOW = "build.yml"
+PUBLIC_URL = os.environ.get("GATEWAY_PUBLIC_URL", "")
+# Runs at once: the rest wait here, where their place in line can be told.
+GITHUB_AT_ONCE = 8
+GITHUB_LINE = 24
+# GitHub's machines cost nothing, but a repository that keeps them busy all day may be asked to stop.
+GITHUB_PER_ADDRESS = 32
+GITHUB_PER_DAY = int(os.environ.get("GITHUB_BUILDS_PER_DAY", "300"))
+GITHUB_LOOK_SECONDS = 20
+# Asked for and no run after this, or a run this old: it isn't coming.
+GITHUB_NO_RUN_SECONDS = 15 * 60
+GITHUB_SECONDS = 75 * 60
+# A failure that wasn't the mods' fault is told for this long; asking again builds again.
+GITHUB_FAILURE_SECONDS = 60 * 60
+ASK = re.compile(r"[0-9a-f]{32}")
 
 lock = threading.Lock()
 index_lock = threading.Lock()
@@ -72,6 +99,9 @@ known_failures = {}
 # Jobs whose library is on its way here, and proxied downloads: the machine stays on for them.
 copying = {}
 proxying = 0
+# Jobs on GitHub, job to what it needs, and when and by whom each was asked for today.
+github_jobs = {}
+github_asked = []
 
 
 def power(action):
@@ -239,7 +269,7 @@ def save_index():
         return
     path = os.path.join(STORE, "index.json")
     with lock:
-        data = json.dumps({"kept": kept, "failures": known_failures})
+        data = json.dumps({"kept": kept, "failures": known_failures, "github": github_jobs})
     try:
         with index_lock:
             with open(path + ".part", "w", encoding="utf-8") as f:
@@ -260,6 +290,10 @@ def load_index():
     with lock:
         kept.update(data.get("kept") or {})
         known_failures.update(data.get("failures") or {})
+        # One whose mods were still being written when this stopped has nothing to build.
+        github_jobs.update(
+            {j: e for j, e in (data.get("github") or {}).items() if e.get("state") != "writing"}
+        )
 
 
 def result_folder(job):
@@ -338,6 +372,16 @@ def forget_oldest():
             del kept[request]
 
 
+def place_result(job, part, status):
+    """The library at `part` as this job's, the status written last."""
+    folder = result_folder(job)
+    os.makedirs(folder, exist_ok=True)
+    os.replace(part, os.path.join(folder, LIBRARY))
+    with open(os.path.join(folder, "status.part"), "w", encoding="utf-8") as f:
+        json.dump(status, f)
+    os.replace(os.path.join(folder, "status.part"), os.path.join(folder, "status.json"))
+
+
 def copy_result(job, status):
     """Brings a finished library here, checked, before the machine sleeps."""
     os.makedirs(os.path.join(STORE, "results"), exist_ok=True)
@@ -360,11 +404,7 @@ def copy_result(job, status):
         if digest.hexdigest() != status["sha256"] or os.path.getsize(part) != status["size"]:
             print(f"{job} came different from what the service said", flush=True)
             return
-        os.makedirs(folder, exist_ok=True)
-        os.replace(part, os.path.join(folder, LIBRARY))
-        with open(os.path.join(folder, "status.part"), "w", encoding="utf-8") as f:
-            json.dump(status, f)
-        os.replace(os.path.join(folder, "status.part"), os.path.join(folder, "status.json"))
+        place_result(job, part, status)
         with lock:
             for a in accepted:
                 if a["job"] == job:
@@ -388,6 +428,298 @@ def keep_result(job, status):
             return
         copying[job] = threading.Event()
     threading.Thread(target=copy_result, args=(job, status), daemon=True).start()
+
+
+def github_token():
+    """The token that may run mod-builds' workflows, or nothing."""
+    try:
+        path = os.path.join(os.environ["CREDENTIALS_DIRECTORY"], "github-token")
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except (KeyError, OSError):
+        return ""
+
+
+def github_open():
+    return bool(STORE and PUBLIC_URL and github_token())
+
+
+def github_headers():
+    return {
+        "Authorization": f"Bearer {github_token()}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "starling-gateway",
+    }
+
+
+def github_api(method, path, payload=None):
+    """One call to the repository's API: its JSON, or None when it answers nothing."""
+    request = urllib.request.Request(
+        f"{GITHUB_API}/repos/{GITHUB_REPO}{path}",
+        data=None if payload is None else json.dumps(payload).encode(),
+        method=method,
+        headers=github_headers(),
+    )
+    with urllib.request.urlopen(request, timeout=30) as answer:
+        text = answer.read()
+    return json.loads(text) if text else None
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def github_download(url, path):
+    """An artifact into `path`. It lives elsewhere behind a redirect, and the token stays at GitHub."""
+    request = urllib.request.Request(url, headers=github_headers())
+    try:
+        answer = urllib.request.build_opener(NoRedirect).open(request, timeout=60)
+    except urllib.error.HTTPError as e:
+        if e.code not in (301, 302, 303, 307, 308):
+            raise
+        answer = urllib.request.urlopen(e.headers["Location"], timeout=60)
+    with answer, open(path, "wb") as f:
+        shutil.copyfileobj(answer, f, CHUNK)
+
+
+def github_folder():
+    return os.path.join(STORE, "github")
+
+
+def github_ask(address, request, version, body):
+    """This request's job on GitHub, asked for before or now: (job, None), or (None, why not)."""
+    if not github_open():
+        return None, "Building on GitHub isn't available right now."
+    if not re.fullmatch(r"\d+(\.\d+){1,3}", version):
+        return None, "That is not a version of the game."
+    job = request[:24]
+    now = time.time()
+    with lock:
+        known = github_jobs.get(job)
+        if known and known["state"] != "failed":
+            return job, None
+        github_asked[:] = [a for a in github_asked if now - a[0] < DAY]
+        if sum(a[1] == address for a in github_asked) >= GITHUB_PER_ADDRESS:
+            return None, YOUR_LIMIT
+        if len(github_asked) >= GITHUB_PER_DAY:
+            return None, EVERYONES_LIMIT
+        if sum(e["state"] in ("waiting", "writing") for e in github_jobs.values()) >= GITHUB_LINE:
+            return None, "The line for GitHub is full. Try again in a few minutes."
+        if shutil.disk_usage(STORE).free - len(body) < MIN_FREE_BYTES:
+            return None, "The build server is full. Try again later."
+        github_asked.append((now, address))
+        ask = secrets.token_hex(16)
+        github_jobs[job] = {
+            "ask": ask,
+            "request": request,
+            "version": version,
+            "at": now,
+            "state": "writing",
+        }
+    os.makedirs(github_folder(), exist_ok=True)
+    with open(os.path.join(github_folder(), ask), "wb") as f:
+        f.write(body)
+    with lock:
+        github_jobs[job]["state"] = "waiting"
+    save_index()
+    return job, None
+
+
+def github_status(job):
+    """What the service would say of a job on GitHub, or None when there is none."""
+    now = time.time()
+    with lock:
+        job_now = github_jobs.get(job)
+        if not job_now:
+            return None
+        state = job_now["state"]
+        if state == "failed":
+            return {"state": "failed", "error": job_now["error"], "settled": False}
+        if state == "building":
+            return {"state": "building", "seconds": int(now - job_now["started"])}
+        ahead = 0
+        if state in ("waiting", "writing"):
+            ahead = sum(
+                e["state"] in ("waiting", "writing") and e["at"] < job_now["at"]
+                for e in github_jobs.values()
+            )
+        return {"state": "queued", "ahead": ahead}
+
+
+def github_forget_body(ask):
+    for name in (ask, f"{ask}.zip"):
+        try:
+            os.remove(os.path.join(github_folder(), name))
+        except OSError:
+            pass
+
+
+def github_failed(job, error):
+    print(f"github {job}: {error}", flush=True)
+    with lock:
+        entry = github_jobs.get(job)
+        if not entry:
+            return
+        entry["state"] = "failed"
+        entry["error"] = error
+        entry["at"] = time.time()
+        ask = entry["ask"]
+    github_forget_body(ask)
+    save_index()
+
+
+def github_keep(job, entry, run):
+    """The run's answer: its library here, checked, or the failure it reports."""
+    archive = os.path.join(github_folder(), f"{entry['ask']}.zip")
+    part = result_folder(job) + ".part"
+    try:
+        artifacts = github_api("GET", f"/actions/runs/{run}/artifacts")["artifacts"]
+        url = next(a["archive_download_url"] for a in artifacts if a["name"] == "result")
+        github_download(url, archive)
+        with zipfile.ZipFile(archive) as z:
+            status = json.loads(z.read("status.json"))
+            if status.get("state") != "done":
+                error = str(status.get("error") or "The build failed.")[:600]
+                if not status.get("settled"):
+                    return github_failed(job, error)
+                failure = {"state": "failed", "error": error, "settled": True}
+                with lock:
+                    known_failures[entry["request"]] = {
+                        "job": job,
+                        "at": time.time(),
+                        "status": failure,
+                    }
+                    del github_jobs[job]
+                github_forget_body(entry["ask"])
+                return save_index()
+            if shutil.disk_usage(STORE).free - status["size"] < MIN_FREE_BYTES:
+                return github_failed(job, "The build server is full. Try again later.")
+            os.makedirs(os.path.join(STORE, "results"), exist_ok=True)
+            digest = hashlib.sha256()
+            with z.open(LIBRARY) as source, open(part, "wb") as f:
+                while chunk := source.read(CHUNK):
+                    digest.update(chunk)
+                    f.write(chunk)
+        if digest.hexdigest() != status["sha256"] or os.path.getsize(part) != status["size"]:
+            return github_failed(job, "The build came back different from what it said.")
+        place_result(job, part, status)
+        with lock:
+            kept[entry["request"]] = job
+            del github_jobs[job]
+        github_forget_body(entry["ask"])
+        forget_oldest()
+        save_index()
+    except (OSError, ValueError, KeyError, StopIteration, zipfile.BadZipFile) as e:
+        print(f"github {job}: could not keep it: {e!r}", flush=True)
+        github_failed(job, "The build's result did not arrive. Try again.")
+    finally:
+        if os.path.exists(part):
+            os.remove(part)
+
+
+def github_round():
+    """One look: failures that were told long enough go, those in line run, the rest are followed."""
+    now = time.time()
+    with lock:
+        for job in [
+            j
+            for j, e in github_jobs.items()
+            if e["state"] == "failed" and now - e["at"] > GITHUB_FAILURE_SECONDS
+        ]:
+            del github_jobs[job]
+        active = {
+            j: dict(e)
+            for j, e in github_jobs.items()
+            if e["state"] in ("waiting", "asked", "queued", "building")
+        }
+    if not active:
+        return
+    running = sum(e["state"] != "waiting" for e in active.values())
+    waiting = sorted(
+        (j for j, e in active.items() if e["state"] == "waiting"), key=lambda j: active[j]["at"]
+    )
+    for job in waiting:
+        if running >= GITHUB_AT_ONCE:
+            break
+        entry = active[job]
+        try:
+            github_api(
+                "POST",
+                f"/actions/workflows/{GITHUB_WORKFLOW}/dispatches",
+                {
+                    "ref": "main",
+                    "inputs": {
+                        "ask": entry["ask"],
+                        "version": entry["version"],
+                        "gateway": PUBLIC_URL,
+                    },
+                },
+            )
+        except urllib.error.HTTPError as e:
+            if e.code >= 500:
+                break
+            github_failed(job, "GitHub refused the build.")
+            continue
+        except OSError as e:
+            print(f"github: could not ask for a run: {e}", flush=True)
+            break
+        with lock:
+            github_jobs[job]["state"] = entry["state"] = "asked"
+            github_jobs[job]["asked"] = entry["asked"] = time.time()
+        running += 1
+    followed = {j: e for j, e in active.items() if e["state"] != "waiting"}
+    if not followed:
+        return save_index()
+    try:
+        runs = github_api(
+            "GET",
+            f"/actions/workflows/{GITHUB_WORKFLOW}/runs?event=workflow_dispatch&per_page=100",
+        )["workflow_runs"]
+    except (OSError, ValueError, KeyError) as e:
+        print(f"github: could not read the runs: {e}", flush=True)
+        return None
+    by_title = {}
+    for run in runs:
+        by_title.setdefault(run.get("display_title"), run)
+    now = time.time()
+    for job, entry in followed.items():
+        run = by_title.get(f"build {entry['ask']}")
+        if not run:
+            if now - entry["asked"] > GITHUB_NO_RUN_SECONDS:
+                github_failed(job, "GitHub did not start the build. Try again later.")
+            continue
+        if now - entry["asked"] > GITHUB_SECONDS:
+            github_failed(job, "The build took too long. Try again later.")
+        elif run["status"] == "completed":
+            if run["conclusion"] == "success":
+                github_keep(job, entry, run["id"])
+            else:
+                github_failed(job, "The build on GitHub did not finish. Try again.")
+        elif run["status"] == "in_progress" and entry["state"] != "building":
+            started = run.get("run_started_at") or ""
+            try:
+                began = calendar.timegm(time.strptime(started, "%Y-%m-%dT%H:%M:%SZ"))
+            except ValueError:
+                began = now
+            with lock:
+                github_jobs[job]["state"] = "building"
+                github_jobs[job]["started"] = began
+        elif entry["state"] == "asked":
+            with lock:
+                github_jobs[job]["state"] = "queued"
+    save_index()
+
+
+def github_worker():
+    while True:
+        time.sleep(GITHUB_LOOK_SECONDS)
+        try:
+            if github_open():
+                github_round()
+        except Exception as e:  # The next look goes on whatever this one did.
+            print(f"github: {e!r}", flush=True)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -419,12 +751,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if size <= 0 or size > MAX_BODY:
             return self.answer(413, {"error": "That is too big to compile."})
         body = self.rfile.read(size)
-        request = hashlib.sha256(self.path.encode() + body).hexdigest()
+        query = urllib.parse.parse_qs(url.query)
+        version = query.get("version", [""])[0]
+        github = query.get("via", [""])[0] == "github"
+        # The same mods on the same game, whichever machine is asked: what one built, the other has.
+        asked = f"{url.path}?version={version}" if github else self.path
+        request = hashlib.sha256(asked.encode() + body).hexdigest()
         job = answered_here(request)
         if job:
             return self.answer(200, {"job": job})
+        if github:
+            job, refused = github_ask(self.address(), request, version, body)
+            if refused:
+                print(f"refused: {refused}", flush=True)
+                return self.answer(429, {"error": refused})
+            return self.answer(200, {"job": job})
         refused = refusal(self.address(), request)
         if refused:
+            print(f"refused: {refused}", flush=True)
             return self.answer(429, {"error": refused})
         # Only now is there something for the machine to do: asking alone keeps nothing awake.
         self.seen()
@@ -467,9 +811,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             f.seek(start)
             shutil.copyfileobj(f, self.wfile, CHUNK)
 
+    def serve_mods(self, ask):
+        """A request's mods, for the runner building them. Whoever has the name, which is random."""
+        path = os.path.join(github_folder(), ask)
+        if not STORE or not ASK.fullmatch(ask) or not os.path.exists(path):
+            return self.answer(404, {"error": "No such thing here."})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(os.path.getsize(path)))
+        self.end_headers()
+        with open(path, "rb") as f:
+            shutil.copyfileobj(f, self.wfile, CHUNK)
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         parts = path.strip("/").split("/")
+        if parts[:2] == ["v1", "github"] and len(parts) == 3:
+            return self.serve_mods(parts[2])
         if parts[:2] != ["v1", "job"] or len(parts) not in (3, 4) or parts[3:] not in ([], ["lib"]):
             return self.answer(404, {"error": "No such thing here."})
         job = parts[2]
@@ -490,6 +848,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except OSError:
                 pass
             return self.serve_library(job) if library else self.answer(200, status)
+        # Nothing about a job on GitHub wakes the machine.
+        on_github = github_status(job)
+        if on_github:
+            if library:
+                return self.answer(404, {"error": "No such thing here."})
+            return self.answer(200, on_github)
         return self.forward(path, library, job)
 
     def forward(self, path, library, job):
@@ -550,6 +914,7 @@ def main():
     if backend_status() is not None:
         started_at = time.time()
     threading.Thread(target=sleeper, daemon=True).start()
+    threading.Thread(target=github_worker, daemon=True).start()
     http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
 
 
