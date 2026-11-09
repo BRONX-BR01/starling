@@ -1,6 +1,6 @@
 //! The Java runtime that prepares the game files on the device, where none is installed (a
-//! phone): OpenJDK 25 built for Android by AngelAuraMC, the build Amethyst runs (GPLv2 with the
-//! Classpath Exception; sources and build scripts at github.com/AngelAuraMC/angelauramc-openjdk-build).
+//! phone): OpenJDK 25 built for Android (GPLv2 with the Classpath Exception; publisher/source
+//! references are recorded in THIRD_PARTY_NOTICES.md).
 //! It is fetched once, checked against the hash pinned here, and unpacked in a folder of its own;
 //! the preparer runs Mojang's code in it (horizon-prepare's exporters), and it can go afterwards.
 use crate::files::Failure;
@@ -21,6 +21,32 @@ pub const JRE25_ANDROID_ARM64: Runtime = Runtime {
     sha256: "d3eb7afe2240c26728a1bb440502c5f18ac3883e932d202dd7f0c9bcbbce4c37",
     size: 38_031_580,
 };
+
+/// OpenJDK 25.0.4 for Android ARMv7, pinned to EclipseJRE's published release.
+/// The AngelAuraMC ARM32 25.0.5 build returned incorrect floating-point results
+/// in on-device tests, including Math.pow(2, -1), and could not generate reports.
+pub const JRE25_ANDROID_ARM: Runtime = Runtime {
+    url: "https://github.com/SouhardyaMaybe/EclipseJRE/releases/download/jres-v1.0.0/jre25-arm-20261009-release.tar.xz",
+    sha256: "528457305c073128b0e0e2478e2b0c41af1c92a0621061cce7ecccd66bdd103d",
+    size: 26_646_332,
+};
+
+/// OpenJDK 25 for Android x86_64, pinned to the publisher's release digest.
+pub const JRE25_ANDROID_X86_64: Runtime = Runtime {
+    url: "https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre25/jre25-android-x86_64.tar.xz",
+    sha256: "7fca862ee1b2d5fe23cd9c9c3d9b7ad3c241947ad1a6cc9464ef2e674867105d",
+    size: 39_061_384,
+};
+
+/// Published runtimes matching the process, never a runtime for another ABI.
+pub fn android_runtime(arch: &str) -> Option<&'static Runtime> {
+    match arch {
+        "arm" => Some(&JRE25_ANDROID_ARM),
+        "aarch64" => Some(&JRE25_ANDROID_ARM64),
+        "x86_64" => Some(&JRE25_ANDROID_X86_64),
+        _ => None,
+    }
+}
 
 /// Written in the runtime's folder once it is unpacked: the archive's hash.
 const INSTALLED: &str = ".starling-runtime";
@@ -259,7 +285,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// The real archive (STARLING_TEST_JRE: a downloaded jre25-android-arm64.tar.xz), timed.
+    /// A real Android runtime archive (STARLING_TEST_JRE), timed.
     #[test]
     #[ignore = "needs the downloaded runtime archive"]
     fn the_android_runtime_unpacks() {
@@ -268,14 +294,18 @@ mod tests {
         let started = std::time::Instant::now();
         unpack(&archive, &dir.join("jre")).unwrap();
         eprintln!("unpacked in {:?}", started.elapsed());
-        for file in [
-            "lib/libjli.so",
-            "lib/server/libjvm.so",
-            "lib/modules",
-            "bin/java",
-        ] {
+        for file in ["lib/libjli.so", "lib/modules", "bin/java"] {
             assert!(dir.join("jre").join(file).is_file(), "{file}");
         }
+        // JLI selects the Client VM on ARM32 and the Server VM on 64-bit.
+        assert!(
+            ["client", "server"].iter().any(|vm| dir
+                .join("jre/lib")
+                .join(vm)
+                .join("libjvm.so")
+                .is_file()),
+            "the archive must contain a JVM that JLI can load"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -299,5 +329,23 @@ mod tests {
         assert!(err.contains("names"), "{err}");
         assert!(!dir.join("escape").exists() && !dir.join("jre").exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod architecture_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_downloads_match_the_process_and_never_substitute_another_cpu() {
+        for (arch, archive) in [
+            ("arm", "jre25-arm-20261009-release.tar.xz"),
+            ("aarch64", "jre25-android-arm64.tar.xz"),
+            ("x86_64", "jre25-android-x86_64.tar.xz"),
+        ] {
+            assert!(android_runtime(arch).unwrap().url.ends_with(archive));
+        }
+        assert!(android_runtime("x86").is_none());
+        assert!(android_runtime("unknown").is_none());
     }
 }

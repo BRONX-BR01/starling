@@ -20,7 +20,7 @@ Usage: horizon-prepare [--prepare] [--server-jar PATH] [--minecraft-dir PATH] [-
                        [--java-home PATH] [--complete] [--progress json]
        horizon-prepare --check [--root PATH] [--output PATH]
        horizon-prepare --launch-api [--root PATH]
-       horizon-prepare compile-exporters [--root PATH]
+       horizon-prepare compile-exporters [--root PATH] [--prepare --minecraft-dir PATH --server-jar PATH]
        horizon-prepare sounds [--minecraft-dir PATH] [--version-json PATH] [--assets-dir PATH] [--root PATH] [--output PATH]
        horizon-prepare panorama [--minecraft-dir PATH] [--version-json PATH] [--assets-dir PATH] [--root PATH] [--output PATH]
        horizon-prepare fonts [--minecraft-dir PATH] [--version-json PATH] [--assets-dir PATH] [--root PATH] [--output PATH]
@@ -58,7 +58,8 @@ Usage: horizon-prepare [--prepare] [--server-jar PATH] [--minecraft-dir PATH] [-
 
 Needs Minecraft played once from the official launcher, and Java of the version
 research-lock.json pins. Releases use a runtime; development or changed exporters need a JDK.
-compile-exporters builds and validates a release bundle from the already imported pinned jars.
+compile-exporters builds and validates a release bundle from the imported pinned jars;
+--prepare first imports the explicit game files, as for resource preparation.
 The resources go to <root>/.local/horizon-client/<version>, or --output; pass that to
 horizon-client --resources. Exit codes: 0 done, 1 failed (or --check found gaps), 2 a refused
 command line (docs/api/launch.md).
@@ -129,7 +130,11 @@ fn main() -> ExitCode {
             }
         };
         let parsed = match flag.as_str() {
-            "--prepare" | "--server-jar" | "--check" if assets.is_some() => {
+            "--prepare" | "--server-jar" | "--check"
+                if assets
+                    .as_deref()
+                    .is_some_and(|kind| kind != "compile-exporters" || flag == "--check") =>
+            {
                 Err(format!("{flag} is for preparing, not for asset copying"))
             }
             "--prepare" if inline.is_none() => {

@@ -7,6 +7,11 @@ use std::sync::Mutex;
 /// How many threads each copying, hashing or compiling step spreads over: HORIZON_PREPARE_JOBS,
 /// else the processors (at most 8). With 1 the lanes run one after another too.
 pub(crate) fn jobs() -> usize {
+    // A 32-bit phone may have less than 1 GiB of RAM. Never keep several exporter
+    // JVMs alive together there, including when a desktop job override is set.
+    if crate::java::SMALL_ANDROID {
+        return 1;
+    }
     std::env::var("HORIZON_PREPARE_JOBS")
         .ok()
         .and_then(|n| n.trim().parse::<usize>().ok())

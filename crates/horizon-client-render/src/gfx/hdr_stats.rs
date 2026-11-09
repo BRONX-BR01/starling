@@ -15,7 +15,7 @@ pub struct EmissionStats {
 }
 
 impl EmissionStats {
-    pub fn new(device: &wgpu::Device, split: u32, arrays: u32) -> Self {
+    pub fn new(device: &wgpu::Device, split: u32, arrays: u32, gl: bool) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Horizon HDR emission thresholds"),
             size: wgpu::Extent3d {
@@ -33,7 +33,7 @@ impl EmissionStats {
         let view = texture.create_view(&Default::default());
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Horizon HDR emission thresholds"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../hdr_stats.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(source(gl)),
         });
         let mut entries: Vec<_> = (0..super::SPRITE_ARRAYS)
             .map(|binding| wgpu::BindGroupLayoutEntry {
@@ -154,5 +154,56 @@ impl EmissionStats {
             pass.draw(0..3, 0..1);
         }
         queue.submit([encoder.finish()]);
+    }
+}
+
+/// Older GLES drivers reject unsigned switch labels emitted by Naga.
+/// Conditional texture selection preserves all samples and HDR thresholds.
+fn source(gl: bool) -> std::borrow::Cow<'static, str> {
+    let original = include_str!("../hdr_stats.wgsl");
+    if !gl {
+        return std::borrow::Cow::Borrowed(original);
+    }
+    let start = original
+        .find("    switch array {")
+        .expect("HDR texture selection");
+    let end = start
+        + original[start..]
+            .find("\n    }")
+            .expect("HDR selection end")
+        + 6;
+    let mut lowered = String::new();
+    for i in 0..7 {
+        let name = if i == 0 {
+            "sprites".into()
+        } else {
+            format!("sprites_{i}")
+        };
+        lowered.push_str(&format!(
+            "    if array == {i}u {{ return textureLoad({name}, at, layer, 0); }}\n"
+        ));
+    }
+    lowered.push_str("    return textureLoad(sprites_7, at, layer, 0);");
+    let mut result = original.to_owned();
+    result.replace_range(start..end, &lowered);
+    std::borrow::Cow::Owned(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::source;
+
+    #[test]
+    fn vulkan_is_unchanged_and_gles_hdr_validates() {
+        assert_eq!(source(false), include_str!("../hdr_stats.wgsl"));
+        assert!(matches!(source(false), std::borrow::Cow::Borrowed(_)));
+        let module = naga::front::wgsl::parse_str(&source(true)).unwrap();
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .unwrap();
+        assert_eq!(module.entry_points.len(), 2);
     }
 }

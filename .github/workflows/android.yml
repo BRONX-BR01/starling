@@ -1,6 +1,6 @@
 name: android
-# The Starling APK, on GitHub's runners: every push to the android branch and every pull request builds it and keeps
-# it as an artifact, signed with the debug key in STARLING_DEBUG_KEYSTORE_BASE64 so one installs over another (a
+# All four Starling APKs, on GitHub's runners: branch pushes and pull requests build each ABI and keep it
+# as an artifact, signed with the debug key in STARLING_DEBUG_KEYSTORE_BASE64 so one installs over another (a
 # throwaway key where that secret is missing, as in a fork's pull request). A tag v* signs it with the release key held
 # in the repository's secrets (STARLING_KEYSTORE_BASE64, STARLING_KEY_ALIAS, STARLING_STORE_PASSWORD, STARLING_KEY_PASSWORD)
 # and publishes it as the latest release, with packaging/android/release-notes.md. The APK holds no game files: players
@@ -40,35 +40,39 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   apk:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { abi: arm64-v8a, target: aarch64-linux-android }
+          - { abi: armeabi-v7a, target: armv7-linux-androideabi }
+          - { abi: x86, target: i686-linux-android }
+          - { abi: x86_64, target: x86_64-linux-android }
     runs-on: ubuntu-latest
     # A release's fast profile builds slower (fewer codegen units, fewer at once: below).
     timeout-minutes: 150
-    permissions:
-      contents: write
-      # A release asks native-mods.yml for its prebuilt native mod builds.
-      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      # javac for the activities, and d8 and apksigner from the build-tools.
+      # JDK 25 compiles/link-checks original exporters; the build-tools supply d8/apksigner.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - name: Install the build-tools, platform and NDK build_apk.py pins
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
             "build-tools;35.0.0" "platforms;android-36" "ndk;28.2.13676358" > /dev/null
       - name: Install Rust for Android and cargo-ndk
         run: |
-          rustup toolchain install stable --profile minimal --target aarch64-linux-android
+          rustup toolchain install stable --profile minimal --target ${{ matrix.target }}
           rustup default stable
           cargo install cargo-ndk --version 3.5.4 --locked
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: android
+          shared-key: android-${{ matrix.abi }}
           save-if: ${{ github.ref == 'refs/heads/android' || github.ref == 'refs/heads/starling' }}
       - name: Unpack the release key
         if: env.RELEASE_BUILD == 'true'
@@ -104,6 +108,7 @@ jobs:
           echo "$KEYSTORE" | base64 -d > target/android/debug.keystore
       - name: Build the APK
         env:
+          ABI: ${{ matrix.abi }}
           HORIZON_ANDROID_KEY_ALIAS: ${{ env.RELEASE_BUILD == 'true' && secrets.STARLING_KEY_ALIAS || 'horizon-debug' }}
           HORIZON_ANDROID_STORE_PASSWORD: ${{ secrets.STARLING_STORE_PASSWORD }}
           HORIZON_ANDROID_KEY_PASSWORD: ${{ secrets.STARLING_KEY_PASSWORD }}
@@ -114,7 +119,7 @@ jobs:
         # native_build.sh makes, named after them.
         run: |
           if [ -z "$MODS" ]; then
-            python packaging/android/build_apk.py --profile "$PROFILE" $VARIANT ${{ inputs.keep_symbols && '--keep-symbols' || '' }}
+            python packaging/android/build_apk.py --abi "$ABI" --profile "$PROFILE" $VARIANT ${{ inputs.keep_symbols && '--keep-symbols' || '' }}
             exit 0
           fi
           bundles=()
@@ -130,11 +135,31 @@ jobs:
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: starling-apk
+          name: starling-apk-${{ matrix.abi }}
           path: target/android/starling-*.apk
+          if-no-files-found: error
           # A test build with the release key installs over a release: anyone may download a public
           # repository's artifacts, so it goes after a day.
           retention-days: ${{ inputs.release_key && 1 || 90 }}
+
+  release:
+    # Publish once, only after every architecture has built and signed successfully.
+    needs: apk
+    if: github.repository == 'JuanLuci/starling' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: starling-apk-*
+          path: target/android
+          merge-multiple: true
+      - name: Check all release APKs and build shared visuals
+        run: |
+          python3 packaging/android/release_assets.py --version "$GITHUB_REF_NAME"
       # The latest release is what the game's update prompt offers (game/update_offer.rs): the APK
       # it installs, Starling Visuals beside it, and the notes written for it.
       - name: Publish the release
