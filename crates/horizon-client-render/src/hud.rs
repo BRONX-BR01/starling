@@ -178,6 +178,71 @@ pub const WORLD_ICON_SLOTS: usize = 32;
 pub const PACK_ICON_SLOTS: usize = 64;
 /// A pack icon slot's side: vanilla's own icons are 128x128.
 pub const PACK_ICON_SIZE: u32 = 128;
+// Bake the settings glyph into its plate: drawing a translucent glyph over
+// a translucent plate changes its effective alpha and darkens it twice.
+fn android_utility_sprites(images: &[PackedImage]) -> Vec<PackedImage> {
+    const GEAR: [&str; 13] = [
+        ".....###.....",
+        "..##.###.##..",
+        ".###########.",
+        ".###########.",
+        "..##.....##..",
+        "####.....####",
+        "####.....####",
+        "####.....####",
+        "..##.....##..",
+        ".###########.",
+        ".###########.",
+        "..##.###.##..",
+        ".....###.....",
+    ];
+    let mut out = Vec::new();
+    for name in ["pause", "inventory", "settings"] {
+        for pressed in [false, true] {
+            let suffix = if pressed { "_pressed" } else { "" };
+            let source = if name == "settings" {
+                "custom_blank"
+            } else {
+                name
+            };
+            let key = format!("starling:gui/sprites/touch/{source}{suffix}");
+            let Some((_, w, h, pixels)) = images.iter().find(|i| i.0 == key).or_else(|| {
+                images
+                    .iter()
+                    .find(|i| i.0 == format!("starling:gui/sprites/touch/{source}"))
+            }) else {
+                continue;
+            };
+            let mut pixels = pixels.clone();
+            if name == "settings" && *w >= 13 && *h >= 13 {
+                let ox = (*w - 13) / 2;
+                let oy = (*h - 13) / 2;
+                for (y, row) in GEAR.iter().enumerate() {
+                    for (x, pixel) in row.bytes().enumerate() {
+                        if pixel == b'#' {
+                            let index = (((oy + y as u32) * w + ox + x as u32) * 4) as usize;
+                            let ink = if pressed { 230 } else { 0 };
+                            pixels[index..index + 3].fill(ink);
+                        }
+                    }
+                }
+            }
+            if name != "inventory" {
+                for pixel in pixels.as_chunks_mut::<4>().0 {
+                    pixel[3] = (u16::from(pixel[3]) * 204 / 255) as u8;
+                }
+            }
+            out.push((
+                format!("starling:android-controls/{name}{suffix}"),
+                *w,
+                *h,
+                pixels,
+            ));
+        }
+    }
+    out
+}
+
 /// Atlas slots for armour trim textures made at run time (`trims`), each the
 /// size of the largest trim texture.
 pub const TRIM_SLOTS: usize = 32;
@@ -1778,6 +1843,7 @@ impl HudAtlas {
         // The menus' atlas too: the touch layout editor works before a world.
         let touch = builtin_touch_sprites(&images);
         images.extend(touch);
+        images.extend(android_utility_sprites(&images));
         // The title screen's "JAVA EDITION" banner reads "RUST EDITION".
         if let Some(edition) = images
             .iter_mut()
@@ -4129,6 +4195,40 @@ texture=wide",
             .unwrap()
             .write_image_data(&pixels)
             .unwrap();
+    }
+    #[test]
+    fn settings_glyph_and_plate_share_one_alpha_and_a_square_bore() {
+        let images = vec![(
+            "starling:gui/sprites/touch/custom_blank".into(),
+            22,
+            22,
+            vec![128; 22 * 22 * 4],
+        )];
+        let mut images = images;
+        for pixel in images[0].3.as_chunks_mut::<4>().0 {
+            pixel[3] = 255;
+        }
+        let baked = android_utility_sprites(&images);
+        let gear = &baked
+            .iter()
+            .find(|i| i.0 == "starling:android-controls/settings")
+            .unwrap()
+            .3;
+        assert!(gear.as_chunks::<4>().0.iter().all(|p| p[3] == 204));
+        // The central bore is five texels wide and five high, with dark teeth
+        // above it. Its alpha is the plate's, rather than two blended layers.
+        for y in 8..13 {
+            for x in 8..13 {
+                assert_eq!(
+                    &gear[(y * 22 + x) * 4..(y * 22 + x) * 4 + 4],
+                    &[128, 128, 128, 204]
+                );
+            }
+        }
+        assert_eq!(
+            &gear[(4 * 22 + 10) * 4..(4 * 22 + 10) * 4 + 4],
+            &[0, 0, 0, 204]
+        );
     }
     #[test]
     fn downloaded_controls_load_even_after_prepared_archive_was_written() {

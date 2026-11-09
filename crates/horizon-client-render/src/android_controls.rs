@@ -1975,27 +1975,14 @@ fn starling_utility(
     pressed: bool,
     opacity: f32,
 ) -> bool {
-    // The neighbouring Bedrock GUI buttons have alpha 204 in the pinned sheet.
-    // Starling's plates are opaque: match their effective alpha, leaving the
-    // inventory matched to the opaque action buttons instead.
-    let opacity = opacity
-        * if c == Control::Inventory {
-            1.
-        } else {
-            204. / 255.
-        };
     let name = match c {
         Control::Pause => "pause",
         Control::Inventory => "inventory",
-        Control::Settings => "custom_blank",
+        Control::Settings => "settings",
         _ => return false,
     };
-    let suffix = if pressed && c != Control::Settings {
-        "_pressed"
-    } else {
-        ""
-    };
-    let key = format!("starling:gui/sprites/touch/{name}{suffix}");
+    let suffix = if pressed { "_pressed" } else { "" };
+    let key = format!("starling:android-controls/{name}{suffix}");
     if !a.sprites.contains_key(&key) {
         return false;
     }
@@ -2009,44 +1996,6 @@ fn starling_utility(
         rect[3],
         rgba(255, 255, 255, (opacity.clamp(0., 1.) * 255.) as u8),
     );
-    if c == Control::Settings {
-        let [x, y, w, h] = rect;
-        let ink = if pressed { 230 } else { 0 };
-        let color = rgba(ink, ink, ink, (opacity.clamp(0., 1.) * 255.).round() as u8);
-        let cell = w.min(h) * 0.62 / 13.;
-        let origin = [x + (w - cell * 13.) / 2., y + (h - cell * 13.) / 2.];
-        // Eight distinct teeth, a circular body and an open central bore.
-        // One mask cell per quad keeps translucent pixels from overlapping.
-        const GEAR: [&str; 13] = [
-            ".....###.....",
-            "..##.###.##..",
-            ".###########.",
-            ".###.....###.",
-            "..##.....##..",
-            "####.....####",
-            "####.....####",
-            "####.....####",
-            "..##.....##..",
-            ".###.....###.",
-            ".###########.",
-            "..##.###.##..",
-            ".....###.....",
-        ];
-        for (row, cells) in GEAR.iter().enumerate() {
-            for (column, pixel) in cells.bytes().enumerate() {
-                if pixel == b'#' {
-                    b.fill(
-                        a,
-                        origin[0] + column as f32 * cell,
-                        origin[1] + row as f32 * cell,
-                        cell,
-                        cell,
-                        color,
-                    );
-                }
-            }
-        }
-    }
     true
 }
 
