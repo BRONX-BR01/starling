@@ -1966,6 +1966,90 @@ fn line(
         );
     }
 }
+/// Starling utility plates, with monochrome glyphs matching the other controls.
+fn starling_utility(
+    b: &mut HudBatch,
+    a: &HudAtlas,
+    c: Control,
+    rect: [f32; 4],
+    pressed: bool,
+    opacity: f32,
+) -> bool {
+    // The neighbouring Bedrock GUI buttons have alpha 204 in the pinned sheet.
+    // Starling's plates are opaque: match their effective alpha, leaving the
+    // inventory matched to the opaque action buttons instead.
+    let opacity = opacity
+        * if c == Control::Inventory {
+            1.
+        } else {
+            204. / 255.
+        };
+    let name = match c {
+        Control::Pause => "pause",
+        Control::Inventory => "inventory",
+        Control::Settings => "custom_blank",
+        _ => return false,
+    };
+    let suffix = if pressed && c != Control::Settings {
+        "_pressed"
+    } else {
+        ""
+    };
+    let key = format!("starling:gui/sprites/touch/{name}{suffix}");
+    if !a.sprites.contains_key(&key) {
+        return false;
+    }
+    crate::ui::sprite_sized(
+        b,
+        a,
+        &key,
+        rect[0],
+        rect[1],
+        rect[2],
+        rect[3],
+        rgba(255, 255, 255, (opacity.clamp(0., 1.) * 255.) as u8),
+    );
+    if c == Control::Settings {
+        let [x, y, w, h] = rect;
+        let ink = if pressed { 230 } else { 0 };
+        let color = rgba(ink, ink, ink, (opacity.clamp(0., 1.) * 255.).round() as u8);
+        let cell = w.min(h) * 0.62 / 13.;
+        let origin = [x + (w - cell * 13.) / 2., y + (h - cell * 13.) / 2.];
+        // Eight distinct teeth, a circular body and an open central bore.
+        // One mask cell per quad keeps translucent pixels from overlapping.
+        const GEAR: [&str; 13] = [
+            ".....###.....",
+            "..##.###.##..",
+            ".###########.",
+            ".###.....###.",
+            "..##.....##..",
+            "####.....####",
+            "####.....####",
+            "####.....####",
+            "..##.....##..",
+            ".###.....###.",
+            ".###########.",
+            "..##.###.##..",
+            ".....###.....",
+        ];
+        for (row, cells) in GEAR.iter().enumerate() {
+            for (column, pixel) in cells.bytes().enumerate() {
+                if pixel == b'#' {
+                    b.fill(
+                        a,
+                        origin[0] + column as f32 * cell,
+                        origin[1] + row as f32 * cell,
+                        cell,
+                        cell,
+                        color,
+                    );
+                }
+            }
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -2238,8 +2322,10 @@ mod tests {
 
     #[test]
     fn shield_uses_the_existing_use_button_in_aim_layouts() {
-        let mut t = TouchControls::default();
-        t.shield_available = true;
+        let mut t = TouchControls {
+            shield_available: true,
+            ..Default::default()
+        };
         assert!(!t.visible(Control::Shield));
         let p = t.placement(Control::Use).center;
         t.update(1, p, true, false);
@@ -2753,8 +2839,10 @@ mod tests {
     }
     #[test]
     fn dpad_can_slide_between_directions_and_mirror() {
-        let mut t = TouchControls::default();
-        t.toggle_crouch = true;
+        let mut t = TouchControls {
+            toggle_crouch: true,
+            ..Default::default()
+        };
         t.settings.mode = Mode::Dpad;
         t.update(1, [0.13, 0.66], true, false);
         assert_eq!(t.state().left, [0.0, 1.0]);
@@ -2814,8 +2902,10 @@ mod tests {
     }
     #[test]
     fn layouts_roundtrip_and_reject_invalid_sizes() {
-        let mut s = Settings::default();
-        s.mode = Mode::Dpad;
+        let mut s = Settings {
+            mode: Mode::Dpad,
+            ..Default::default()
+        };
         s.layouts[2][2].center = [0.4, 0.5];
         let bytes = serde_json::to_vec(&s).unwrap();
         let mut r: Settings = serde_json::from_slice(&bytes).unwrap();
@@ -2880,75 +2970,4 @@ mod tests {
         touch.poll_state(); // consume the queued tap
         assert!(!touch.poll_state().held(Button::LeftStick));
     }
-}
-
-/// Starling utility plates, with monochrome glyphs matching the other controls.
-fn starling_utility(
-    b: &mut HudBatch,
-    a: &HudAtlas,
-    c: Control,
-    rect: [f32; 4],
-    pressed: bool,
-    opacity: f32,
-) -> bool {
-    // The neighbouring Bedrock GUI buttons have alpha 204 in the pinned sheet.
-    // Starling's plates are opaque: match their effective alpha, leaving the
-    // inventory matched to the opaque action buttons instead.
-    let opacity = opacity
-        * if c == Control::Inventory {
-            1.
-        } else {
-            204. / 255.
-        };
-    let name = match c {
-        Control::Pause => "pause",
-        Control::Inventory => "inventory",
-        Control::Settings => "custom_blank",
-        _ => return false,
-    };
-    let suffix = if pressed && c != Control::Settings {
-        "_pressed"
-    } else {
-        ""
-    };
-    let key = format!("starling:gui/sprites/touch/{name}{suffix}");
-    if !a.sprites.contains_key(&key) {
-        return false;
-    }
-    crate::ui::sprite_sized(
-        b,
-        a,
-        &key,
-        rect[0],
-        rect[1],
-        rect[2],
-        rect[3],
-        rgba(255, 255, 255, (opacity.clamp(0., 1.) * 255.) as u8),
-    );
-    if c == Control::Settings {
-        let [x, y, w, h] = rect;
-        let ink = if pressed { 230 } else { 0 };
-        let color = rgba(ink, ink, ink, (opacity.clamp(0., 1.) * 255.).round() as u8);
-        let cell = w.min(h) * 0.62 / 9.;
-        let origin = [x + (w - cell * 9.) / 2., y + (h - cell * 9.) / 2.];
-        // A one-pixel ring and eight teeth; the centre stays open.
-        for iy in -4i32..=4 {
-            for ix in -4i32..=4 {
-                let d = ix * ix + iy * iy;
-                let ring = (4..=10).contains(&d);
-                let tooth = (11..=18).contains(&d) && (ix == 0 || iy == 0 || ix.abs() == iy.abs());
-                if ring || tooth {
-                    b.fill(
-                        a,
-                        origin[0] + (ix + 4) as f32 * cell,
-                        origin[1] + (iy + 4) as f32 * cell,
-                        cell,
-                        cell,
-                        color,
-                    );
-                }
-            }
-        }
-    }
-    true
 }

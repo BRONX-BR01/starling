@@ -2213,13 +2213,15 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("horizon-vm-persist-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
 
-        let mut settings = Settings::default();
-        settings.virtual_mouse_enabled = false;
-        settings.virtual_mouse_sensitivity = 1.75;
-        settings.virtual_mouse_pointer_scale = 1.6;
-        settings.vibrate = false;
-        settings.auto_jump = true;
-        settings.toggle_sprint = true;
+        let mut settings = Settings {
+            virtual_mouse_enabled: false,
+            virtual_mouse_sensitivity: 1.75,
+            virtual_mouse_pointer_scale: 1.6,
+            vibrate: false,
+            auto_jump: true,
+            toggle_sprint: true,
+            ..Default::default()
+        };
         settings.sanitize();
         assert!(settings.sprint_toggle);
 

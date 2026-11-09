@@ -7956,9 +7956,11 @@ mod tests {
         let (_, _, _, _, _, cx, cw, top, _) = hub_metrics(w, h);
         let point = |x: f32, y: f32| [x * density / scale, y * density / scale];
         let mut settings = crate::android_controls::Settings::default();
-        let mut ui = TouchUi::default();
-        ui.floating_menu = true;
-        ui.hub_tab = 2;
+        let mut ui = TouchUi {
+            floating_menu: true,
+            hub_tab: 2,
+            ..Default::default()
+        };
         ui.hub_max_scroll.set(300.);
         let start = point(cx + cw / 2., top + 200.);
         assert_eq!(
@@ -8022,8 +8024,10 @@ mod tests {
     use super::*;
     #[test]
     fn title_utility_offset_moves_more_hit_target_but_keeps_back_in_place() {
-        let mut ui = TouchUi::default();
-        ui.utility_offset_y = 24.;
+        let ui = TouchUi {
+            utility_offset_y: 24.,
+            ..Default::default()
+        };
         assert!(ui.action(400., 240., [50., 10.], true).is_none());
         assert!(matches!(
             ui.action(400., 240., [50., 34.], true),

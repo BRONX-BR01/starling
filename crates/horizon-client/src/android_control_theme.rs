@@ -2817,9 +2817,11 @@ mod tests {
         assert_eq!(parse_hex_color("#F0A"), Some(0xFF00AA));
         assert_eq!(parse_hex_color("not-a-color"), None);
 
-        let mut cfg = LauncherThemeConfig::default();
-        cfg.custom_bg_hex = "invalid".into();
-        cfg.gradient_mid_pos = 99.0;
+        let mut cfg = LauncherThemeConfig {
+            custom_bg_hex: "invalid".into(),
+            gradient_mid_pos: 99.0,
+            ..Default::default()
+        };
         cfg.sanitize();
         assert_eq!(cfg.custom_bg_hex, "#13111C");
         assert_eq!(cfg.gradient_mid_pos, 0.85);

@@ -861,7 +861,7 @@ fn builtin_touch_sprites(images: &[PackedImage]) -> Vec<PackedImage> {
             }
             let (w, h, mut pixels) = decode_bytes(png).ok()?;
             if matches!(*name, "pause" | "inventory") {
-                for pixel in pixels.chunks_exact_mut(4) {
+                for pixel in pixels.as_chunks_mut::<4>().0 {
                     if pixel[0] >= 245 && pixel[1] >= 245 && pixel[2] >= 245 {
                         pixel[..3].copy_from_slice(&[32, 32, 32]);
                     }
