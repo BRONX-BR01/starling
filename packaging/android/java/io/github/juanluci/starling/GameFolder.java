@@ -118,6 +118,31 @@ final class GameFolder {
         }
     }
 
+    /**
+     * The id of `target`, a path in this game folder, when the Files app may show it; else null.
+     * Compared without links on the way (/sdcard, /data/data), so either spelling of a path works.
+     */
+    String idOf(File target) {
+        String top;
+        String path;
+        try {
+            top = root.getCanonicalPath();
+            path = target.getCanonicalPath();
+        } catch (IOException e) {
+            return null;
+        }
+        if (!path.equals(top) && !path.startsWith(top + File.separator)) {
+            return null;
+        }
+        String id = ROOT + path.substring(top.length()).replace(File.separatorChar, '/');
+        try {
+            file(id);
+            return id;
+        } catch (FileNotFoundException e) {
+            return null;
+        }
+    }
+
     /** The folder a document is in. */
     static String parent(String id) {
         return id.substring(0, id.lastIndexOf('/'));

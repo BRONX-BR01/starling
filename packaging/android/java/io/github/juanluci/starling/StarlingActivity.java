@@ -742,17 +742,50 @@ public class StarlingActivity extends NativeActivity {
         return true;
     }
 
-    /** The system's file manager on a folder of shared storage; false where none can show it. */
+    /**
+     * The system's file manager on a folder; false where none can show it. A folder of the game's
+     * opens through this app's own provider (GameFolderProvider), which shows it in shared storage
+     * and in the app's own files alike, as Horizon Android did. Another one of shared storage opens
+     * through the storage's provider. When nothing opens, the player is told where to look.
+     */
     public boolean openFolder(String path) {
-        String root = Environment.getExternalStorageDirectory().getPath();
-        if (!path.startsWith(root)) {
-            return false;
+        File target = new File(path);
+        String id = GameFolder.choose(getFilesDir(), sharedFolder(this)).idOf(target);
+        if (id != null
+                && viewFolder(DocumentsContract.buildDocumentUri(getPackageName() + ".documents", id))) {
+            return true;
         }
-        String relative = path.substring(root.length()).replaceFirst("^/+", "");
-        Uri folder = DocumentsContract.buildDocumentUri(
-                "com.android.externalstorage.documents", "primary:" + relative);
-        // Any file manager that takes a folder, else the system's own (Files).
-        String[] packages = {null, "com.google.android.documentsui", "com.android.documentsui"};
+        String root = Environment.getExternalStorageDirectory().getPath();
+        boolean shared = path.startsWith(root + "/");
+        if (shared) {
+            String relative = path.substring(root.length() + 1);
+            Uri folder = DocumentsContract.buildDocumentUri(
+                    "com.android.externalstorage.documents", "primary:" + relative);
+            if (viewFolder(folder)) {
+                return true;
+            }
+        }
+        // A folder the Files app can't show at all (the app's own native mods) is the game's to
+        // explain: it offers the Starling folder.
+        if (id != null || shared) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(StarlingActivity.this, R.string.open_folder_failed,
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+        return false;
+    }
+
+    /**
+     * A folder document in the system's Files app, which shows any provider's, else in any file
+     * manager that takes one. Some phones' own file managers take the intent and show nothing for
+     * another app's documents, so the system's goes first.
+     */
+    private boolean viewFolder(Uri folder) {
+        String[] packages = {"com.google.android.documentsui", "com.android.documentsui", null};
         for (String app : packages) {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(folder, DocumentsContract.Document.MIME_TYPE_DIR);
@@ -764,7 +797,7 @@ public class StarlingActivity extends NativeActivity {
                 startActivity(intent);
                 return true;
             } catch (ActivityNotFoundException | SecurityException e) {
-                // The next one.
+                android.util.Log.i("starling", "No folder view in " + app + ": " + e);
             }
         }
         return false;

@@ -31,16 +31,18 @@ fn catalog_shelf(shelf: horizon_client::options_ui::CatalogShelf) -> starling_ca
 }
 
 impl Game<'_> {
-    /// One of the game's folders (packs, shader packs, mods) in the file manager. On a phone that
-    /// keeps the game in the app's private files, which no file manager opens, the offer of the
-    /// Starling folder instead.
+    /// One of the game's folders (packs, shader packs, mods) in the file manager. On a phone the
+    /// Files app shows it through Starling's own provider, wherever the game keeps it. A folder it
+    /// can't show from the app's private files gets the offer of the Starling folder instead.
     fn open_game_folder(&mut self, dir: &std::path::Path) {
         let _ = std::fs::create_dir_all(dir);
         #[cfg(target_os = "android")]
-        if horizon_client::logging::game_home() == horizon_client::logging::private_home() {
+        if horizon_client::platform::open_folder(dir) != Some(true)
+            && horizon_client::logging::game_home() == horizon_client::logging::private_home()
+        {
             self.ask_files_offer();
-            return;
         }
+        #[cfg(not(target_os = "android"))]
         super::packs::open_folder(dir);
     }
 
