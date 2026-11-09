@@ -15970,6 +15970,10 @@ impl Game<'_> {
             static_block_entities = static_sections;
             visible_static_block_entity_sections = visible_static_sections;
             static_block_entity_stats = static_stats;
+        } else {
+            // `begin_skinning` clears the last frame's posed draws, and only a frame that builds
+            // entities runs it: kept, the last world's entities would be posed over the panorama.
+            self.skin_frame.get_mut().clear_draws();
         }
         let bolts = if title {
             Vec::new()
