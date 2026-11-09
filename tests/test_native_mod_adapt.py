@@ -30,5 +30,11 @@ class Code(unittest.TestCase):
         self.assertEqual(adapt.code(UPDATED_STATE), UPDATED_STATE)
 
 
+class Calls(unittest.TestCase):
+    def test_a_mod_calling_content_root_again_passes_what_it_now_takes(self):
+        said = adapt.code("Break(content_root(root, enabled, &with))")
+        self.assertEqual(said, "Break(content_root(root, enabled, &with, None, &mut |_| {}))")
+
+
 if __name__ == "__main__":
     unittest.main()
