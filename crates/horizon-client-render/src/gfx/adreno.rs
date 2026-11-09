@@ -2,13 +2,23 @@
 // SPDX-License-Identifier: MIT
 // Adapted from Vasysik/horizon-android; see THIRD_PARTY_NOTICES.md and LICENSE.
 //! What only Adreno on Android's Vulkan takes: the GPU Vasysik's Android fork measured these
-//! paths on (an Adreno 710). Every other GPU keeps the usual pipelines and draw order.
+//! paths on (an Adreno 710). Every other GPU keeps the usual pipelines and draw order, but for the
+//! sky after solid terrain, which Mali and PowerVR take too (`late_sky::wanted`).
 
 /// Adreno on Android's Vulkan.
 pub(super) fn adreno_vulkan(info: &wgpu::AdapterInfo) -> bool {
     cfg!(target_os = "android")
         && info.backend == wgpu::Backend::Vulkan
         && info.name.contains("Adreno")
+}
+
+/// Mali or PowerVR on Android's Vulkan: the other phone GPUs the fork takes its paths on. Only
+/// those phones can say whether a path gains there, so each one taken here can be turned off
+/// from `horizon-ctl` for an A/B check.
+pub(super) fn mali_or_powervr_vulkan(info: &wgpu::AdapterInfo) -> bool {
+    cfg!(target_os = "android")
+        && info.backend == wgpu::Backend::Vulkan
+        && (info.name.contains("Mali") || info.vendor == 0x1010 || info.name.contains("PowerVR"))
 }
 
 /// What these paths' pipelines of terrain.wgsl share. Unlike `Renderer::new`'s own, they may fail:

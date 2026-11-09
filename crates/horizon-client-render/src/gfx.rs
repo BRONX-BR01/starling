@@ -4040,7 +4040,7 @@ impl Renderer {
         let uploads = upload::Uploads::new(&device);
         let section_uploads = upload::Uploads::with_chunk(&device, SECTION_UPLOAD_CHUNK);
         let stars = stars::Stars::new(&device, config.format.remove_srgb_suffix());
-        let late_sky = adreno::adreno_vulkan(&adapter_info)
+        let late_sky = late_sky::wanted(&adapter_info)
             .then(|| {
                 late_sky::LateSky::new(
                     &adreno::TerrainModule {

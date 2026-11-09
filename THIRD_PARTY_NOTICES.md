@@ -257,7 +257,8 @@ after solid terrain (`gfx/late_sky.rs` and the far-plane vertex entries in `terr
 9771fbce2b).
 
 The fork takes them on every Android Vulkan GPU it allows; here they follow `splits_solid`, which
-holds on Adreno. Starling's sunrise fan is geometry, so it has a far-plane entry of its own. The
+holds on Adreno, but for the sky after solid terrain, which Mali and PowerVR on Android's Vulkan take
+too (`late_sky::wanted`, `adreno::mali_or_powervr_vulkan`), as in the fork. Starling's sunrise fan is geometry, so it has a far-plane entry of its own. The
 fork's two specialization constants are one here, which also leaves out the distant tiles' sampling,
 and its terrain shaders also cover flat frames. The indirect offset fix in 1a115395f8 doesn't apply:
 Starling's solid passes don't rebase the indirect buffer.

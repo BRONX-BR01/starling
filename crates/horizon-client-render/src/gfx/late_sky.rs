@@ -7,7 +7,19 @@
 //! usual ones. The fork measured less GPU time on an Adreno 710 (14.73 to 13.59 ms standing,
 //! 16.5 to 13.5 ms turning), with the same pixels. Shader packs, the End sky, the water mirror
 //! and occlusion culling keep the usual order.
+//!
+//! Taken on Adreno, Mali and PowerVR behind Android's Vulkan (`wanted`), as the fork takes it
+//! on every Android Vulkan GPU. Mali and PowerVR have not been measured with it:
+//! `horizon-ctl sky-order early` brings the usual order back for an A/B check.
 use super::adreno::TerrainModule;
+
+/// Whether frames on this GPU may draw the sky after solid terrain: Adreno, Mali and PowerVR
+/// on Android's Vulkan. Mali and PowerVR adapted from Vasysik/horizon-android (`late_sky` in
+/// its `gfx.rs`, on any Android Vulkan GPU), MIT, copyright (c) 2026 Ludovic Marie and the
+/// Horizon contributors.
+pub(super) fn wanted(info: &wgpu::AdapterInfo) -> bool {
+    super::adreno::adreno_vulkan(info) || super::adreno::mali_or_powervr_vulkan(info)
+}
 
 pub(super) struct LateSky {
     pub sky: wgpu::RenderPipeline,
