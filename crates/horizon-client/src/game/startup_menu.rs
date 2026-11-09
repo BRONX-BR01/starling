@@ -767,6 +767,8 @@ impl Loading {
                     self.settings.shader_packs =
                         horizon_client::shader_pack_list::scan(&Game::shader_packs_dir());
                 }
+                // Before the game starts the mods are listed as it starts (`start_mods`).
+                Event::ListMods => {}
                 Event::ShaderPack => self.save_menu_settings(),
                 Event::OpenCustomButtons => {
                     self.settings.custom_buttons = super::touch::saved_custom_buttons();
