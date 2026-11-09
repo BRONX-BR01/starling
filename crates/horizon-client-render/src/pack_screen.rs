@@ -51,12 +51,16 @@ fn phone_drop_info(data: bool, folder: Option<&std::path::Path>) -> String {
         format!("Put packs in {shown}/resourcepacks")
     }
 }
-/// Where a page's Catalog button goes, left of its footer's first button at `footer_x`: its x and
-/// width. Narrower where the GUI leaves less room, and none where the label wouldn't fit.
-pub(crate) fn catalog_button_at(footer_x: f32) -> Option<(f32, f32)> {
-    let right = footer_x - 4.0;
-    let x = (right - 100.0).max(2.0);
-    (right - x >= 44.0).then_some((x, right - x))
+/// The footer's first button is 150 wide. With a Catalog button the two share that width, a gap
+/// between: each is this wide.
+const HALF_BUTTON: f32 = 73.0;
+/// The footer's first slot, at `x`: Open Folder's width and, when the page has a Catalog button,
+/// its x and width. Open Folder keeps the left half and Catalog takes the right.
+pub(crate) fn open_folder_slot(x: f32, catalog: bool) -> (f32, Option<(f32, f32)>) {
+    if !catalog {
+        return (150.0, None);
+    }
+    (HALF_BUTTON, Some((x + 150.0 - HALF_BUTTON, HALF_BUTTON)))
 }
 impl Compat {
     fn key(self) -> &'static str {
@@ -458,13 +462,17 @@ impl PackScreen {
         let y = self.height - 33 + (0.5f32 * 13.0).round() as i32;
         [(x, y), (x + 158, y)]
     }
+    /// A footer button's width: Open Folder shares its slot with Catalog when there is one.
+    fn footer_w(&self, i: usize) -> i32 {
+        match i {
+            0 => open_folder_slot(0.0, self.catalog).0 as i32,
+            _ => 150,
+        }
+    }
     /// The Catalog button, if it has one: x, y and width.
     fn catalog_button(&self) -> Option<(i32, i32, i32)> {
-        if !self.catalog {
-            return None;
-        }
         let (footer_x, y) = self.footer()[0];
-        let (x, width) = catalog_button_at(footer_x as f32)?;
+        let (x, width) = open_folder_slot(footer_x as f32, self.catalog).1?;
         Some((x as i32, y, width as i32))
     }
     /// Whether `(x, y)` is on the Catalog button.
@@ -592,8 +600,13 @@ impl PackScreen {
             self.footer()
         };
         (self.confirm.is_none() && self.on_catalog(x, y))
-            || buttons.into_iter().any(|(bx, by)| {
-                x >= bx as f64 && y >= by as f64 && x < (bx + 150) as f64 && y < (by + 20) as f64
+            || buttons.into_iter().enumerate().any(|(i, (bx, by))| {
+                let w = if self.confirm.is_none() {
+                    self.footer_w(i)
+                } else {
+                    150
+                };
+                x >= bx as f64 && y >= by as f64 && x < (bx + w) as f64 && y < (by + 20) as f64
             })
     }
     /// A left click (`Screen.mouseClicked`).
@@ -655,7 +668,8 @@ impl PackScreen {
             return Action::None;
         }
         for (i, (bx, by)) in self.footer().into_iter().enumerate() {
-            if x >= bx as f64 && y >= by as f64 && x < (bx + 150) as f64 && y < (by + 20) as f64 {
+            let w = self.footer_w(i);
+            if x >= bx as f64 && y >= by as f64 && x < (bx + w) as f64 && y < (by + 20) as f64 {
                 self.set_focus(Focus::Button(i));
                 return if i == 0 {
                     Action::OpenFolder
@@ -979,7 +993,8 @@ impl PackScreen {
         labels: [&Text; 2],
     ) {
         for (i, ((bx, by), label)) in self.footer().into_iter().zip(labels).enumerate() {
-            let hover = d::inside(mouse, bx, by, 150, 20);
+            let w = self.footer_w(i);
+            let hover = d::inside(mouse, bx, by, w, 20);
             // The cursor follows the mouse; the highlight also keyboard focus.
             crate::widgets::widget_cursor(hover, true);
             d::button(
@@ -988,7 +1003,7 @@ impl PackScreen {
                 label,
                 bx,
                 by,
-                150,
+                w,
                 20,
                 true,
                 hover || self.focus == Focus::Button(i),
@@ -1363,7 +1378,7 @@ mod catalog_button_tests {
     }
 
     #[test]
-    fn it_sits_left_of_the_footer_and_clear_of_the_rest_at_a_phones_gui_sizes() {
+    fn it_takes_the_right_half_of_open_folders_slot_at_a_phones_gui_sizes() {
         let atlas = atlas();
         let m = Measure(&atlas.font);
         for (w, h) in [(427, 240), (533, 240), (600, 270), (800, 360), (1200, 540)] {
@@ -1371,13 +1386,14 @@ mod catalog_button_tests {
             let mut screen = PackScreen::new(&m, tr("resourcePack.title"), w, h, false, packs, &[]);
             screen.catalog = true;
             let (x, y, width) = screen.catalog_button().expect("room for it");
-            let [(footer_x, footer_y), _] = screen.footer();
+            let [(footer_x, footer_y), (done_x, _)] = screen.footer();
             assert_eq!(y, footer_y, "on the footer's row at {w}x{h}");
-            assert!(x >= 0, "on the screen at {w}x{h}");
             assert!(
-                x + width <= footer_x,
+                x >= footer_x + screen.footer_w(0),
                 "clear of Open Pack Folder at {w}x{h}"
             );
+            assert!(x + width <= footer_x + 150, "inside the slot at {w}x{h}");
+            assert!(x + width < done_x, "clear of Done at {w}x{h}");
             assert!(y >= screen.lists[0].bottom(), "below the lists at {w}x{h}");
             assert!(screen.button_at(&m, x as f64 + 1.0, y as f64 + 1.0));
             assert_eq!(
@@ -1388,15 +1404,15 @@ mod catalog_button_tests {
     }
 
     #[test]
-    fn it_goes_where_the_mods_page_has_its_button_next_to_the_footer() {
-        // 4 away from the footer, 100 wide.
-        assert_eq!(catalog_button_at(246.0), Some((142.0, 100.0)));
-    }
-
-    #[test]
-    fn a_narrow_gui_makes_it_narrower_and_too_narrow_a_one_leaves_it_out() {
-        assert_eq!(catalog_button_at(59.0), Some((2.0, 53.0)));
-        assert_eq!(catalog_button_at(6.0), None);
+    fn the_slot_splits_in_two_halves_with_a_gap_and_keeps_its_width() {
+        assert_eq!(open_folder_slot(100.0, false), (150.0, None));
+        let (open, catalog) = open_folder_slot(100.0, true);
+        let (x, width) = catalog.unwrap();
+        assert_eq!((open, width), (73.0, 73.0));
+        assert_eq!(x, 177.0);
+        // The same 150 from the left of Open Folder to the right of Catalog.
+        assert_eq!(x + width, 100.0 + 150.0);
+        assert!(x - (100.0 + open) > 0.0);
     }
 
     #[test]
@@ -1405,7 +1421,7 @@ mod catalog_button_tests {
         let m = Measure(&atlas.font);
         let packs = Vec::new();
         let mut screen = PackScreen::new(&m, tr("resourcePack.title"), 800, 360, false, packs, &[]);
-        let (x, y) = (142, screen.footer()[0].1);
+        let (x, y) = (screen.footer()[0].0 + 77, screen.footer()[0].1);
         let drawn_at = |screen: &PackScreen| {
             screen
                 .draw(&m, (0, 0), 0, 0)
@@ -1413,13 +1429,23 @@ mod catalog_button_tests {
                 .any(|d| matches!(d, Draw::Sprite { x: dx, y: dy, .. } if (*dx, *dy) == (x, y)))
         };
         assert!(!drawn_at(&screen));
-        assert!(!screen.button_at(&m, x as f64 + 1.0, y as f64 + 1.0));
+        // Open Folder keeps its whole button.
         assert_eq!(
             screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
-            Action::None
+            Action::OpenFolder
         );
         screen.catalog = true;
         assert!(drawn_at(&screen));
+        assert_eq!(
+            screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
+            Action::Catalog
+        );
+        // Open Folder's half still opens the folder.
+        let (fx, fy) = screen.footer()[0];
+        assert_eq!(
+            screen.click(&m, fx as f64 + 1.0, fy as f64 + 1.0),
+            Action::OpenFolder
+        );
     }
 
     #[test]

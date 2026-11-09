@@ -10,6 +10,43 @@ pub const PAGE: usize = 20;
 /// the game's other lists (`touch::slop`).
 pub const SLOP: f32 = 12.0;
 
+/// What a player reads when the network failed.
+const NO_CONNECTION: &str = "Couldn't reach the catalog. Check your connection and try again.";
+
+/// The words of an error that came from the network or the server's answer.
+const NETWORK_WORDS: [&str; 13] = [
+    "no connection",
+    "network error",
+    "connection",
+    "timed out",
+    "timeout",
+    "dns",
+    "lookup",
+    "unreachable",
+    "reset by peer",
+    "broken pipe",
+    "software caused",
+    "transport",
+    "interrupted",
+];
+
+/// The words of an error that is for the log, not the player.
+const TECHNICAL_WORDS: [&str; 5] = ["://", "os error", "error:", "status code", "{"];
+
+/// `raw`, an error for the log, as one plain sentence for the screen: no connection when the
+/// network failed, `otherwise` when what it says is only technical, and `raw` itself when it is
+/// already a sentence a player can read.
+pub fn friendly(raw: &str, otherwise: &str) -> String {
+    let lower = raw.to_ascii_lowercase();
+    if NETWORK_WORDS.iter().any(|w| lower.contains(w)) {
+        NO_CONNECTION.to_owned()
+    } else if TECHNICAL_WORDS.iter().any(|w| lower.contains(w)) {
+        otherwise.to_owned()
+    } else {
+        raw.to_owned()
+    }
+}
+
 /// What the list ends with.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum Tail {

@@ -784,7 +784,9 @@ impl Game<'_> {
             return false;
         }
         if event.state == ElementState::Pressed && !event.repeat {
-            if self.touch.editor.take().is_some() {
+            if self.catalog_back() {
+                // The catalog closes, and the page it was opened from stays.
+            } else if self.touch.editor.take().is_some() {
                 self.save_touch_layout();
             } else {
                 let _ = self.touch_key_tap(KeyCode::Escape);
