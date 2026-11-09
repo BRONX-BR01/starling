@@ -140,6 +140,7 @@ impl StartupMenu {
             game.ui.options = std::mem::take(&mut self.options);
             game.ui.options.resource_error =
                 game.ui.options.resource_error.take().or(resource_error);
+            game.ui.options.offer_catalog();
             game.screen = Screen::Options;
             game.options_from_title = true;
             game.dragging = self.dragging;
@@ -828,7 +829,7 @@ impl Loading {
                     &mut self.menu.narrator_toast,
                 ),
                 // Mods' settings pages open only in a running game.
-                Event::NativeSettings(_) | Event::NativeButton(..) | Event::OpenCatalog => {}
+                Event::NativeSettings(_) | Event::NativeButton(..) | Event::OpenCatalog(_) => {}
                 // Options.createSoundSliderOptionInstance: the preview plays without a level,
                 // once the menu's sound output is up.
                 Event::Volume(source, volume) => {
