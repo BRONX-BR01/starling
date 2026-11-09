@@ -12,6 +12,7 @@ mod launcher {
     pub mod browser;
 }
 pub use launcher::browser;
+pub mod list;
 
 use browser::{
     horizon::Registry,
@@ -65,14 +66,16 @@ pub fn search(
 ) -> Result<Vec<Project>, String> {
     match shelf {
         Shelf::Mods => {
+            // Left out first, then paged: a page that lost all its rows would look like the end.
             let mut query = Query::new(text, Kind::Mod);
-            query.offset = offset;
-            query.limit = limit;
+            query.limit = usize::MAX;
             Ok(Registry
                 .search(&query)?
                 .into_iter()
                 .filter(|p| p.support().installable())
                 .filter(|p| NATIVE_MODS_BUILD || !is_native_mod(p))
+                .skip(offset)
+                .take(limit)
                 .collect())
         }
         Shelf::ResourcePacks => {
