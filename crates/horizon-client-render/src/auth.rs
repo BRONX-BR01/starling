@@ -67,6 +67,10 @@ impl AuthSession {
         session.ely = true;
         session
     }
+    /// An Ely.by account: its skin is on Ely.by, not on Mojang's profile.
+    pub fn is_ely(&self) -> bool {
+        self.ely
+    }
     /// The session file's JSON: {"name", "uuid", "access_token", "user_type": "msa", "xuid"}.
     pub fn parse(text: &str) -> Result<Self, String> {
         let v: serde_json::Value =

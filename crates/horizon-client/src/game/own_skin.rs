@@ -206,6 +206,16 @@ impl Game<'_> {
         self.own_skin.elyby.textures(name)
     }
 
+    /// The signed-in Ely.by account's own skin, once Ely.by answered: Ely.by is where that account
+    /// keeps it, whether or not Skin Customization looks other names up there. None for another
+    /// account or none.
+    pub(super) fn own_elyby_textures(&mut self) -> Option<horizon_client::skins::Textures> {
+        let account = horizon_client::auth::current().filter(|a| a.is_ely())?;
+        // Its answers are kept in the same file.
+        self.elyby_enabled();
+        self.own_skin.elyby.textures(&account.name)
+    }
+
     /// The name worlds open with (`offline_name::for_worlds`), read at most every few seconds.
     fn worlds_name(&mut self) -> String {
         if let Some(name) = horizon_client::accounts::player_name() {
@@ -237,7 +247,14 @@ impl Game<'_> {
         if let Some((skin, slim)) = self.own_skin_sprite() {
             return Worn::Skin(skin, slim);
         }
-        if horizon_client::auth::current().is_some() || !self.elyby_enabled() {
+        // A Microsoft account's skin comes from its profile (remote.rs, `own_profile`). An Ely.by
+        // account's is on Ely.by, looked up by its name like an offline one's.
+        let ely = match horizon_client::auth::current() {
+            Some(account) if !account.is_ely() => return Worn::Default,
+            Some(_) => true,
+            None => false,
+        };
+        if !self.elyby_enabled() && !ely {
             return Worn::Default;
         }
         let name = self.worlds_name();
