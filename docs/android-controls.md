@@ -1,25 +1,29 @@
-# Custom touch buttons
+# Android control system
 
-Open the touch layout editor (hold Pause while playing), then add or edit a custom
-button. Starling keeps its chat shortcuts, built-in controls, imported/drawn button
-images and Hold/Toggle behavior.
+Starling integrates Horizon Android's control engine and visual editor. Open the
+control hub to select **MCPE** or **GoyControl**, change the movement mode or edit
+a layout. The touch-layout entry in Controls opens the same visual editor.
 
-A custom button has three binding slots. Tap **Binding** to choose slot 1, 2 or 3,
-then choose a game control or a keyboard key. They are pressed together, with
-modifiers first. **Clear binding** clears the current slot. A key shared by two
-custom buttons stays held until both release it. Opening another screen releases
-custom holds and toggles.
+The editor supports moving and resizing controls, independent dimensions,
+component properties, colors, borders, shapes, labels and event bindings. It has
+undo/redo, visibility controls and a save/back confirmation. Presets keep their
+names, descriptions and separate MCPE/GoyControl layouts under `controls/`;
+`horizon-touch.json` keeps the active selection.
 
-The text field switches between a chat/command and a button label. An empty label
-uses the action names. The first slot may send a chat line or command; extra slots
-hold keys. A custom label does not change the command or bindings.
+The control hub includes movement and joystick configuration, aiming and axis
+sensitivity, virtual pointer settings, gyroscope settings, button behavior and
+inventory controls. GoyControl supports custom static buttons, pass-through,
+swiping, hold/toggle behavior and up to three simultaneous events. MCPE supports
+joystick/crosshair, joystick/tap and D-pad schemes.
 
-Width and height change independently in 25% steps from 25% to 300%, wrapping
-back to 25%. These multiply the size in the layout editor. The button's picture
-and touch area use the same rectangle. Existing buttons keep 100% dimensions.
+Starling's chat shortcuts (history, completion, cursor and paste) and touch slot
+gestures remain available. Inventory Shift/Control include the control system's
+latched modifiers and held custom keys. Foreground/focus changes release touch
+owners through the existing input paths.
 
-The existing `touch-layout.json` stores these additions alongside the original
-positions, images and actions. Old layouts remain readable. This does not import
-Horizon Android layout files: their presets and bindings use a different format.
+This is independent of account management. It uses the current game's settings
+folder; selecting an account does not select a control preset. Existing Starling
+`touch-layout.json` files are preserved, but are not imported into the new preset
+format automatically.
 
-Adapted from Horizon Android under MIT; see `THIRD_PARTY_NOTICES.md`.
+See `THIRD_PARTY_NOTICES.md` for the MIT source attribution.

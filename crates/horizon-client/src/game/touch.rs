@@ -1,6 +1,3 @@
-// Custom button extensions adapted from Horizon Android (MIT).
-// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
-// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! Touch input (horizon_client::touch): on the playing screen the touch controls, drawn over the
 //! HUD and turned into the virtual pad, mouse motion and the hotbar, laid out as the player's
 //! touch-layout.json says (edited in place: a long press on pause); on every other screen the
@@ -116,7 +113,7 @@ pub(super) struct Touch {
     keyboard: bool,
     /// The keyboard is wanted over the text field shown now: a typing screen opened, or a tap
     /// landed on the field; a tap beside it, the back key or the field going away end it.
-    wanted: bool,
+    pub(in crate::game) wanted: bool,
     /// The text field the keyboard was last decided for (`text_context`).
     context: Option<&'static str>,
     /// Where the last finger landed: lifted about there, it was a tap (`keyboard_after_tap`).
@@ -239,7 +236,6 @@ fn plate_of(ui: &mut Ui, shape: Shape, c: [f32; 2], r: f32, fill: u32) {
     let corner = match shape {
         Shape::Square => r * 0.3,
         Shape::Round | Shape::Wide(_) => r,
-        Shape::Rect([w, h]) => r * w.min(h) * 0.3,
     };
     ui.rounded(
         (c[0] - hw) / d,
@@ -256,7 +252,6 @@ fn ring_of(ui: &mut Ui, shape: Shape, c: [f32; 2], r: f32, line: u32) {
     let corner = match shape {
         Shape::Square => r * 0.3,
         Shape::Round | Shape::Wide(_) => r,
-        Shape::Rect([w, h]) => r * w.min(h) * 0.3,
     };
     ui.border(
         (c[0] - hw) / d,
@@ -283,7 +278,6 @@ fn text_r(shape: Shape, r: f32) -> f32 {
     match shape {
         Shape::Wide(_) => r * 1.5,
         Shape::Round | Shape::Square => r,
-        Shape::Rect([w, h]) => r * w.min(h),
     }
 }
 
@@ -320,22 +314,7 @@ pub(super) fn draw_editor(
             && let Some(sprite) = skin(target)
         {
             let a = if place.show == Show::Off { 0.4 } else { a };
-            if let Shape::Rect(_) = shape {
-                let [hw, hh] = shape.half(r);
-                let scale = ui.batch.scale;
-                horizon_client::ui::sprite_sized(
-                    ui.batch,
-                    ui.atlas,
-                    &sprite,
-                    (c[0] - hw) / scale,
-                    (c[1] - hh) / scale,
-                    2. * hw / scale,
-                    2. * hh / scale,
-                    ink(a),
-                );
-            } else {
-                icon(ui, &sprite, c, r, 1.0, a);
-            }
+            icon(ui, &sprite, c, r, 1.0, a);
             if editor.selected == Some(target) {
                 ring_of(ui, shape, c, r, color::ACCENT);
             }
@@ -471,7 +450,7 @@ impl Game<'_> {
     /// The player plays with a touch screen: a touch was seen, and on Android no keyboard, mouse
     /// or controller took over since (game/input_mode.rs).
     pub(super) fn has_touch(&self) -> bool {
-        self.touch.seen && self.touch_shown()
+        (cfg!(target_os = "android") || self.touch.seen) && self.touch_shown()
     }
     fn touch_playing(&self) -> bool {
         self.screen == Screen::Playing
@@ -498,6 +477,12 @@ impl Game<'_> {
 
     /// The touch controls turn the view as a grabbed pointer does (mouse.rs).
     pub(super) fn touch_turns(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            return self.touch.live
+                && self.mobile.controls.editor.is_none()
+                && !self.mobile.ui.floating_menu;
+        }
         self.touch.live && self.touch.editor.is_none()
     }
 
@@ -530,6 +515,13 @@ impl Game<'_> {
     /// Taps and presses on the view act on what is under the finger now: tap to interact, the
     /// touch controls in play, in first person (the ray goes through the finger from the eyes).
     pub(super) fn touch_taps(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            return self.touch.live
+                && !self.mobile.controls.crosshair()
+                && self.mobile.controls.editor.is_none()
+                && self.camera_type.first_person();
+        }
         self.touch.live
             && self.touch.editor.is_none()
             && self.touch_shown()
@@ -544,6 +536,13 @@ impl Game<'_> {
     /// The window pixel tap to interact aims through: a finger that may still tap or holds, or
     /// a tap whose click is still held.
     fn touch_aim_point(&self) -> Option<[f32; 2]> {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            return self.mobile.controls.aim.or(self.mobile.touch_aim).map(|p| {
+                let [w, h] = self.touch_size();
+                [p[0] * w as f32, p[1] * h as f32]
+            });
+        }
         if !self.touch_taps() {
             return None;
         }
@@ -604,6 +603,9 @@ impl Game<'_> {
     /// A short buzz of the phone (Bedrock's "Vibrate when breaking blocks" and "when splitting
     /// items"): while the touch screen plays and the layout leaves vibration on.
     pub(super) fn touch_vibrate(&self, millis: u32) {
+        #[cfg(target_os = "android")]
+        let on = self.mobile.controls.settings.vibrate;
+        #[cfg(not(target_os = "android"))]
         let on = self.touch.config.as_ref().is_none_or(|c| c.vibrate);
         if !on || !self.has_touch() {
             return;
@@ -617,14 +619,20 @@ impl Game<'_> {
     /// Once a frame: aiming by turning the phone, while the layout asks for it and the touch
     /// controls play (the sensor is listened to only then). Its turn goes on the view as the
     /// mouse's would (`Entity.turn`).
-    fn touch_gyro(&mut self) {
+    pub(in crate::game) fn touch_gyro(&mut self) {
+        #[cfg(target_os = "android")]
+        let wanted = self.touch.live
+            && self.mobile.controls.editor.is_none()
+            && self.has_touch()
+            && self.mobile.controls.settings.gyroscope;
+        #[cfg(not(target_os = "android"))]
         let wanted = self.touch.live
             && self.touch.editor.is_none()
             && self.has_touch()
             && self.player.is_some()
             && self.touch.config.as_ref().is_some_and(|c| c.gyro);
         #[cfg(target_os = "android")]
-        {
+        if self.mobile_controls_enabled() {
             if wanted != self.touch.gyro_on {
                 // A phone without a gyroscope says so; it is not asked again until the next change.
                 let started = crate::android::gyroscope(wanted);
@@ -639,7 +647,8 @@ impl Game<'_> {
             let Some([x, y, rotation]) = crate::android::take_gyro() else {
                 return;
             };
-            let [yaw, pitch] = touch::gyro_turn([x, y], rotation as i32);
+            let [yaw, pitch] = touch::gyro_turn([x, y], rotation as i32)
+                .map(|v| v * self.mobile.controls.settings.gyro_sensitivity);
             if yaw == 0.0 && pitch == 0.0 {
                 return;
             }
@@ -719,6 +728,11 @@ impl Game<'_> {
             if matches!(t.phase, TouchPhase::Ended | TouchPhase::Cancelled) {
                 self.touch.chat_finger = None;
             }
+            return true;
+        }
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            self.mobile_touch(t, event_loop, id);
             return true;
         }
         // The extra buttons: held while a finger is on them.
@@ -807,6 +821,10 @@ impl Game<'_> {
 
     /// Android's back key: Escape (pause, close a screen), or Done in the layout editor.
     pub(super) fn touch_back_key(&mut self, event: &KeyEvent) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_back_key(event) {
+            return true;
+        }
         if event.logical_key != Key::Named(NamedKey::BrowserBack) {
             return false;
         }
@@ -824,6 +842,13 @@ impl Game<'_> {
 
     /// Once per loop iteration, before the pads are read.
     pub(super) fn touch_frame(&mut self, event_loop: &dyn EventLoopCtl) {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            self.touch.live = self.touch_playing();
+            self.mobile_frame(event_loop);
+            self.touch_keyboard_frame();
+            return;
+        }
         let now = Instant::now();
         if self.touch.config.is_none() {
             let text = Self::touch_layout_path()
@@ -885,6 +910,14 @@ impl Game<'_> {
             self.touch.tapped = None;
         }
         self.touch_gyro();
+        self.touch_keyboard_frame();
+    }
+
+    fn touch_keyboard_frame(&mut self) {
+        #[cfg(target_os = "android")]
+        if self.mobile_keyboard_active() {
+            return;
+        }
         // The on-screen keyboard (its keys arrive as key events; on Android an editor behind it
         // holds the field, text_mirror.rs). The screens made for typing
         // (chat, sign, book, command block) open it with them; the other text fields on a tap on
@@ -1191,6 +1224,14 @@ impl Game<'_> {
 
     /// Whether the touch Sneak button holds sneak now (`sync_toggle` adds it to the key's state).
     pub(super) fn touch_sneaking(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            return self
+                .mobile
+                .controls
+                .state()
+                .held(horizon_client::gamepad::Button::RightStick);
+        }
         self.touch.sneaking
     }
 
@@ -1225,6 +1266,11 @@ impl Game<'_> {
     }
 
     pub(super) fn open_touch_editor(&mut self) {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            self.mobile_open_editor();
+            return;
+        }
         let actions = self.touch.controls.reset();
         self.touch_apply(actions);
         self.touch.editor = Some(LayoutEditor::default());
@@ -1233,6 +1279,11 @@ impl Game<'_> {
     /// The controls over the HUD while playing (or the layout editor), the close button over
     /// screens.
     pub(super) fn draw_touch(&self, batch: &mut HudBatch) {
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            self.mobile_draw(batch);
+            return;
+        }
         if !self.touch_shown() {
             return;
         }
@@ -1414,22 +1465,7 @@ impl Game<'_> {
                 if let Some((skin, lit)) = &face.skin {
                     // One image for both: dimmed while held.
                     let held = if on && skin == lit { *a * 0.6 } else { *a };
-                    if let Shape::Rect(_) = shape {
-                        let [hw, hh] = shape.half(*r);
-                        let scale = ui.batch.scale;
-                        horizon_client::ui::sprite_sized(
-                            ui.batch,
-                            ui.atlas,
-                            if on { lit } else { skin },
-                            (c[0] - hw) / scale,
-                            (c[1] - hh) / scale,
-                            2. * hw / scale,
-                            2. * hh / scale,
-                            ink(held),
-                        );
-                    } else {
-                        icon(&mut ui, if on { lit } else { skin }, *c, *r, 1.0, held);
-                    }
+                    icon(&mut ui, if on { lit } else { skin }, *c, *r, 1.0, held);
                     continue;
                 }
                 let fill = if on { pressed(*a) } else { plate(*a) };
@@ -1448,6 +1484,8 @@ impl Game<'_> {
     /// Let go of everything the fingers held (the app went to the background, or the player took
     /// up a keyboard, a mouse or a controller).
     pub(super) fn touch_release_all(&mut self) {
+        #[cfg(target_os = "android")]
+        self.android_release_touch_keys(true);
         let actions = self.touch.controls.reset();
         self.touch_apply(actions);
         // No window events here: the screen gets them back when the app returns.
@@ -1617,6 +1655,10 @@ impl Game<'_> {
         if words.first() != Some(&"touch-layout") {
             return Ok(None);
         }
+        #[cfg(target_os = "android")]
+        if self.mobile_controls_enabled() {
+            return self.mobile_layout_command(words);
+        }
         match words.get(1).copied() {
             None => {}
             Some("edit") => self.open_touch_editor(),
@@ -1654,7 +1696,6 @@ impl Game<'_> {
         if id != touch::CUSTOM_BUTTONS {
             return;
         }
-        let before = self.custom_held_keys();
         let held = format!("{id}:{bind}");
         let button = self
             .touch
@@ -1676,49 +1717,40 @@ impl Game<'_> {
         if on {
             self.touch.custom_down.push(held);
         }
-        if finger && let Some(CustomAction::Send(line)) = button.map(|b| b.action) {
-            self.handle_chat_input(&line);
+        match button.map(|b| b.action) {
+            Some(CustomAction::Send(line)) if finger => self.handle_chat_input(&line),
+            Some(action) => self.custom_key(&action, on),
+            None => {}
         }
-        let after = self.custom_held_keys();
-        self.sync_custom_keys(before, after);
     }
 
-    fn custom_held_keys(&self) -> Vec<KeyCode> {
-        let Some(config) = &self.touch.config else {
-            return Vec::new();
-        };
-        touch::held_custom_keys(&config.custom, &self.touch.custom_down, |a| match a {
-            horizon_client::settings::CustomAction::Key(name) => {
-                horizon_client::keybinds::key_code(self.settings.keys.get(name))
-            }
-            horizon_client::settings::CustomAction::Input(name) => {
-                horizon_client::keybinds::key_code(name)
-            }
-            horizon_client::settings::CustomAction::Send(_) => None,
-        })
-    }
-    fn sync_custom_keys(&mut self, before: Vec<KeyCode>, after: Vec<KeyCode>) {
-        // Release the chord in reverse order; modifiers were pressed first.
-        for key in before.iter().rev().filter(|k| !after.contains(k)) {
-            self.custom_key_code(*key, false);
-        }
-        for key in after.iter().filter(|k| !before.contains(k)) {
-            // Inventory/chat bindings may leave gameplay while a chord is being pressed.
-            if self.screen != Screen::Playing {
-                break;
-            }
-            self.custom_key_code(*key, true);
-        }
-    }
-    /// Screen changes release every custom hold and toggle together.
+    /// The custom buttons on let go, as a screen opening lets go of every key.
     fn custom_buttons_up(&mut self) {
-        let before = self.custom_held_keys();
-        self.touch.custom_down.clear();
-        self.sync_custom_keys(before, Vec::new());
+        for held in std::mem::take(&mut self.touch.custom_down) {
+            let action = self.touch.config.as_ref().and_then(|c| {
+                let id = held
+                    .strip_prefix(touch::CUSTOM_BUTTONS)?
+                    .strip_prefix(':')?;
+                let button = c.custom.iter().find(|b| b.id.to_string() == id)?;
+                Some(button.action.clone())
+            });
+            if let Some(action) = action {
+                self.custom_key(&action, false);
+            }
+        }
     }
 
     /// A custom button's key goes down or up.
-    fn custom_key_code(&mut self, key: KeyCode, pressed: bool) {
+    fn custom_key(&mut self, action: &horizon_client::settings::CustomAction, pressed: bool) {
+        use horizon_client::settings::CustomAction;
+        let key = match action {
+            CustomAction::Send(_) => return,
+            CustomAction::Key(name) => {
+                horizon_client::keybinds::key_code(self.settings.keys.get(name))
+            }
+            CustomAction::Input(name) => horizon_client::keybinds::key_code(name),
+        };
+        let Some(key) = key else { return };
         // F3 acts on its release, through its own handler (the game's F3 button too).
         if key == KeyCode::F3 {
             let state = if pressed {
@@ -1857,17 +1889,7 @@ impl Game<'_> {
                     key: format!("{}:{}", touch::CUSTOM_BUTTONS, b.id),
                     label,
                     icon: None,
-                    shape: if b.dimensions != [100, 100] {
-                        let base = if skin.is_some() {
-                            1.0
-                        } else {
-                            (width / WIDE_HEIGHT).max(1.0)
-                        };
-                        Shape::Rect([
-                            base * b.dimensions[0] as f32 / 100.,
-                            b.dimensions[1] as f32 / 100.,
-                        ])
-                    } else if skin.is_some() {
+                    shape: if skin.is_some() {
                         Shape::Square
                     } else {
                         Shape::Wide(width / WIDE_HEIGHT)

@@ -352,7 +352,7 @@ impl Game<'_> {
     /// decided: what the editor did applied in order, then the editor shown, told the field's
     /// own changes or put away; or NativeActivity's keyboard for a field it cannot read.
     #[cfg(target_os = "android")]
-    pub(super) fn android_keyboard(&mut self, keyboard: bool) {
+    pub(in crate::game) fn android_keyboard(&mut self, keyboard: bool) {
         for event in crate::android::take_mirror_events() {
             match event {
                 crate::android::MirrorEvent::Edit {

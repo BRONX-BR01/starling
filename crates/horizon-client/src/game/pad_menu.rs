@@ -332,7 +332,7 @@ impl Game<'_> {
     /// A click (press and release) at a point, the pointer staying there.
     /// A pointer event of the pad's or the keyboard's, as the window would
     /// send it (marked, so it isn't taken for the real mouse).
-    fn pad_synthetic_event(
+    pub(in crate::game) fn pad_synthetic_event(
         &mut self,
         event_loop: &dyn EventLoopCtl,
         id: WindowId,
@@ -1388,7 +1388,7 @@ impl Game<'_> {
 
     /// What a key of the on-screen keyboard does: the same as a typed key in
     /// the field that has focus.
-    fn pad_osk_output(&mut self, out: osk::Output) {
+    pub(in crate::game) fn pad_osk_output(&mut self, out: osk::Output) {
         use osk::Output;
         let (key, text) = match &out {
             Output::Text(t) => (None, Some(t.as_str())),

@@ -245,11 +245,8 @@
   "starling.diagnostics.last_error": "Последняя ошибка: %s",
   "starling.native_builds.arm64_only": "Сервис сборки нативных модов пока поддерживает только ARM64. Архитектура этого приложения не может использовать его сборки.",
   "starling.native_builds.wrong_architecture": "Эта нативная сборка предназначена для другой архитектуры.",
-  "starling.touch.edit_label": "Поле: подпись кнопки (нажмите для смены)",
-  "starling.touch.edit_command": "Поле: сообщение / команда (нажмите для смены)",
-  "starling.touch.binding": "Назначение",
-  "starling.touch.clear_binding": "Убрать назначение",
-  "starling.touch.chord_hint": "Все три назначения удерживаются вместе. Нажмите «Назначение», чтобы выбрать слот.",
-  "starling.touch.width": "Ширина",
-  "starling.touch.height": "Высота"
+  "starling.controls.analog": "Движение на 360°",
+  "starling.controls.analog_hint": "Выключено: направления движения как в Java.",
+  "starling.controls.interact_look": "Обзор при взаимодействии",
+  "starling.controls.interact_look_hint": "Поворот камеры при атаке, установке блоков и использовании предмета."
 }

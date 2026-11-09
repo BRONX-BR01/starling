@@ -184,6 +184,10 @@ impl Pads {
     pub(super) fn player_replaced(&mut self) {
         self.health.forget();
     }
+    #[cfg(target_os = "android")]
+    pub(super) fn set_touch_state(&mut self, state: PadState) {
+        self.touch = state;
+    }
     /// The touch controls (game/touch.rs) play through their own pad.
     pub(super) fn touch_hold(&mut self, button: Button, down: bool) {
         self.touch.set(button, down);
@@ -273,6 +277,8 @@ impl Game<'_> {
             self.pad_edge(event_loop, button, down);
         }
         self.pad_menu_frame(event_loop);
+        #[cfg(target_os = "android")]
+        self.mobile_pad_end(state.triggers == [0.; 2] && self.pad.late_releases.is_empty());
     }
 
     fn pad_edge(&mut self, event_loop: &dyn EventLoopCtl, button: Button, down: bool) {
@@ -409,6 +415,14 @@ impl Game<'_> {
         } else {
             self.pad.touch.left
         };
+        #[cfg(target_os = "android")]
+        if self.touch_shown()
+            && (!self.mobile.controls.settings.analog_movement
+                || self.mobile.controls.settings.mode
+                    == horizon_client::android_controls::Mode::Dpad)
+        {
+            return gamepad::java_move_vector(stick, settings.move_deadzone);
+        }
         gamepad::move_vector(stick, settings.move_deadzone)
     }
 

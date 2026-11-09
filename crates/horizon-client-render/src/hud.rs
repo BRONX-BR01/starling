@@ -1698,6 +1698,59 @@ impl HudAtlas {
                 images.push(image);
             }
         }
+        // Downloaded Android controls can arrive after horizon-data.bin was built.
+        // Read this small overlay from disk too, without walking every prepared asset.
+        if full {
+            let mut existing: HashSet<String> = images.iter().map(|i| i.0.clone()).collect();
+            for base in [root, defaults] {
+                let dir = base.join("assets/minecraft/textures/gui/bedrock");
+                let mut pending = vec![dir.clone()];
+                while let Some(folder) = pending.pop() {
+                    let Ok(entries) = fs::read_dir(folder) else {
+                        continue;
+                    };
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            pending.push(path);
+                            continue;
+                        }
+                        if path.extension().is_none_or(|e| e != "png") {
+                            continue;
+                        }
+                        let Ok(relative) = path.strip_prefix(&dir) else {
+                            continue;
+                        };
+                        let name = format!(
+                            "gui/bedrock/{}",
+                            relative
+                                .with_extension("")
+                                .to_string_lossy()
+                                .replace('\\', "/")
+                        );
+                        if !existing.contains(&name)
+                            && let Ok(bytes) = fs::read(&path)
+                            && let Ok((w, h, pixels)) = decode_bytes(&bytes)
+                        {
+                            existing.insert(name.clone());
+                            images.push((name, w, h, pixels));
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(target_os = "android")]
+        if full {
+            log::info!(
+                "Android control atlas: {} original textures (root {}, defaults {})",
+                images
+                    .iter()
+                    .filter(|i| i.0.starts_with("gui/bedrock/"))
+                    .count(),
+                root.display(),
+                defaults.display()
+            );
+        }
         // The menus' atlas too: the touch layout editor works before a world.
         let touch = builtin_touch_sprites(&images);
         images.extend(touch);
@@ -4052,6 +4105,22 @@ texture=wide",
             .unwrap()
             .write_image_data(&pixels)
             .unwrap();
+    }
+    #[test]
+    fn downloaded_controls_load_even_after_prepared_archive_was_written() {
+        let root =
+            std::env::temp_dir().join(format!("horizon-control-overlay-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("horizon-resources.json"), b"{}").unwrap();
+        write_png(&root, "gui/sprites/widget/button", 200, 20);
+        horizon_core::prepared_files::write(&root).unwrap();
+        // Downloading touch assets does not rewrite the large vanilla archive.
+        write_png(&root, "gui/bedrock/gui", 256, 256);
+        write_png(&root, "gui/bedrock/ui/attack", 32, 32);
+        let atlas = HudAtlas::build(&root).unwrap();
+        assert_eq!(atlas.sprites["gui/bedrock/gui"].w, 256);
+        assert_eq!(atlas.sprites["gui/bedrock/ui/attack"].h, 32);
+        let _ = fs::remove_dir_all(root);
     }
     #[test]
     fn a_pack_texture_keeps_the_default_textures_gui_size() {

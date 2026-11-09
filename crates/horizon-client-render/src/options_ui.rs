@@ -1,6 +1,3 @@
-// Custom button extensions adapted from Horizon Android (MIT).
-// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
-// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! The options screens: OptionsScreen, Video Settings, Music & Sounds,
 //! Controls, Key Binds, Mouse Settings, Chat Settings, Accessibility,
 //! Language and Resource Packs, laid out like vanilla's HeaderAndFooter /
@@ -214,6 +211,37 @@ impl Opt {
 
     pub(crate) fn caption(self) -> &'static str {
         match self {
+            Opt::TouchMode => "Control scheme",
+            Opt::TouchCrosshairGestures => "Touch gestures",
+            Opt::TouchControlHub => "Control hub button",
+            Opt::TouchUiVibration => "UI vibration",
+            Opt::TouchGameVibration => "Gameplay vibration",
+            Opt::TouchAttackButtonLook => "Look while interacting",
+            Opt::TouchMouseSensitivity => "Virtual mouse sensitivity",
+            Opt::TouchAnalog => "360-degree movement",
+            Opt::TouchCircleSize => "Touch circle size",
+            Opt::TouchAttackSide => "Attack indicator side",
+            Opt::TouchHorizontalMargin => "HUD margins: left / right",
+            Opt::TouchVerticalMargin => "HUD margins: top / bottom",
+            Opt::TouchSensitivity => "Touch sensitivity",
+            Opt::TouchSensitivityHorizontal => "Horizontal sensitivity",
+            Opt::TouchSensitivityVertical => "Vertical sensitivity",
+            Opt::TouchOffhand => "Swap hands button",
+            Opt::TouchShield => "Raise shield with",
+            Opt::TouchButtonScale => "Control button size",
+            Opt::TouchInteract => "Interact button",
+            Opt::TouchLeftHand => "Left handed",
+            Opt::TouchSprintButton => "Sprint button",
+            Opt::TouchSprintToggle => "Toggle sprint button",
+            Opt::TouchInventoryControls => "Controls in inventory",
+            Opt::TouchDynamicJoystick => "Dynamic joystick",
+            Opt::TouchDynamicAreaX => "Dynamic joystick width",
+            Opt::TouchDynamicAreaY => "Dynamic joystick height",
+            Opt::AndroidGyroscope => "Gyroscope aiming",
+            Opt::AndroidGyroSensitivity => "Gyroscope sensitivity",
+            Opt::TouchSwapJumpSneak => "Swap jump / sneak",
+            Opt::TouchAutoSprint => "Auto Sprint",
+
             Opt::Fov => "options.fov",
             Opt::RenderDistance => "options.renderDistance",
             Opt::SimulationDistance => "options.simulationDistance",
@@ -340,6 +368,18 @@ impl Opt {
     pub(crate) fn kind(self, s: &Settings) -> Kind {
         let unit = |v: f32, lo: f32, hi: f32| Kind::Slider(((v - lo) / (hi - lo)).clamp(0.0, 1.0));
         match self {
+            Opt::TouchCircleSize => unit(s.touch.circle_size, 16.0, 64.0),
+            Opt::TouchDynamicAreaX => unit(s.touch.dynamic_area_x, 0.0, 1.0),
+            Opt::TouchDynamicAreaY => unit(s.touch.dynamic_area_y, 0.0, 1.0),
+            Opt::TouchHorizontalMargin => unit(s.touch.horizontal_margin, 0.0, 0.12),
+            Opt::TouchVerticalMargin => unit(s.touch.vertical_margin, 0.0, 0.12),
+            Opt::AndroidGyroSensitivity => unit(s.touch.gyro_sensitivity, 0.1, 3.0),
+            Opt::TouchSensitivity => unit(s.touch.sensitivity, 0.1, 3.0),
+            Opt::TouchSensitivityHorizontal => unit(s.touch.sensitivity_horizontal, 0.1, 3.0),
+            Opt::TouchSensitivityVertical => unit(s.touch.sensitivity_vertical, 0.1, 3.0),
+            Opt::TouchMouseSensitivity => unit(s.touch.virtual_mouse_sensitivity, 0.25, 3.0),
+            Opt::TouchButtonScale => unit(s.touch.button_scale, 0.5, 2.0),
+
             Opt::FovEffects | Opt::DarknessPulsing => {
                 Kind::Slider(s.file.double(self.file_key().unwrap()).sqrt() as f32)
             }
@@ -490,6 +530,131 @@ impl Opt {
     /// The widget message (OptionInstance.toString / CycleButton full name).
     pub fn label(self, s: &Settings) -> Text {
         let c = self.caption();
+        let touch_value = match self {
+            Opt::TouchMode => Some(
+                crate::android_controls::Mode::SCHEMES
+                    .iter()
+                    .find(|(mode, split, _)| {
+                        *mode == s.touch.mode
+                            && (!matches!(
+                                mode,
+                                crate::android_controls::Mode::Dpad
+                                    | crate::android_controls::Mode::Tap
+                            ) || *split == s.touch.split_controls)
+                    })
+                    .map_or("Joystick & aim crosshair", |(_, _, label)| *label)
+                    .to_owned(),
+            ),
+            Opt::TouchCircleSize => Some(format!("{} px", s.touch.circle_size.round())),
+            Opt::TouchAttackSide => Some(
+                if s.touch.attack_indicator_left {
+                    "Left"
+                } else {
+                    "Right"
+                }
+                .into(),
+            ),
+            Opt::TouchHorizontalMargin => {
+                Some(format!("{:.1}%", s.touch.horizontal_margin * 100.0))
+            }
+            Opt::TouchVerticalMargin => Some(format!("{:.1}%", s.touch.vertical_margin * 100.0)),
+            Opt::AndroidGyroscope => Some(if s.touch.gyroscope { "ON" } else { "OFF" }.into()),
+            Opt::AndroidGyroSensitivity => {
+                Some(format!("{:.0}%", s.touch.gyro_sensitivity * 100.0))
+            }
+            Opt::TouchSensitivity => Some(format!("{:.0}%", s.touch.sensitivity * 100.0)),
+            Opt::TouchSensitivityHorizontal => {
+                Some(format!("{:.0}%", s.touch.sensitivity_horizontal * 100.0))
+            }
+            Opt::TouchSensitivityVertical => {
+                Some(format!("{:.0}%", s.touch.sensitivity_vertical * 100.0))
+            }
+            Opt::TouchOffhand => Some(if s.touch.offhand_button { "On" } else { "Off" }.into()),
+            Opt::TouchShield => Some(
+                if s.touch.shield_button {
+                    "Button"
+                } else {
+                    "Sneak"
+                }
+                .into(),
+            ),
+            Opt::TouchMouseSensitivity => {
+                Some(format!("{:.0}%", s.touch.virtual_mouse_sensitivity * 100.0))
+            }
+            Opt::TouchAttackButtonLook => Some(
+                if s.touch.attack_button_look {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchControlHub => Some(
+                if s.touch.show_control_hub {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchUiVibration => Some(if s.touch.ui_vibrate { "ON" } else { "OFF" }.into()),
+            Opt::TouchGameVibration => Some(if s.touch.vibrate { "ON" } else { "OFF" }.into()),
+            Opt::TouchCrosshairGestures => Some(
+                if s.touch.crosshair_gestures {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchButtonScale => Some(format!("{:.0}%", s.touch.button_scale * 100.0)),
+            Opt::TouchAnalog => Some(if s.touch.analog_movement { "ON" } else { "OFF" }.into()),
+            Opt::TouchInteract => Some(
+                if s.touch.contextual_interact {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchLeftHand => Some(if s.touch.left_handed { "ON" } else { "OFF" }.into()),
+            Opt::TouchSprintButton => Some(if s.touch.sprint_button { "ON" } else { "OFF" }.into()),
+            Opt::TouchSprintToggle => Some(if s.touch.sprint_toggle { "ON" } else { "OFF" }.into()),
+            Opt::TouchInventoryControls => Some(
+                if s.touch.inventory_controls {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchDynamicJoystick => Some(
+                if s.touch.dynamic_joystick {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            Opt::TouchDynamicAreaX => Some(format!("{:.0}%", s.touch.dynamic_area_x * 100.0)),
+            Opt::TouchDynamicAreaY => Some(format!("{:.0}%", s.touch.dynamic_area_y * 100.0)),
+            Opt::TouchSwapJumpSneak => {
+                Some(if s.touch.swap_jump_sneak { "ON" } else { "OFF" }.into())
+            }
+            Opt::TouchAutoSprint => Some(
+                if s.touch.sprint_with_joystick {
+                    "ON"
+                } else {
+                    "OFF"
+                }
+                .into(),
+            ),
+            _ => None,
+        };
+        if let Some(value) = touch_value {
+            return Text::literal(format!("{c}: {value}"));
+        }
+
         match self {
             Opt::ChatDelay => tr("options.chat.delay_none"),
             Opt::FovEffects
@@ -851,6 +1016,18 @@ impl Opt {
         let v = v.clamp(0.0, 1.0);
         let step = |lo: f32, hi: f32| (lo + v * (hi - lo)).round();
         match self {
+            Opt::TouchCircleSize => s.touch.circle_size = step(16.0, 64.0),
+            Opt::TouchDynamicAreaX => s.touch.dynamic_area_x = (v * 100.0).round() / 100.0,
+            Opt::TouchDynamicAreaY => s.touch.dynamic_area_y = (v * 100.0).round() / 100.0,
+            Opt::TouchHorizontalMargin => s.touch.horizontal_margin = (v * 120.0).round() / 1000.0,
+            Opt::TouchVerticalMargin => s.touch.vertical_margin = (v * 120.0).round() / 1000.0,
+            Opt::AndroidGyroSensitivity => s.touch.gyro_sensitivity = 0.1 + v * 2.9,
+            Opt::TouchSensitivity => s.touch.sensitivity = 0.1 + v * 2.9,
+            Opt::TouchSensitivityHorizontal => s.touch.sensitivity_horizontal = 0.1 + v * 2.9,
+            Opt::TouchSensitivityVertical => s.touch.sensitivity_vertical = 0.1 + v * 2.9,
+            Opt::TouchMouseSensitivity => s.touch.virtual_mouse_sensitivity = 0.25 + v * 2.75,
+            Opt::TouchButtonScale => s.touch.button_scale = 0.5 + v * 1.5,
+
             Opt::FovEffects | Opt::DarknessPulsing => s.file.set(
                 self.file_key().unwrap(),
                 crate::options_file::V::Double(f64::from(v).powi(2)),
@@ -950,6 +1127,44 @@ impl Opt {
             }
         };
         match self {
+            Opt::TouchMode => {
+                let i = crate::android_controls::Mode::SCHEMES
+                    .iter()
+                    .position(|(mode, split, _)| {
+                        *mode == s.touch.mode
+                            && (!matches!(
+                                mode,
+                                crate::android_controls::Mode::Dpad
+                                    | crate::android_controls::Mode::Tap
+                            ) || *split == s.touch.split_controls)
+                    })
+                    .unwrap_or(0);
+                let (mode, split, _) = crate::android_controls::Mode::SCHEMES[usize::from(next(
+                    i as u8,
+                    crate::android_controls::Mode::SCHEMES.len() as u8,
+                ))];
+                s.touch.mode = mode;
+                s.touch.split_controls = split;
+            }
+            Opt::AndroidGyroscope => s.touch.gyroscope ^= true,
+            Opt::TouchAnalog => s.touch.analog_movement ^= true,
+            Opt::TouchInteract => s.touch.contextual_interact ^= true,
+            Opt::TouchOffhand => s.touch.offhand_button ^= true,
+            Opt::TouchShield => s.touch.shield_button ^= true,
+            Opt::TouchLeftHand => s.touch.left_handed ^= true,
+            Opt::TouchSprintButton => s.touch.sprint_button ^= true,
+            Opt::TouchSprintToggle => s.touch.sprint_toggle ^= true,
+            Opt::TouchInventoryControls => s.touch.inventory_controls ^= true,
+            Opt::TouchDynamicJoystick => s.touch.dynamic_joystick ^= true,
+            Opt::TouchCrosshairGestures => s.touch.crosshair_gestures ^= true,
+            Opt::TouchControlHub => s.touch.show_control_hub ^= true,
+            Opt::TouchUiVibration => s.touch.ui_vibrate ^= true,
+            Opt::TouchGameVibration => s.touch.vibrate ^= true,
+            Opt::TouchAttackButtonLook => s.touch.attack_button_look ^= true,
+            Opt::TouchAttackSide => s.touch.attack_indicator_left ^= true,
+            Opt::TouchSwapJumpSneak => s.touch.swap_jump_sneak ^= true,
+            Opt::TouchAutoSprint => s.touch.sprint_with_joystick ^= true,
+
             Opt::GuiScale => {
                 let max = crate::window::calculate_scale(framebuffer, 0, s.force_unicode) as u32;
                 let value = s.gui_scale.min(max);
@@ -1498,6 +1713,7 @@ pub enum Page {
     Video,
     Sound,
     Controls,
+    Touch,
     KeyBinds,
     Mouse,
     Chat,
@@ -1588,10 +1804,6 @@ enum Act {
     CustomDelete(u32),
     /// Toggled or held.
     CustomToggle(u32),
-    CustomField(u32),
-    CustomSlot(u32),
-    CustomClear(u32),
-    CustomDimension(u32, usize),
     CustomKey(u32, &'static str),
     CustomInput(u32, &'static str),
     /// A native mod's key (the mod's index in the installed list, the key's in its page) as the
@@ -1892,8 +2104,6 @@ pub struct OptionsUi {
     pub(crate) settings_search: ui::EditBox,
     /// What the custom button on its page sends.
     custom_send: ui::EditBox,
-    custom_label_edit: bool,
-    custom_slot: usize,
     /// The custom button on its page came from the touch editor's Add, and goes back there.
     back_to_editor: bool,
     /// The canvas of a custom button's image.
@@ -2025,8 +2235,6 @@ impl Default for OptionsUi {
             language_search: search,
             settings_search,
             custom_send,
-            custom_label_edit: false,
-            custom_slot: 0,
             back_to_editor: false,
             painter: Painter::default(),
             pack_infos: Vec::new(),
@@ -2770,6 +2978,7 @@ impl OptionsUi {
             Page::Skin => "options.skinCustomisation.title",
             Page::Online => "options.online.title",
             Page::Controls => "controls.title",
+            Page::Touch => "Touch Controls",
             Page::KeyBinds => "controls.keybinds.title",
             Page::Mouse => "options.mouse_settings.title",
             Page::Chat => "options.chat.title",
@@ -3338,52 +3547,111 @@ impl OptionsUi {
                         Act::Push(Page::KeyBinds),
                     )),
                 )];
-                let controls = vanilla_control_options();
+                let mut controls = vanilla_control_options();
+                if cfg!(target_os = "android") {
+                    controls.push(Opt::TouchAutoSprint);
+                }
                 rows.extend(pairs(&controls));
-                // Horizon's controller page, after vanilla's rows.
                 rows.push(Row::Buttons(
                     button(
-                        0.0,
-                        0.0,
-                        310.0,
+                        0.,
+                        0.,
+                        if cfg!(target_os = "android") {
+                            150.
+                        } else {
+                            310.
+                        },
                         tr("horizon.pages.open.controller"),
                         Act::Push(Page::Controller),
                     ),
-                    None,
+                    cfg!(target_os = "android").then(|| {
+                        button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::literal("Touch Controls..."),
+                            Act::Push(Page::Touch),
+                        )
+                    }),
                 ));
+                rows.push(Row::Buttons(
+                    button(
+                        0.,
+                        0.,
+                        if cfg!(target_os = "android") {
+                            150.
+                        } else {
+                            310.
+                        },
+                        Text::literal("Bedrock Inventory: ").append(on_off(s.bedrock_inventory)),
+                        Act::BedrockInventory,
+                    ),
+                    cfg!(target_os = "android").then(|| {
+                        button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::literal("Customize Layout..."),
+                            if cfg!(target_os = "android") {
+                                Act::TouchLayout
+                            } else {
+                                Act::CustomButtons
+                            },
+                        )
+                    }),
+                ));
+                self.filter_option_rows(rows)
+            }
+            Page::Touch => {
+                let mut rows = vec![Row::Header("Movement & Look Sensitivity")];
+                rows.push(Row::Big(Opt::TouchMode));
+                rows.extend(pairs(&[
+                    Opt::TouchCrosshairGestures,
+                    Opt::TouchAttackButtonLook,
+                    Opt::TouchSensitivity,
+                    Opt::TouchSensitivityHorizontal,
+                    Opt::TouchSensitivityVertical,
+                ]));
+                rows.push(Row::Header("Control Hub & Feedback"));
+                rows.extend(pairs(&[
+                    Opt::TouchControlHub,
+                    Opt::TouchUiVibration,
+                    Opt::TouchGameVibration,
+                ]));
+                rows.push(Row::Header("HUD Buttons & Layout"));
+                rows.extend(pairs(&[
+                    Opt::TouchOffhand,
+                    Opt::TouchShield,
+                    Opt::TouchButtonScale,
+                    Opt::TouchCircleSize,
+                    Opt::TouchAttackSide,
+                    Opt::GuiScale,
+                    Opt::TouchLeftHand,
+                    Opt::TouchSwapJumpSneak,
+                ]));
+                rows.push(Row::Header("Joystick, Actions & Gyroscope"));
+                rows.extend(pairs(&[
+                    Opt::TouchAnalog,
+                    Opt::TouchSprintButton,
+                    Opt::TouchSprintToggle,
+                    Opt::TouchInventoryControls,
+                    Opt::TouchInteract,
+                    Opt::TouchDynamicJoystick,
+                    Opt::TouchDynamicAreaX,
+                    Opt::TouchDynamicAreaY,
+                    Opt::AndroidGyroscope,
+                    Opt::AndroidGyroSensitivity,
+                ]));
                 rows.push(Row::Buttons(
                     button(
                         0.0,
                         0.0,
                         310.0,
-                        Text::literal("Bedrock Inventory: ").append(on_off(s.bedrock_inventory)),
-                        Act::BedrockInventory,
+                        Text::literal("Customize Touch & GoyControl Layout..."),
+                        Act::TouchLayout,
                     ),
                     None,
                 ));
-                // The touch controls' layout, where there is a touch screen to play on.
-                if cfg!(target_os = "android") {
-                    rows.push(Row::Buttons(
-                        button(
-                            0.0,
-                            0.0,
-                            310.0,
-                            Text::literal("Touch Controls..."),
-                            Act::TouchLayout,
-                        ),
-                        None,
-                    ));
-                    rows.push(Row::Buttons(
-                        button(
-                            0.0,
-                            0.0,
-                            310.0,
-                            Text::literal("Custom Buttons..."),
-                            Act::CustomButtons,
-                        ),
-                        None,
-                    ));
-                }
                 self.filter_option_rows(rows)
             }
             Page::Controller => {
@@ -3664,13 +3932,9 @@ impl OptionsUi {
             Page::CustomButton(id) => {
                 use crate::settings::CustomAction as A;
                 let b = s.custom_buttons.iter().find(|b| b.id == id);
-                let held = |pick: CustomPick| match b.and_then(|b| b.binding(self.custom_slot)) {
-                    Some(A::Key(_)) if pick == CustomPick::Control => {
-                        b.and_then(|b| b.binding(self.custom_slot)).map(A::label)
-                    }
-                    Some(A::Input(_)) if pick == CustomPick::Keyboard => {
-                        b.and_then(|b| b.binding(self.custom_slot)).map(A::label)
-                    }
+                let held = |pick: CustomPick| match b.map(|b| &b.action) {
+                    Some(A::Key(_)) if pick == CustomPick::Control => b.map(|b| b.label()),
+                    Some(A::Input(_)) if pick == CustomPick::Keyboard => b.map(|b| b.label()),
                     _ => None,
                 };
                 let choice = |caption: &str, pick: CustomPick| {
@@ -3692,72 +3956,12 @@ impl OptionsUi {
                     None => "Its Name",
                 };
                 vec![
-                    Row::Buttons(
-                        button(
-                            0.,
-                            0.,
-                            310.,
-                            Text::tr(
-                                if self.custom_label_edit {
-                                    "starling.touch.edit_label"
-                                } else {
-                                    "starling.touch.edit_command"
-                                },
-                                &[],
-                            ),
-                            Act::CustomField(id),
-                        ),
-                        None,
-                    ),
+                    Row::Note("Sends a /command or a chat line when pressed".into()),
                     Row::SendField,
-                    Row::Buttons(
-                        button(
-                            0.,
-                            0.,
-                            150.,
-                            Text::literal(format!(
-                                "{}: {}",
-                                crate::lang::get("starling.touch.binding"),
-                                self.custom_slot + 1
-                            )),
-                            Act::CustomSlot(id),
-                        ),
-                        Some(button(
-                            0.,
-                            0.,
-                            150.,
-                            Text::tr("starling.touch.clear_binding", &[]),
-                            Act::CustomClear(id),
-                        )),
-                    ),
-                    Row::Note(crate::lang::get("starling.touch.chord_hint")),
+                    Row::Note("Or holds a key while pressed".into()),
                     Row::Buttons(
                         choice("Game Control", CustomPick::Control),
                         Some(choice("Keyboard Key", CustomPick::Keyboard)),
-                    ),
-                    Row::Buttons(
-                        button(
-                            0.,
-                            0.,
-                            150.,
-                            Text::literal(format!(
-                                "{}: {}%",
-                                crate::lang::get("starling.touch.width"),
-                                b.map_or(100, |b| b.dimensions[0])
-                            )),
-                            Act::CustomDimension(id, 0),
-                        ),
-                        Some(button(
-                            0.,
-                            0.,
-                            150.,
-                            Text::literal(format!(
-                                "{}: {}%",
-                                crate::lang::get("starling.touch.height"),
-                                b.map_or(100, |b| b.dimensions[1])
-                            )),
-                            Act::CustomDimension(id, 1),
-                        )),
                     ),
                     Row::Note("How it looks".into()),
                     Row::Buttons(
@@ -5518,8 +5722,6 @@ impl OptionsUi {
                             self.custom_add(s);
                         }
                         Act::CustomEdit(id) => {
-                            self.custom_label_edit = false;
-                            self.custom_slot = 0;
                             let line =
                                 s.custom_buttons.iter().find(|b| b.id == id).map(|b| {
                                     match &b.action {
@@ -5537,76 +5739,28 @@ impl OptionsUi {
                             s.custom_buttons.retain(|b| b.id != id);
                             events.push(Event::CustomButtons);
                         }
-                        Act::CustomField(id) => {
-                            self.commit_custom_field(s, id);
-                            self.custom_label_edit = !self.custom_label_edit;
-                            let b = s.custom_buttons.iter().find(|b| b.id == id);
-                            let text = if self.custom_label_edit {
-                                b.map(|b| b.custom_label.as_str())
-                            } else {
-                                b.and_then(|b| match &b.action {
-                                    crate::settings::CustomAction::Send(t) => Some(t.as_str()),
-                                    _ => None,
-                                })
-                            };
-                            self.custom_send.set_value(text.unwrap_or_default());
-                            self.custom_send.focused = false;
-                        }
-                        Act::CustomSlot(_) => self.custom_slot = (self.custom_slot + 1) % 3,
-                        Act::CustomClear(id) => {
-                            self.commit_custom_field(s, id);
-                            if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                if self.custom_slot == 0 {
-                                    b.action = crate::settings::CustomAction::Send(String::new());
-                                } else {
-                                    b.bindings[self.custom_slot - 1] = None;
-                                }
-                            }
-                            if !self.custom_label_edit && self.custom_slot == 0 {
-                                self.custom_send.set_value("");
-                            }
-                        }
-                        Act::CustomDimension(id, axis) => {
-                            if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                let v = &mut b.dimensions[axis];
-                                *v = if *v >= 300 { 25 } else { *v + 25 };
-                            }
-                        }
                         Act::CustomToggle(id) => {
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
                                 b.toggle = !b.toggle;
                             }
                         }
                         Act::CustomKey(id, name) => {
-                            self.commit_custom_field(s, id);
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                b.set_binding(
-                                    self.custom_slot,
-                                    crate::settings::CustomAction::Key(name.to_owned()),
-                                );
+                                b.action = crate::settings::CustomAction::Key(name.to_owned());
                             }
-                            if !self.custom_label_edit && self.custom_slot == 0 {
-                                self.custom_send.set_value("");
-                            }
+                            self.custom_send.set_value("");
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
                         Act::CustomInput(id, name) => {
-                            self.commit_custom_field(s, id);
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                b.set_binding(
-                                    self.custom_slot,
-                                    crate::settings::CustomAction::Input(name.to_owned()),
-                                );
+                                b.action = crate::settings::CustomAction::Input(name.to_owned());
                             }
-                            if !self.custom_label_edit && self.custom_slot == 0 {
-                                self.custom_send.set_value("");
-                            }
+                            self.custom_send.set_value("");
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
                         Act::CustomModKey(id, i, k) => {
-                            self.commit_custom_field(s, id);
                             let key = s.mods.installed.get(i).and_then(|m| {
                                 let [name, _, default] = m.native.as_ref()?.keys.get(k)?;
                                 let chosen = s.mods.keys.get(&m.id).and_then(|c| c.get(name));
@@ -5615,14 +5769,9 @@ impl OptionsUi {
                             if let Some(key) = key
                                 && let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id)
                             {
-                                b.set_binding(
-                                    self.custom_slot,
-                                    crate::settings::CustomAction::Input(key),
-                                );
+                                b.action = crate::settings::CustomAction::Input(key);
                             }
-                            if !self.custom_label_edit && self.custom_slot == 0 {
-                                self.custom_send.set_value("");
-                            }
+                            self.custom_send.set_value("");
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
@@ -6120,12 +6269,16 @@ impl OptionsUi {
             }
             // What the box holds is what it sends; one that does nothing goes.
             Page::CustomButton(id) => {
-                self.commit_custom_field(s, id);
+                let line = self.custom_send.value.trim().to_owned();
                 self.custom_send.focused = false;
-                s.custom_buttons.retain(|b| {
-                    b.actions()
-                        .any(|a| *a != crate::settings::CustomAction::Send(String::new()))
-                });
+                if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id)
+                    && (!line.is_empty()
+                        || matches!(b.action, crate::settings::CustomAction::Send(_)))
+                {
+                    b.action = crate::settings::CustomAction::Send(line);
+                }
+                s.custom_buttons
+                    .retain(|b| b.action != crate::settings::CustomAction::Send(String::new()));
                 events.push(Event::CustomButtons);
             }
             _ => {}
@@ -6140,30 +6293,14 @@ impl OptionsUi {
         }
         events
     }
-    fn commit_custom_field(&mut self, s: &mut Settings, id: u32) {
-        let text = self.custom_send.value.trim().to_owned();
-        if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-            if self.custom_label_edit {
-                b.custom_label = text.chars().take(64).collect();
-            } else if !text.is_empty() || matches!(b.action, crate::settings::CustomAction::Send(_))
-            {
-                b.action = crate::settings::CustomAction::Send(text);
-            }
-        }
-    }
     /// A new custom button's page. False with every slot taken.
     fn custom_add(&mut self, s: &mut Settings) -> bool {
-        self.custom_label_edit = false;
-        self.custom_slot = 0;
         // A button's id is the slot of its image: the first one free.
         let free = (0..own_buttons::SLOTS).find(|id| !s.custom_buttons.iter().any(|b| b.id == *id));
         let Some(id) = free else {
             return false;
         };
         s.custom_buttons.push(crate::settings::CustomButton {
-            custom_label: String::new(),
-            bindings: [None, None],
-            dimensions: [100, 100],
             id,
             action: crate::settings::CustomAction::Send(String::new()),
             icon: None,
@@ -6798,10 +6935,6 @@ impl OptionsUi {
                         | Act::CustomModKey(..)
                         | Act::CustomIcon(..)
                         | Act::CustomDraw(_)
-                        | Act::CustomField(_)
-                        | Act::CustomSlot(_)
-                        | Act::CustomClear(_)
-                        | Act::CustomDimension(..)
                         | Act::CustomToggle(_)
                         | Act::CanvasClear
                         | Act::CanvasPlate
@@ -8870,33 +9003,6 @@ mod tests {
             CustomAction::Send("/home".into())
         );
         assert_eq!(s.custom_buttons[0].label(), "/home");
-        // A custom caption and additional key do not overwrite the command.
-        let id = s.custom_buttons[0].id;
-        press(&mut ui, &mut s, Act::CustomEdit(id));
-        press(&mut ui, &mut s, Act::CustomField(id));
-        ui.custom_send.set_value("Home");
-        press(&mut ui, &mut s, Act::CustomSlot(id));
-        ui.push(Page::CustomPick(id, CustomPick::Keyboard));
-        press(
-            &mut ui,
-            &mut s,
-            Act::CustomInput(id, "key.keyboard.left.shift"),
-        );
-        press(&mut ui, &mut s, Act::CustomDimension(id, 0));
-        ui.back(&mut s);
-        assert_eq!(s.custom_buttons[0].label(), "Home");
-        assert_eq!(
-            s.custom_buttons[0].action,
-            CustomAction::Send("/home".into())
-        );
-        assert_eq!(
-            s.custom_buttons[0].bindings[0],
-            Some(CustomAction::Input("key.keyboard.left.shift".into()))
-        );
-        assert_eq!(s.custom_buttons[0].dimensions, [125, 100]);
-        // Restore the automatic label for the remaining legacy editor checks.
-        s.custom_buttons[0].custom_label.clear();
-        s.custom_buttons[0].bindings = [None, None];
         // A key takes its place, and stays without a line.
         let id = s.custom_buttons[0].id;
         press(&mut ui, &mut s, Act::CustomEdit(id));

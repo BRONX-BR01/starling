@@ -209,6 +209,8 @@ mod mob_gear;
 mod mob_index;
 mod mob_looting;
 mod mob_sounds;
+#[cfg(target_os = "android")]
+mod mobile_controls;
 mod mod_api_host;
 mod mod_assets;
 #[cfg(target_os = "android")]
@@ -2539,6 +2541,8 @@ struct Game<'a> {
     pad: pad::Pads,
     /// The touch controls (game/touch.rs).
     touch: touch::Touch,
+    #[cfg(target_os = "android")]
+    mobile: mobile_controls::MobileControls,
     /// What the player plays with: the touch controls show while it is the touch screen
     /// (game/input_mode.rs).
     input_mode: horizon_client::input_mode::InputMode,
@@ -7737,6 +7741,10 @@ impl Game<'_> {
     /// A key event after rebinding, as the default key of its mapping (the
     /// keyboard and controllers both end here).
     fn mapped_key(&mut self, key: KeyCode, pressed: bool, repeat: bool) -> Result<()> {
+        #[cfg(target_os = "android")]
+        if !pressed && self.android_custom_key_held(key) {
+            return Ok(());
+        }
         // Sneak and sprint are ToggleKeyMappings: a press (or a key
         // repeat) flips them when toggling; only releases reach them
         // behind a screen (KeyboardHandler.keyPress).
@@ -10306,10 +10314,18 @@ impl Game<'_> {
     /// and a sneak the key no longer held: #4166's in-game report), so a
     /// cached key set is not vanilla's answer.
     pub(super) fn has_shift_down(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_shift_down() {
+            return true;
+        }
         self.modifiers.shift_key()
     }
     /// The same live word for Control (`InputWithModifiers.hasControlDown`).
     pub(super) fn has_control_down(&self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.mobile_control_down() {
+            return true;
+        }
         self.modifiers.control_key()
     }
     /// Real events word the modifiers by their own `ModifiersChanged`; a
@@ -16559,6 +16575,10 @@ impl Game<'_> {
     }
     /// A mouse button while playing (window or control socket).
     fn play_mouse(&mut self, button: MouseButton, pressed: bool) -> Result<()> {
+        #[cfg(target_os = "android")]
+        if !pressed && self.android_custom_mouse_held(button) {
+            return Ok(());
+        }
         if self.sleeping.is_some() {
             return Ok(());
         }
@@ -19035,6 +19055,8 @@ impl<'a> Game<'a> {
             last_input: now,
             pad: Default::default(),
             touch: Default::default(),
+            #[cfg(target_os = "android")]
+            mobile: Default::default(),
             input_mode: horizon_client::input_mode::InputMode::first(cfg!(target_os = "android")),
             frames: 0,
             glint_frame: Default::default(),
@@ -22001,6 +22023,11 @@ pub fn run_with() -> Result<()> {
     // came without them (prepared on a computer, or no network then): drawn from the next start,
     // or this one's if they come before its GUI atlas.
     #[cfg(target_os = "android")]
+    if options.execution_role.is_client()
+        && let Err(e) = horizon_client::android_control_assets::fetch(&vanilla_root, |_, _| {})
+    {
+        log::warn!("Original Android control textures: {e}");
+    }
     if options.execution_role.is_client() && !horizon_client::bedrock_touch::present(&vanilla_root)
     {
         let root = vanilla_root.clone();

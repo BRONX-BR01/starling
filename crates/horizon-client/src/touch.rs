@@ -1,6 +1,3 @@
-// Custom button extensions adapted from Horizon Android (MIT).
-// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
-// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! Touch controls for phones (horizon-android): a stick that walks (floating under the finger,
 //! or fixed with its knob going to the finger), dragging anywhere else that turns the view (a tap there uses the held item, a still press breaks), buttons for
 //! every other action (jump, sneak, attack, use, inventory, chat, commands, pause, camera, drop,
@@ -27,41 +24,6 @@ use winit::{
         DeviceId, ElementState, MouseButton, MouseScrollDelta, Touch, TouchPhase, WindowEvent,
     },
 };
-
-/// Resolve all custom owners before emitting key transitions. Shared keys stay down
-/// until the last owner releases them; modifiers precede the other keys in a chord.
-pub fn held_custom_keys(
-    buttons: &[CustomButton],
-    held: &[String],
-    resolve: impl Fn(&CustomAction) -> Option<winit::keyboard::KeyCode>,
-) -> Vec<winit::keyboard::KeyCode> {
-    use winit::keyboard::KeyCode as K;
-    let mut keys = Vec::new();
-    for b in buttons {
-        if held.contains(&format!("{CUSTOM_BUTTONS}:{}", b.id)) {
-            for key in b.actions().filter_map(&resolve) {
-                if !keys.contains(&key) {
-                    keys.push(key);
-                }
-            }
-        }
-    }
-    keys.sort_by_key(|k| {
-        !matches!(
-            k,
-            K::F3
-                | K::ControlLeft
-                | K::ControlRight
-                | K::ShiftLeft
-                | K::ShiftRight
-                | K::AltLeft
-                | K::AltRight
-                | K::SuperLeft
-                | K::SuperRight
-        )
-    });
-    keys
-}
 
 /// A press that stays put this long breaks the block in view (Bedrock's touch default).
 pub const HOLD: Duration = Duration::from_millis(300);
@@ -339,15 +301,12 @@ pub enum Shape {
     Square,
     /// This many times as wide as it is tall: a button with a label.
     Wide(f32),
-    /// Independent horizontal and vertical scale for a custom button.
-    Rect([f32; 2]),
 }
 
 impl Shape {
     /// Half its width and height, for its radius (half its height).
     pub fn half(self, r: f32) -> [f32; 2] {
         match self {
-            Shape::Rect([w, h]) => [r * w, r * h],
             Shape::Wide(aspect) => [r * aspect.max(1.0), r],
             Shape::Round | Shape::Square => [r, r],
         }
@@ -531,17 +490,6 @@ impl LayoutConfig {
                 continue;
             };
             config.custom.push(CustomButton {
-                custom_label: text("label").unwrap_or_default().chars().take(64).collect(),
-                bindings: std::array::from_fn(|i| {
-                    let v = &v["bindings"][i];
-                    v["key"]
-                        .as_str()
-                        .map(|k| CustomAction::Key(k.into()))
-                        .or_else(|| v["input"].as_str().map(|k| CustomAction::Input(k.into())))
-                }),
-                dimensions: std::array::from_fn(|i| {
-                    v["dimensions"][i].as_u64().unwrap_or(100).clamp(25, 300) as u16
-                }),
                 id: v["id"].as_u64().unwrap_or(0) as u32,
                 action,
                 icon: text("icon"),
@@ -581,15 +529,7 @@ impl LayoutConfig {
                     show: Show::On,
                     opacity: 1.0,
                 };
-                (
-                    format!("{CUSTOM_BUTTONS}:{}", b.id),
-                    place,
-                    if b.dimensions == [100, 100] {
-                        Shape::Round
-                    } else {
-                        Shape::Rect(b.dimensions.map(|v| v as f32 / 100.))
-                    },
-                )
+                (format!("{CUSTOM_BUTTONS}:{}", b.id), place, Shape::Round)
             })
             .collect();
         self.offer(&offered);
@@ -640,18 +580,6 @@ impl LayoutConfig {
                     CustomAction::Input(key) => json!({ "id": b.id, "input": key }),
                     CustomAction::Send(line) => json!({ "id": b.id, "send": line }),
                 };
-                entry["label"] = json!(b.custom_label);
-                entry["dimensions"] = json!(b.dimensions);
-                entry["bindings"] = Value::Array(
-                    b.bindings
-                        .iter()
-                        .map(|a| match a {
-                            Some(CustomAction::Key(k)) => json!({"key": k}),
-                            Some(CustomAction::Input(k)) => json!({"input": k}),
-                            _ => Value::Null,
-                        })
-                        .collect(),
-                );
                 if let Some(icon) = &b.icon {
                     entry["icon"] = json!(icon);
                 }
@@ -2046,63 +1974,10 @@ mod tests {
     }
 
     #[test]
-    fn custom_chords_keep_shared_keys_and_modifiers_until_the_last_owner_releases() {
-        use winit::keyboard::KeyCode as K;
-        let config = LayoutConfig::from_json(
-            r#"{"custom":[
-            {"id":1,"input":"key.keyboard.c","bindings":[{"input":"key.keyboard.left.control"}]},
-            {"id":2,"input":"key.keyboard.left.control"}]}"#,
-        );
-        let resolve = |a: &CustomAction| match a {
-            CustomAction::Input(k) => crate::keybinds::key_code(k),
-            _ => None,
-        };
-        let both = vec![format!("{CUSTOM_BUTTONS}:1"), format!("{CUSTOM_BUTTONS}:2")];
-        assert_eq!(
-            held_custom_keys(&config.custom, &both, resolve),
-            vec![K::ControlLeft, K::KeyC]
-        );
-        assert_eq!(
-            held_custom_keys(&config.custom, &both[1..], resolve),
-            vec![K::ControlLeft]
-        );
-        assert!(held_custom_keys(&config.custom, &[], resolve).is_empty());
-    }
-    #[test]
-    fn custom_labels_chords_and_dimensions_survive_restart_and_legacy_layouts_still_load() {
-        let config = LayoutConfig::from_json(
-            r#"{"custom":[{"id":7,"key":"key.jump",
-            "label":"Leap","bindings":[{"input":"key.keyboard.left.shift"},null],"dimensions":[175,75]}]}"#,
-        );
-        let saved = LayoutConfig::from_json(&config.to_json());
-        assert_eq!(saved.custom, config.custom);
-        assert_eq!(saved.custom[0].label(), "Leap");
-        let legacy = LayoutConfig::from_json(r#"{"custom":[{"id":1,"send":"/home"}]}"#);
-        assert_eq!(legacy.custom[0].dimensions, [100, 100]);
-        assert_eq!(legacy.custom[0].label(), "/home");
-        assert_eq!(legacy.custom[0].actions().count(), 1);
-        let malformed = LayoutConfig::from_json(
-            r#"{"custom":[{"id":1,"input":"key.keyboard.a","dimensions":[0,9000],"bindings":[{"send":"untrusted"}]}]}"#,
-        );
-        assert_eq!(malformed.custom[0].dimensions, [25, 300]);
-        assert_eq!(malformed.custom[0].actions().count(), 1);
-    }
-    #[test]
-    fn custom_rectangles_hit_the_same_independent_dimensions_they_draw() {
-        let shape = Shape::Rect([2., 0.5]);
-        assert_eq!(shape.half(20.), [40., 10.]);
-        assert!(shape.hits([100., 100.], 20., [135., 100.]));
-        assert!(!shape.hits([100., 100.], 20., [100., 115.]));
-    }
-
-    #[test]
     fn the_editor_deletes_a_custom_button_and_no_other() {
         let (w, h) = (3200.0, 1440.0);
         let mut config = LayoutConfig {
             custom: vec![CustomButton {
-                custom_label: String::new(),
-                bindings: [None, None],
-                dimensions: [100, 100],
                 id: 1,
                 action: CustomAction::Send("/home".into()),
                 icon: None,
@@ -2138,9 +2013,6 @@ mod tests {
         let mut config = LayoutConfig {
             custom: vec![
                 CustomButton {
-                    custom_label: String::new(),
-                    bindings: [None, None],
-                    dimensions: [100, 100],
                     id: 1,
                     action: CustomAction::Key("key.sprint".into()),
                     icon: Some("star".into()),
@@ -2149,9 +2021,6 @@ mod tests {
                     toggle: true,
                 },
                 CustomButton {
-                    custom_label: String::new(),
-                    bindings: [None, None],
-                    dimensions: [100, 100],
                     id: 2,
                     action: CustomAction::Send("/home".into()),
                     icon: None,
@@ -2160,9 +2029,6 @@ mod tests {
                     toggle: false,
                 },
                 CustomButton {
-                    custom_label: String::new(),
-                    bindings: [None, None],
-                    dimensions: [100, 100],
                     id: 3,
                     action: CustomAction::Input("key.keyboard.f1".into()),
                     icon: None,

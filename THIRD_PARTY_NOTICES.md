@@ -272,11 +272,17 @@ and its `crates/horizon-client/src/android/document_store.rs`, under the MIT lic
 The port is plain Java over Starling's one game folder, in place of the fork's Rust store of
 profiles and fixed folders that its launcher screens share.
 
-## Horizon Android custom touch controls
+## Horizon Android control system and editor
 
-Custom button labels, simultaneous binding slots and independent dimensions are adapted
-from `crates/horizon-client-render/src/touch/{custom,layout}.rs` in
+The Android control engine, MCPE/GoyControl layouts and presets, visual editor,
+control hub, virtual pointer and auxiliary keyboard are adapted from
 [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606),
 MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors (see [LICENSE](LICENSE)).
-They use Starling's existing layout file, settings editor, images and input dispatch.
-Shared custom bindings retain a key until every custom owner releases it.
+Source: `crates/horizon-client-render/src/touch.rs`, `touch/{layout,editor,custom}.rs`,
+`crates/horizon-client/src/{touch_ui,ui_theme,osk,ui_text}.rs`, and Android input
+integration in `game/android_input.rs`, `game/pad.rs` and `game.rs`.
+
+The port uses Starling's input, IME, inventory, controller and renderer interfaces.
+Its UI rasterization shares Starling's existing runtime atlas allocator; it does
+not add a second font texture. Starling's chat shortcuts and slot gestures are
+retained. No Minecraft textures or prepared resources are included by this port.
