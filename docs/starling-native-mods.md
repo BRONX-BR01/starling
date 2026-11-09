@@ -54,13 +54,36 @@ none of the machine's files or keys, and no way to gain privileges, over a clean
 in an overlay thrown away after it, so a mod can't reach a later player's build.
 
 `mod_build_gateway.py`, behind HTTPS on a small machine that stays on, is what the game talks to. The machine that builds
-sleeps until a request wakes it (about 35 seconds) and goes back to sleep once it has been idle for 15 minutes. It limits
-how many builds an address, and everyone together (`BUILDS_PER_DAY`, 80 unless set), can ask for in a day, and says which
-limit it was. Mods that are already built pass at any limit, a build that failed gives its place back, and failures have
-a day limit of their own, counted by job. Mods that fail for their own fault (a refused injection, a compile error with
-its code) aren't built again: asking again gets the same error at once and counts nothing.
+sleeps until a request wakes it (about a minute) and goes back to sleep once it has been idle for 2 minutes. Finished
+libraries stay on the small machine, so asking again wakes nothing. It limits how many builds an address, and everyone
+together (`BUILDS_PER_DAY`, 80 unless set), can ask for in a day, and says which limit it was. Mods that are already built
+pass at any limit, a build that failed gives its place back, and failures have a day limit of their own, counted by job.
+Mods that fail for their own fault (a refused injection, a compile error with its code) aren't built again: asking again
+gets the same error at once and counts nothing.
 
 Each new release needs `versions.json` updated and the clean cache rebuilt on its commit, or its first builds are slow.
+
+## On GitHub's machines
+
+**Use GitHub (slower)** on the Compile card asks the gateway for GitHub's runners instead of the build machine
+(`via=github`). The player needs no GitHub account, and the APK holds no secret.
+
+1. The gateway keeps the request's mods under a random name and runs the `build.yml` workflow of the public
+   `starling-client/mod-builds` repository with that name, using a token that may only run that repository's workflows
+   (systemd's `LoadCredential`, `github-token`). Without the token this door is shut.
+2. The runner restores the clean cache `base.yml` made for that version, fetches the mods, and runs
+   `mod_build_once.py`: the same checks and the same sandbox as the service, so a mod's code has no network and can't see
+   the runner's files. The job's token has no permissions.
+3. The result, `status.json` and the library, is the run's artifact. The gateway checks it against its SHA-256 and serves
+   it as any other, so the same mods asked either way build once.
+
+The run's log is public, and so are its name and the artifact while it lasts (a day). The Compile card says so.
+
+It costs nothing on a public repository, but a repository that keeps runners busy all day may be asked to stop, so
+this has limits too (`GITHUB_PER_ADDRESS`, `GITHUB_PER_DAY`), and at most 8 runs go at once, the rest waiting in line on
+the gateway. It lives in a repository of its own so that trouble there doesn't reach this one.
+
+Each new release also needs its commit in mod-builds' `versions.json` and a run of `base.yml`.
 
 ## Where the service is
 
