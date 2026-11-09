@@ -107,6 +107,9 @@ pub(super) struct Touch {
     tapped: Option<(Instant, [f32; 2])>,
     /// The press held on the view uses (a mob, the air) rather than breaks.
     hold_uses: bool,
+    /// The Hit button is held: it acts along the crosshair, which shows meanwhile, while another
+    /// finger turns the view.
+    hit_held: bool,
     /// The gyroscope is listened to (the layout aims with it and the controls play).
     gyro_on: bool,
     /// The on-screen keyboard was asked for.
@@ -523,7 +526,7 @@ impl Game<'_> {
     /// The window pixel tap to interact aims through: a finger that may still tap or holds, or
     /// a tap whose click is still held.
     fn touch_aim_point(&self) -> Option<[f32; 2]> {
-        if !self.touch_taps() {
+        if !self.touch_taps() || self.touch.hit_held {
             return None;
         }
         self.touch.controls.aim().or_else(|| {
@@ -572,12 +575,13 @@ impl Game<'_> {
         self.pick_entity_hit().is_none() && self.pick().is_some()
     }
 
-    /// Tap to interact has no crosshair, and outlines a block only while a finger aims at it.
+    /// Tap to interact has no crosshair, and outlines a block only while a finger aims at it, or
+    /// while the Hit button acts along the crosshair.
     pub(super) fn touch_hides_crosshair(&self) -> bool {
-        self.touch_taps()
+        self.touch_taps() && !self.touch.hit_held
     }
     pub(super) fn touch_hides_outline(&self) -> bool {
-        self.touch_taps() && self.touch_aim_point().is_none()
+        self.touch_hides_crosshair() && self.touch_aim_point().is_none()
     }
 
     /// A short buzz of the phone (Bedrock's "Vibrate when breaking blocks" and "when splitting
@@ -1075,8 +1079,14 @@ impl Game<'_> {
                 Action::Look(dx, dy) => self.mouse.add_motion(dx as f64, dy as f64),
                 Action::Press(Button::Jump) => self.pad.touch_hold(Pad::South, true),
                 Action::Release(Button::Jump) => self.pad.touch_hold(Pad::South, false),
-                Action::Press(Button::Attack) => self.pad.touch_trigger(1, 1.0),
-                Action::Release(Button::Attack) => self.pad.touch_trigger(1, 0.0),
+                Action::Press(Button::Attack) => {
+                    self.touch.hit_held = true;
+                    self.pad.touch_trigger(1, 1.0);
+                }
+                Action::Release(Button::Attack) => {
+                    self.touch.hit_held = false;
+                    self.pad.touch_trigger(1, 0.0);
+                }
                 // Held on a block it breaks it; on a mob or the air it is the right button
                 // held (interact, eat, draw a bow), as Bedrock's press.
                 Action::HoldStart(_) => {
