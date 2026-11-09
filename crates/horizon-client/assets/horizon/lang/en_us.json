@@ -566,5 +566,18 @@
   "starling.account.downloading": "Downloading",
   "starling.account.signin_required": "Sign in again: %s",
   "starling.account.ely_working": "Signing in to Ely.by",
-  "starling.account.name_in_accounts": "Manage names in Accounts on the title screen."
+  "starling.account.name_in_accounts": "Manage names in Accounts on the title screen.",
+  "starling.account.log_in": "Log in",
+  "starling.account.show_password": "Show password",
+  "starling.account.hide_password": "Hide password",
+  "starling.account.requesting_code": "Requesting a Microsoft sign-in code…",
+  "starling.account.restoring": "Restoring the selected profile…",
+  "starling.account.waiting_browser": "Waiting for you to finish in the browser. Starling checks automatically.",
+  "starling.account.signed_in": "Signed in as %s. You can now press Done.",
+  "starling.account.progress.xbox": "Microsoft authorized. Signing in to Xbox Live…",
+  "starling.account.progress.xbox_security": "Checking Xbox Live authorization…",
+  "starling.account.progress.minecraft": "Signing in to Minecraft services…",
+  "starling.account.progress.ownership": "Checking Minecraft: Java Edition ownership…",
+  "starling.account.progress.profile": "Loading your Minecraft profile…",
+  "starling.account.progress.saving": "Saving your sign-in securely…"
 }

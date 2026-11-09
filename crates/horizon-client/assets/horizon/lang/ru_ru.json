@@ -295,5 +295,18 @@
   "starling.account.downloading": "Загрузка",
   "starling.account.signin_required": "Нужен вход: %s",
   "starling.account.ely_working": "Вход в Ely.by",
-  "starling.account.name_in_accounts": "Имя и профиль меняются в «Аккаунтах» главного экрана."
+  "starling.account.name_in_accounts": "Имя и профиль меняются в «Аккаунтах» главного экрана.",
+  "starling.account.log_in": "Войти",
+  "starling.account.show_password": "Показать пароль",
+  "starling.account.hide_password": "Скрыть пароль",
+  "starling.account.requesting_code": "Получаем код входа Microsoft…",
+  "starling.account.restoring": "Восстанавливаем выбранный профиль…",
+  "starling.account.waiting_browser": "Ждём завершения входа в браузере. Starling проверяет результат автоматически.",
+  "starling.account.signed_in": "Вход выполнен: %s. Теперь можно нажать «Готово».",
+  "starling.account.progress.xbox": "Microsoft подтвердил вход. Подключаем Xbox Live…",
+  "starling.account.progress.xbox_security": "Проверяем авторизацию Xbox Live…",
+  "starling.account.progress.minecraft": "Входим в службы Minecraft…",
+  "starling.account.progress.ownership": "Проверяем наличие Minecraft: Java Edition…",
+  "starling.account.progress.profile": "Загружаем профиль Minecraft…",
+  "starling.account.progress.saving": "Сохраняем данные входа…"
 }

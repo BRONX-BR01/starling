@@ -137,6 +137,7 @@ pub enum State {
     Resuming,
     /// Asking Microsoft for a code.
     Starting,
+    Progress(starling_account::SignInStage),
     /// Waiting for the player at `link` with `code`.
     Code {
         code: String,
@@ -381,6 +382,12 @@ pub fn sign_in() {
             }
             match sign_in.state() {
                 SignInState::Starting => {}
+                SignInState::Progress(stage) => {
+                    let mut s = shared();
+                    if s.generation == generation && !cancel.load(Ordering::Relaxed) {
+                        s.state = State::Progress(stage);
+                    }
+                }
                 SignInState::Code(code) => {
                     let to = State::Code {
                         code: code.user_code,

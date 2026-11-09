@@ -1425,6 +1425,7 @@ fn account_control(words: &[&str]) -> Result<Option<Value>> {
         State::OfflineProfile(name) => json!({ "state": "offline", "name": name }),
         State::Resuming => json!({ "state": "resuming" }),
         State::Starting => json!({ "state": "starting" }),
+        State::Progress(stage) => json!({ "state": "progress", "stage": stage.key() }),
         State::Code { code, link } => json!({ "state": "code", "code": code, "link": link }),
         State::SignedIn(account) => {
             json!({ "state": "signed-in", "name": account.name, "uuid": account.uuid })

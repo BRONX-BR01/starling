@@ -358,7 +358,12 @@ struct Minecraft {
     xuid: Option<String>,
 }
 
-fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String> {
+fn minecraft_login_progress(
+    ep: &Endpoints,
+    ms_access: &str,
+    progress: &dyn Fn(SignInStage),
+) -> Result<Minecraft, String> {
+    progress(SignInStage::Xbox);
     let (status, xbl) = send(
         agent().post(&ep.xbox_user),
         Some(Body::Json(json!({
@@ -375,6 +380,7 @@ fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String>
     let xbl_token = str_field(&xbl, "Token")
         .filter(|_| status == 200)
         .ok_or("Xbox Live refused the sign-in.")?;
+    progress(SignInStage::XboxSecurity);
     let (status, xsts) = send(
         agent().post(&ep.xsts),
         Some(Body::Json(json!({
@@ -395,6 +401,7 @@ fn minecraft_login(ep: &Endpoints, ms_access: &str) -> Result<Minecraft, String>
         return Err("Xbox Live refused the sign-in.".into());
     };
     let xuid = claims.and_then(|c| str_field(c, "xid"));
+    progress(SignInStage::Minecraft);
     let (status, mc) = send(
         agent().post(&format!("{}/authentication/login_with_xbox", ep.minecraft)),
         Some(Body::Json(
@@ -559,10 +566,19 @@ impl Secrets {
 
 /// From Microsoft tokens to a ready account: Xbox, XSTS, Minecraft, ownership, profile.
 pub fn finish_sign_in(ep: &Endpoints, ms: MsTokens) -> Result<(Account, Secrets), String> {
-    let mc = minecraft_login(ep, &ms.access)?;
+    finish_sign_in_progress(ep, ms, &|_| {})
+}
+fn finish_sign_in_progress(
+    ep: &Endpoints,
+    ms: MsTokens,
+    progress: &dyn Fn(SignInStage),
+) -> Result<(Account, Secrets), String> {
+    let mc = minecraft_login_progress(ep, &ms.access, progress)?;
+    progress(SignInStage::Ownership);
     if !owns_game(ep, &mc.token)? {
         return Err("This account doesn't own Minecraft: Java Edition.".into());
     }
+    progress(SignInStage::Profile);
     let account = profile(ep, &mc.token)?;
     Ok((
         account,
@@ -755,10 +771,34 @@ pub fn sign_out(store: &dyn SecretStore, dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Network stages after the browser authorizes Microsoft sign-in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignInStage {
+    Xbox,
+    XboxSecurity,
+    Minecraft,
+    Ownership,
+    Profile,
+    Saving,
+}
+impl SignInStage {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Xbox => "starling.account.progress.xbox",
+            Self::XboxSecurity => "starling.account.progress.xbox_security",
+            Self::Minecraft => "starling.account.progress.minecraft",
+            Self::Ownership => "starling.account.progress.ownership",
+            Self::Profile => "starling.account.progress.profile",
+            Self::Saving => "starling.account.progress.saving",
+        }
+    }
+}
+
 /// Where a background sign-in is (the game's account screen shows it).
 #[derive(Clone, Debug)]
 pub enum SignInState {
     Starting,
+    Progress(SignInStage),
     /// Waiting for the player at `verification_uri` with `user_code`.
     Code(DeviceCode),
     Done(Result<Account, String>),
@@ -799,8 +839,15 @@ impl SignIn {
                 let ms = wait_for_sign_in(&ep, &client_id, &code, &cancelled)?;
                 // The player may still be in the browser: Xbox, XSTS and Minecraft too are asked
                 // again while the network fails.
-                let (account, secrets) =
-                    while_unreachable(|| finish_sign_in(&ep, ms.clone()), &cancelled)?;
+                let (account, secrets) = while_unreachable(
+                    || {
+                        finish_sign_in_progress(&ep, ms.clone(), &|stage| {
+                            set(SignInState::Progress(stage))
+                        })
+                    },
+                    &cancelled,
+                )?;
+                set(SignInState::Progress(SignInStage::Saving));
                 let _lock = account_lock();
                 if cancelled() {
                     return Err("starling.account.error.sign_in_cancelled".into());

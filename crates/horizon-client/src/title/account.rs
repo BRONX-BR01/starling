@@ -17,6 +17,7 @@ enum Page {
     #[default]
     List,
     Add,
+    Signing,
     Files,
     Offline,
     Ely,
@@ -32,6 +33,8 @@ pub struct Screen {
     otp: String,
     remove: Option<Player>,
     dismiss_error: bool,
+    show_password: bool,
+    microsoft: bool,
 }
 impl std::fmt::Debug for Screen {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -44,7 +47,7 @@ impl std::fmt::Debug for Screen {
 pub(super) fn main_label() -> String {
     if matches!(
         accounts::state(),
-        State::Resuming | State::Starting | State::Code { .. }
+        State::Resuming | State::Starting | State::Progress(_) | State::Code { .. }
     ) {
         return tr("working");
     }
@@ -70,20 +73,40 @@ fn label(p: &Player) -> String {
 }
 impl Screen {
     fn status(&self) -> Option<String> {
-        match accounts::state() {
-            State::Starting | State::Resuming => Some(tr("working")),
-            State::Code { code, link } => Some(format!("{}\n{link}\n\n{code}", tr("device_code"))),
+        self.status_for(&accounts::state())
+    }
+    fn status_for(&self, state: &State) -> Option<String> {
+        match state {
+            State::Starting => Some(tr(if self.microsoft {
+                "requesting_code"
+            } else {
+                "ely_working"
+            })),
+            State::Resuming => Some(tr("restoring")),
+            State::Progress(stage) => Some(crate::lang::get(stage.key())),
+            State::Code { code, link } => Some(format!(
+                "{}\n{link}\n\n{code}\n\n{}",
+                tr("device_code"),
+                tr("waiting_browser")
+            )),
+            State::SignedIn(account) if self.page == Page::Signing => {
+                Some(with("signed_in", &account.name))
+            }
+            State::OfflineProfile(name) if self.page == Page::Signing => Some(with("active", name)),
             State::Failed(e) if !self.dismiss_error => {
                 Some(if e.starts_with("starling.account.") {
-                    crate::lang::get(&e)
+                    crate::lang::get(e)
                 } else {
-                    e
+                    e.clone()
                 })
             }
             _ => None,
         }
     }
     pub(super) fn field(&mut self) -> Option<(FieldId, &mut String, usize)> {
+        if self.status().is_some() {
+            return None;
+        }
         match (self.page, self.focus) {
             (Page::Offline, 0) => Some((("account-name", 0), &mut self.username, 16)),
             (Page::Ely, 0) => Some((("account-login", 0), &mut self.username, 254)),
@@ -103,7 +126,10 @@ impl Screen {
         })
     }
     pub(super) fn password_focused(&self) -> bool {
-        self.page == Page::Ely && matches!(self.focus, 1 | 2)
+        self.status().is_none() && self.page == Page::Ely && matches!(self.focus, 1 | 2)
+    }
+    pub(super) fn password_masked(&self) -> bool {
+        self.password_focused() && (self.focus == 2 || !self.show_password)
     }
     pub(super) fn focus_at(&mut self, (x, y): (f32, f32), w: f32) {
         if (x - w / 2.0).abs() > 100.0 {
@@ -138,9 +164,23 @@ impl Screen {
                     y += 10.0;
                 }
             }
+            if matches!(
+                accounts::state(),
+                State::Starting | State::Progress(_) | State::Resuming | State::Code { .. }
+            ) {
+                let phase = started.elapsed().as_millis() / 400 % 4;
+                centered(
+                    atlas,
+                    batch,
+                    &".".repeat(phase as usize + 1),
+                    156.0,
+                    rgba(170, 170, 170, 255),
+                );
+            }
             return;
         }
         match self.page {
+            Page::Signing => {}
             Page::Offline | Page::Ely => {
                 let fields = if self.page == Page::Offline {
                     vec![("name", &self.username, 16, "account-name")]
@@ -156,7 +196,7 @@ impl Screen {
                     centered(atlas, batch, &tr(key), y - 12.0, rgba(170, 170, 170, 255));
                     let field = ((id, 0), value.as_str(), max);
                     let rect = [(w / 2.0).floor() - 100.0, y, 200.0, 20.0];
-                    if key == "password" || key == "otp" {
+                    if (key == "password" && !self.show_password) || key == "otp" {
                         caret.draw_password(batch, atlas, field, rect, self.focus == i, started);
                     } else {
                         caret.draw(batch, atlas, field, rect, self.focus == i, started);
@@ -211,10 +251,13 @@ impl Screen {
         }
     }
     pub(super) fn buttons(&self, w: f32, h: f32) -> Vec<(f32, f32, f32, String, bool, u8)> {
+        self.buttons_for(w, h, &accounts::state())
+    }
+    fn buttons_for(&self, w: f32, h: f32, state: &State) -> Vec<(f32, f32, f32, String, bool, u8)> {
         let x = (w / 2.0).floor() - 150.0;
         let b = |dx, y, width, label: String, enabled, id| (x + dx, y, width, label, enabled, id);
-        if self.status().is_some() {
-            return match accounts::state() {
+        if self.status_for(state).is_some() {
+            return match state {
                 State::Code { .. } => vec![
                     b(0.0, h - 52.0, 148.0, tr("open"), true, 62),
                     b(152.0, h - 52.0, 148.0, tr("copy"), true, 63),
@@ -222,6 +265,9 @@ impl Screen {
                     b(152.0, h - 28.0, 148.0, tr("done"), false, 69),
                 ],
                 State::Failed(_) => vec![b(50.0, h - 28.0, 200.0, tr("back"), true, 70)],
+                State::SignedIn(_) | State::OfflineProfile(_) => {
+                    vec![b(50.0, h - 28.0, 200.0, tr("done"), true, 69)]
+                }
                 _ => vec![
                     b(0.0, h - 28.0, 148.0, tr("cancel"), true, 61),
                     b(152.0, h - 28.0, 148.0, tr("done"), false, 69),
@@ -229,6 +275,7 @@ impl Screen {
             };
         }
         match self.page {
+            Page::Signing => vec![b(50.0, h - 28.0, 200.0, tr("done"), true, 69)],
             Page::Add => vec![
                 b(50.0, 80.0, 200.0, "Microsoft".into(), true, 60),
                 b(50.0, 104.0, 200.0, "Ely.by".into(), true, 76),
@@ -243,13 +290,29 @@ impl Screen {
                         if self.page == Page::Ely { 0.0 } else { 50.0 },
                         h - 52.0,
                         if self.page == Page::Ely { 148.0 } else { 200.0 },
-                        tr("save"),
+                        tr(if self.page == Page::Ely {
+                            "log_in"
+                        } else {
+                            "save"
+                        }),
                         valid,
                         71,
                     ),
                     b(50.0, h - 28.0, 200.0, tr("back"), true, 70),
                 ];
                 if self.page == Page::Ely {
+                    out.push(b(
+                        50.0,
+                        158.0,
+                        200.0,
+                        tr(if self.show_password {
+                            "hide_password"
+                        } else {
+                            "show_password"
+                        }),
+                        true,
+                        108,
+                    ));
                     out.insert(1, b(152.0, h - 52.0, 148.0, tr("register"), true, 72));
                 }
                 out
@@ -325,7 +388,10 @@ impl Screen {
                 return true;
             }
             60 => {
+                self.clear();
                 self.dismiss_error = false;
+                self.microsoft = true;
+                self.page = Page::Signing;
                 accounts::sign_in();
             }
             61 => {
@@ -366,8 +432,11 @@ impl Screen {
                         std::mem::take(&mut self.otp),
                     );
                 }
-                self.page = Page::List;
+                self.page = Page::Signing;
+                self.show_password = false;
+                self.microsoft = false;
             }
+            108 => self.show_password = !self.show_password,
             72 => {
                 let _ = crate::platform::open_link(if self.page == Page::Ely {
                     "https://account.ely.by/register"
@@ -419,7 +488,7 @@ impl Screen {
     pub(super) fn back(&mut self) -> bool {
         if matches!(
             accounts::state(),
-            State::Starting | State::Resuming | State::Code { .. }
+            State::Starting | State::Resuming | State::Progress(_) | State::Code { .. }
         ) {
             accounts::cancel();
             self.clear();
@@ -453,11 +522,74 @@ impl Screen {
         }
     }
     fn clear(&mut self) {
+        self.show_password = false;
+        self.microsoft = false;
         self.password.clear();
         self.otp.clear();
         self.username.clear();
         self.page = Page::List;
         self.focus = 0;
         self.remove = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn signing_stays_on_its_result_and_enables_done_only_after_completion() {
+        let mut screen = Screen {
+            page: Page::Signing,
+            microsoft: true,
+            ..Default::default()
+        };
+        let done_enabled = |state: State| {
+            screen
+                .buttons_for(427.0, 267.0, &state)
+                .iter()
+                .any(|b| b.5 == 69 && b.4)
+        };
+        assert!(!done_enabled(State::Starting));
+        assert!(!done_enabled(State::Code {
+            code: "TEST-CODE".into(),
+            link: "https://www.microsoft.com/link".into()
+        }));
+        assert!(!done_enabled(State::Progress(
+            starling_account::SignInStage::Ownership
+        )));
+        let account = starling_account::Account {
+            provider: Provider::Microsoft,
+            uuid: "0123456789abcdef0123456789abcdef".into(),
+            name: "TestPlayer".into(),
+            skin: None,
+            cape: None,
+        };
+        let state = State::SignedIn(account);
+        assert!(done_enabled(state.clone()));
+        assert!(screen.status_for(&state).is_some());
+        let buttons = screen.buttons_for(427.0, 267.0, &state);
+        assert_eq!(buttons.len(), 1);
+        assert_eq!(buttons[0].5, 69);
+        assert!(screen.click(69, 267.0));
+        assert_eq!(screen.page, Page::List);
+    }
+    #[test]
+    fn reveal_keeps_the_password_secret_for_input_and_resets_on_leaving() {
+        let mut screen = Screen {
+            page: Page::Ely,
+            focus: 1,
+            password: "Secret§9".into(),
+            ..Default::default()
+        };
+        assert!(screen.password_masked());
+        screen.click(108, 267.0);
+        assert!(!screen.password_masked());
+        assert!(screen.password_focused());
+        assert!(!format!("{screen:?}").contains("Secret"));
+        screen.focus = 2;
+        assert!(screen.password_masked());
+        screen.clear();
+        assert!(!screen.show_password);
+        assert!(screen.password.is_empty());
     }
 }

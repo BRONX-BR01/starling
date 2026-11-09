@@ -212,7 +212,19 @@ fn the_whole_chain() {
         ("ABCD-EFGH", "https://www.microsoft.com/link")
     );
     let ms = wait_for_sign_in(&ep, "test-client", &code, &|| false).unwrap();
-    let (account, secrets) = finish_sign_in(&ep, ms).unwrap();
+    let stages = std::cell::RefCell::new(Vec::new());
+    let (account, secrets) =
+        finish_sign_in_progress(&ep, ms, &|stage| stages.borrow_mut().push(stage)).unwrap();
+    assert_eq!(
+        *stages.borrow(),
+        [
+            SignInStage::Xbox,
+            SignInStage::XboxSecurity,
+            SignInStage::Minecraft,
+            SignInStage::Ownership,
+            SignInStage::Profile
+        ]
+    );
     assert_eq!(
         account,
         Account {

@@ -182,7 +182,9 @@ fn step(setup: &Setup, failure: &str) -> Step {
             }
             Step::Start
         }
-        State::Resuming | State::Starting | State::SignedIn(_) => Step::Talking,
+        State::Resuming | State::Starting | State::Progress(_) | State::SignedIn(_) => {
+            Step::Talking
+        }
         State::Code { code, link } => Step::Code { code, link },
         State::Failed(e) => Step::SignInFailed(if e.starts_with("starling.account.") {
             horizon_client::lang::get(&e)

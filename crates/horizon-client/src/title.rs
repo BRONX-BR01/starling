@@ -3970,7 +3970,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if !crate::ui::hovered((x, y), fx, fy, fw, fh) {
             return;
         }
-        let secret = self.password_focused();
+        let secret = matches!(&self.mode, Mode::Account(screen) if screen.password_masked());
         if let Some(field) = caret_field(&mut self.mode, self.search_focused, &mut self.search) {
             if secret {
                 self.caret
@@ -3986,7 +3986,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if self.rules.get_mut().is_some() {
             return;
         }
-        let secret = self.password_focused();
+        let secret = matches!(&self.mode, Mode::Account(screen) if screen.password_masked());
         if let Some(field) = caret_field(&mut self.mode, self.search_focused, &mut self.search) {
             if secret {
                 self.caret.get_mut().drag_password(atlas, field, x);

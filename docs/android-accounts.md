@@ -5,10 +5,14 @@ is kept across restarts. Remove asks for confirmation and removes only that
 profile and its saved sign-in; worlds and other profiles stay in place.
 
 - **Microsoft** uses Starling's existing browser device-code sign-in. Follow the
-  browser's account creation link if you need a Microsoft account. A Minecraft
+  browser's account creation link if you need a Microsoft account. Starling shows
+  the current sign-in stage after browser authorization and keeps the result
+  visible until **Done** is pressed. A Minecraft
   Java entitlement is required for authenticated Microsoft play.
 - **Ely.by** accepts a username or email and password, with an optional six-digit
-  two-factor code. **Register** opens Ely.by's registration page. This session
+  two-factor code. **Log in** submits the form; **Show password** / **Hide password**
+  controls only the visible password field. The code remains masked. **Register**
+  opens Ely.by's registration page. This session
   joins servers configured for Ely.by authentication; it does not authenticate
   with Microsoft's session servers or grant Minecraft ownership.
 - **Offline** saves a name of 1–16 ASCII letters, digits or underscores. It works
