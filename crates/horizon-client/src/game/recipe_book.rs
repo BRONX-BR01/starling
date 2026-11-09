@@ -158,6 +158,14 @@ impl Game<'_> {
         self.active_book().is_some_and(|b| self.book_open(b))
             && self.recipe_ui.search.as_ref().is_some_and(|s| s.focused)
     }
+    /// The search box while it takes the keys, for the keyboard's editor on Android
+    /// (touch/text_mirror.rs).
+    pub(super) fn recipe_search_box(&mut self) -> Option<&mut EditBox> {
+        if !self.recipe_search_focused() {
+            return None;
+        }
+        self.recipe_ui.search.as_mut()
+    }
     /// `keyChat` focuses the search box.
     pub(super) fn recipe_focus_search(&mut self) {
         if self.active_book().is_some_and(|b| self.book_open(b))

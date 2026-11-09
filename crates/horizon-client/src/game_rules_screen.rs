@@ -337,6 +337,18 @@ impl RulesScreen {
     pub fn typing(&self) -> bool {
         !self.confirm && (self.search.focused || self.numbers.iter().any(|(_, b)| b.focused))
     }
+    /// The box that takes the keys, for the on-screen keyboard's editor on Android: 0 the
+    /// search, then the rules' number boxes in their order. `edit` sets it.
+    pub fn typed_box(&self) -> Option<(usize, &EditBox)> {
+        if self.confirm {
+            return None;
+        }
+        if self.search.focused {
+            return Some((0, &self.search));
+        }
+        let i = self.numbers.iter().position(|(_, b)| b.focused)?;
+        Some((i + 1, &self.numbers[i].1))
+    }
 
     /// A left click; Some when the screen closes.
     pub fn click(

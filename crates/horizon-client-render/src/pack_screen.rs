@@ -882,6 +882,26 @@ impl PackScreen {
     pub fn search_focused(&self) -> bool {
         self.confirm.is_none() && self.focus == Focus::Search
     }
+    /// The search box, its text and selection (the on-screen keyboard's editor on Android).
+    pub fn search_field(&self) -> &TextField {
+        &self.search
+    }
+    /// The on-screen keyboard's editor's text, already through the box's filter, and selection
+    /// in the focused search box (Android); the lists filter again when the text changed.
+    pub fn set_search(&mut self, m: &Measure, value: &str, cursor: usize, anchor: usize) {
+        if !self.search_focused() {
+            return;
+        }
+        let changed = value != self.search.value;
+        if changed {
+            self.search.set_value(m, value);
+        }
+        self.search.move_cursor_to(m, anchor, false);
+        self.search.move_cursor_to(m, cursor, true);
+        if changed {
+            self.filter(None);
+        }
+    }
     /// Resize (`Screen.init` on a new size: `repositionElements`).
     pub fn resize(&mut self, m: &Measure, width: i32, height: i32) {
         self.width = width;

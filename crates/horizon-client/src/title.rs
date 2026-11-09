@@ -3914,6 +3914,11 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
             edit.highlight = anchor.min(len);
         });
     }
+    /// Create New World's game rules while their screen is open, whose boxes `focused_field`
+    /// leaves out (the on-screen keyboard's editor on Android reads and sets them).
+    pub fn creation_rules(&mut self) -> Option<&mut RulesScreen> {
+        self.rules.get_mut().as_mut()
+    }
     /// Whether a text field has the focus.
     pub fn text_focused(&mut self) -> bool {
         // The game rules' boxes edit themselves (`focused_field` leaves them out).

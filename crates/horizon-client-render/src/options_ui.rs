@@ -2474,6 +2474,20 @@ fn pairs(opts: &[Opt]) -> Vec<Row> {
         .map(|c| Row::Pair(c[0], c.get(1).copied()))
         .collect()
 }
+/// The focused text field as the on-screen keyboard's editor on Android mirrors it
+/// (`OptionsUi::focused_text`).
+pub struct FocusedText {
+    /// Which field: 0 the language search, 1 the settings search, 2 the pack search, 3 Skin
+    /// Customization's name, 4 a custom button's text.
+    pub index: usize,
+    /// It searches a list.
+    pub search: bool,
+    pub value: String,
+    /// The cursor and the selection's other end, in characters.
+    pub selection: (usize, usize),
+    /// The most characters it takes.
+    pub max: usize,
+}
 impl OptionsUi {
     /// A switch of `horizon-extras.txt` as the Extras page draws it: "Caption: On".
     fn extra_button(&self, s: &Settings, item: crate::extras::Item) -> Widget {
@@ -2509,6 +2523,75 @@ impl OptionsUi {
             Page::Skin => self.profile_name.is_none() && on(&self.skin.name),
             Page::CustomButton(_) => on(&self.custom_send),
             _ => self.settings_search_active() && on(&self.settings_search),
+        }
+    }
+    /// The text field that has the focus (`text_focused`), for the on-screen keyboard's editor
+    /// on Android.
+    pub fn focused_text(&self) -> Option<FocusedText> {
+        if !self.text_focused() {
+            return None;
+        }
+        let edit = |e: &ui::EditBox| (e.value.clone(), (e.cursor, e.highlight), e.max_length);
+        let (index, (value, selection, max)) = match self.page() {
+            Page::Language => (0, edit(&self.language_search)),
+            Page::Packs => {
+                let s = self.pack_screen.as_ref()?.search_field();
+                (2, (s.value.clone(), (s.cursor, s.highlight), s.max_length))
+            }
+            Page::Skin => (3, edit(&self.skin.name)),
+            Page::CustomButton(_) => (4, edit(&self.custom_send)),
+            _ => (1, edit(&self.settings_search)),
+        };
+        Some(FocusedText {
+            index,
+            search: index <= 2,
+            value,
+            selection,
+            max,
+        })
+    }
+    /// The on-screen keyboard's editor's text and selection on the focused field (Android),
+    /// through the field's filter and limit as typing would leave them: a position after a
+    /// character the filter drops moves back with it. A search's list goes back to its top
+    /// when its text changed, as after a typed key.
+    pub fn set_focused_text(&mut self, atlas: &HudAtlas, text: &str, cursor: usize, anchor: usize) {
+        if !self.text_focused() {
+            return;
+        }
+        let kept = |pos: usize| {
+            let before: String = text.chars().take(pos).collect();
+            crate::clipboard::filter_text(&before, false)
+                .chars()
+                .count()
+        };
+        let (cursor, anchor) = (kept(cursor), kept(anchor));
+        let value = crate::clipboard::filter_text(text, false);
+        let page = self.page();
+        let edit = match page {
+            Page::Packs => {
+                if let Some(p) = &mut self.pack_screen {
+                    p.set_search(
+                        &crate::screen_draw::Measure(&atlas.font),
+                        &value,
+                        cursor,
+                        anchor,
+                    );
+                }
+                return;
+            }
+            Page::Language => &mut self.language_search,
+            Page::Skin => &mut self.skin.name,
+            Page::CustomButton(_) => &mut self.custom_send,
+            _ => &mut self.settings_search,
+        };
+        let changed = value != edit.value;
+        if changed {
+            edit.set_value(&value);
+        }
+        edit.set_cursor(anchor, false);
+        edit.set_cursor(cursor, true);
+        if changed && !matches!(page, Page::Skin | Page::CustomButton(_)) {
+            self.scroll = 0.0;
         }
     }
     /// Read the Skin Customization page's name, skins and choice again (it opened, or a skin
