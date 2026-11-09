@@ -8361,6 +8361,7 @@ impl Game<'_> {
                     &mut batch,
                     self.cursor,
                     self.settings.file.bool("hideSplashTexts"),
+                    self.settings.file.bool("hideServerAddress"),
                 );
             }
             self.draw_title_player(&mut batch);
