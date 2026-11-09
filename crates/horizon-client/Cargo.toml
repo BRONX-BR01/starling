@@ -88,6 +88,8 @@ rustix = { version = "1", default-features = false, features = ["std", "time", "
 # file manager, the file picker, the clipboard (cpal's version of jni).
 winit = { version = "0.30.13", features = ["android-native-activity"] }
 jni = "0.21.1"
+# The mods, resource packs and shader packs catalog (game/mod_catalog.rs).
+starling-catalog = { path = "../starling-catalog" }
 
 [target.'cfg(windows)'.dependencies]
 # (Resource pack overlays' `junction` is horizon-client-render's, with packs.rs.)
