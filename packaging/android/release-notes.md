@@ -1,6 +1,6 @@
 **Starling 0.8.0: the first release of Starling and Horizon Android together.**
 
-Horizon Android and Starling are now one app, in [starling-client/starling](https://github.com/starling-client/starling). Thanks to [Vasysik](https://github.com/Vasysik), who founded Horizon Android, for the support for older phones in this release.
+Horizon Android and Starling are now one app, in [starling-client/starling](https://github.com/starling-client/starling). Thanks to [Vasysik](https://github.com/Vasysik), who founded Horizon Android, for the support for older phones, the terrain work on Adreno and the game folder in the Files app in this release.
 
 ## Install
 
@@ -9,7 +9,9 @@ Horizon Android and Starling are now one app, in [starling-client/starling](http
 
 ## What's new
 
-- **A catalog inside the game:** **Options > Mods > Catalog** finds and installs mods, resource packs and shader packs. Java shader packs like Complementary, BSL and Photon install with a tap and run as they are.
+- **A catalog inside the game:** the **Catalog** button on the Mods, Resource Packs and Shader Packs pages finds, installs and removes them. Java shader packs like Complementary, BSL and Photon install with a tap and run as they are.
+- **Your game folder in the Files app:** Starling shows up in Android's Files app and file pickers, to browse, copy, rename and delete.
+- **More shader packs work:** packs written for the core profile, like Pixel Perfect, no longer leave a black screen, and packs with only world programs, like Round World, load.
 - **More phones:** 32-bit ARM phones and x86 devices get their own APK, and older GPUs get a game built to run on them.
 - **Fixed the crash on opening a game in OpenGL** on Adreno phones.
 - **Faster terrain on Adreno**, and a lighter upscale on Mali and PowerVR when the resolution is below 100%.
