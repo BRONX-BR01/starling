@@ -48,6 +48,7 @@ public final class GameFolderChecks {
         File work = new File(args[0]);
         choosing(new File(work, "choose"));
         ids(new File(work, "ids"));
+        opening(new File(work, "opening"));
         ownFiles(new File(work, "own"));
         sharedFolder(new File(work, "shared"));
         links(new File(work, "links"));
@@ -113,6 +114,33 @@ public final class GameFolderChecks {
                 }
             });
         }
+    }
+
+    /** The game's own paths as the documents the Files app opens on (StarlingActivity.openFolder). */
+    private static void opening(File work) throws IOException {
+        File root = new File(work, "root");
+        write(new File(root, "resourcepacks/pack.zip"), "pack");
+        write(new File(root, "accounts/account.json"), "token");
+        write(new File(work, "rootx/other"), "other");
+        for (boolean ownFiles : new boolean[] {false, true}) {
+            GameFolder folder = new GameFolder(root, ownFiles);
+            check(GameFolder.ROOT.equals(folder.idOf(root)), "the folder itself");
+            check("starling/resourcepacks".equals(folder.idOf(new File(root, "resourcepacks"))),
+                    "a folder in it");
+            check("starling/resourcepacks".equals(
+                    folder.idOf(new File(root, "saves/../resourcepacks"))), "a path with ..");
+            check("starling/shaderpacks".equals(folder.idOf(new File(root, "shaderpacks"))),
+                    "one not made yet");
+            check(folder.idOf(work) == null, "the folder above");
+            check(folder.idOf(new File(work, "rootx")) == null, "a name that starts the same");
+            check(folder.idOf(new File(root, "../rootx/other")) == null, "out by ..");
+        }
+        check(new GameFolder(root, false).idOf(new File(root, "accounts")) != null,
+                "shared storage is all the player's");
+        check(new GameFolder(root, true).idOf(new File(root, "accounts")) == null,
+                "the app's own sign-ins are not shown");
+        check(new GameFolder(root, true).idOf(new File(root, "horizon-native-mods")) == null,
+                "nor its native mods' folder: the game offers the Starling folder for it");
     }
 
     /** The app's own files: their sign-ins and builds out of reach, the top's names fixed. */
