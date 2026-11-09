@@ -680,6 +680,10 @@ struct SunriseOut {
 @vertex fn vs_sunrise(@location(0) clip: vec4<f32>, @location(1) weight: f32) -> SunriseOut {
     return SunriseOut(clip, weight);
 }
+// At the far plane, for the sky drawn after solid terrain (gfx/late_sky.rs).
+@vertex fn vs_sunrise_late(@location(0) clip: vec4<f32>, @location(1) weight: f32) -> SunriseOut {
+    return SunriseOut(vec4(clip.xy, 0.0, clip.w), weight);
+}
 @fragment fn fs_sunrise(in: SunriseOut) -> @location(0) vec4<f32> {
     return vec4(globals.sunrise.rgb, in.weight * globals.sunrise.a);
 }

@@ -381,6 +381,7 @@ impl Game<'_> {
                 .chain(super::repro::HELP)
                 .collect::<Vec<_>>() }))),
             "setblock" | "fill" | "particle" | "signedit" => self.render_command(&words),
+            "sky-order" => self.sky_order_command(&words),
             "section-draws" => {
                 let r = self.renderer.as_mut().ok_or("no renderer")?;
                 match words.get(1).copied() {

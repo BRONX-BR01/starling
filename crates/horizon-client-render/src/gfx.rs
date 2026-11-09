@@ -201,6 +201,7 @@ mod hdr_stats;
 mod terrain_source;
 pub use hdr::Calibration as HdrCalibration;
 pub mod block_light;
+mod late_sky;
 pub mod lightning;
 mod lod;
 mod native_material;
@@ -905,6 +906,9 @@ pub struct Renderer {
     sunrise_pipeline: wgpu::RenderPipeline,
     sunrise_buffer: wgpu::Buffer,
     dark_disc: wgpu::RenderPipeline,
+    /// The vanilla sky after solid terrain (`late_sky`), and whether frames take it.
+    late_sky: Option<late_sky::LateSky>,
+    late_sky_on: bool,
     /// Clears the world pass's depth to the far plane so the first-person hand draws in the
     /// same pass (`hand_in_world`), as the hand's own pass would clear it.
     depth_reset: wgpu::RenderPipeline,
@@ -3572,7 +3576,7 @@ impl Renderer {
             },
             ..additive_descriptor
         });
-        let celestial_pipeline = kept.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let celestial_descriptor = wgpu::RenderPipelineDescriptor {
             label: Some("Celestial bodies"),
             layout: Some(&entity_layout),
             vertex: wgpu::VertexState {
@@ -3620,7 +3624,8 @@ impl Renderer {
             }),
             multiview_mask: None,
             cache: None,
-        });
+        };
+        let celestial_pipeline = kept.create_render_pipeline(&celestial_descriptor);
         drop(entity_step);
         // WorldBorderRenderer: misc/forcefield.png as a MipmappedTexture
         // (repeat, linear minification with mipmaps, nearest magnification).
@@ -4016,6 +4021,22 @@ impl Renderer {
         let uploads = upload::Uploads::new(&device);
         let section_uploads = upload::Uploads::with_chunk(&device, SECTION_UPLOAD_CHUNK);
         let stars = stars::Stars::new(&device, config.format.remove_srgb_suffix());
+        let late_sky = adreno::adreno_vulkan(&adapter_info)
+            .then(|| {
+                late_sky::LateSky::new(
+                    &adreno::TerrainModule {
+                        kept: &kept,
+                        shader: &shader,
+                        format: config.format.remove_srgb_suffix(),
+                        constants: &sprite_constants,
+                    },
+                    &layout,
+                    (&sunrise_buffers, sunrise_blend),
+                    &celestial_descriptor,
+                    &stars,
+                )
+            })
+            .flatten();
         let entity_outline = entity_outline::EntityOutline::new(
             &device,
             (&entity_shader, &entity_layout, &entity_vertex),
@@ -4081,6 +4102,8 @@ impl Renderer {
             cull,
             flat,
             sky,
+            late_sky,
+            late_sky_on: true,
             sky_base,
             sunrise_pipeline,
             sunrise_buffer,
@@ -4527,6 +4550,18 @@ impl Renderer {
             return Err("flat section draws are off on this device".into());
         }
         self.flat_on = on;
+        Ok(())
+    }
+    /// Whether frames that may take it draw the sky after solid terrain (`late_sky`).
+    pub fn late_sky_on(&self) -> bool {
+        self.late_sky_on
+    }
+    /// Switches drawing the sky after solid terrain, for A/B checks.
+    pub fn set_late_sky(&mut self, on: bool) -> Result<()> {
+        if on && self.late_sky.is_none() {
+            return Err("the late sky is off on this device".into());
+        }
+        self.late_sky_on = on;
         Ok(())
     }
     /// Whether one of Horizon's own packs reads the water mirror, which needs the frame's
@@ -8167,7 +8202,20 @@ impl Renderer {
             });
             pass.set_bind_group(0, &self.group, &[]);
             pack_frame(&mut pass);
-            if frame.title || (sky_visible && (frame.skybox || frame.end_sky)) {
+            // The vanilla Overworld sky waits for solid terrain (`late_sky`).
+            let late_sky = self.late_sky.as_ref().filter(|_| {
+                self.late_sky_on
+                    && !frame.title
+                    && frame.skybox
+                    && !frame.end_sky
+                    && self.native.is_none()
+                    && self.pack_post.is_none()
+                    && mirror.is_none()
+                    && cull.is_none()
+            });
+            if late_sky.is_none()
+                && (frame.title || (sky_visible && (frame.skybox || frame.end_sky)))
+            {
                 if !frame.title && frame.skybox && !pack_draws_sky && !native_sky_pass {
                     match self
                         .native
@@ -8396,6 +8444,32 @@ impl Renderer {
             if surface.is_some() {
                 drop(pass);
                 pass = plain_pass(&mut encoder);
+            }
+            // At the far plane, it reads the depth solids left, in the usual order of its parts.
+            if let Some(sky) = late_sky.filter(|_| sky_visible) {
+                pass.set_pipeline(&sky.sky);
+                pass.draw(0..3, 0..1);
+                if frame.sky.sunrise_color[3] > 0.001 {
+                    pass.set_pipeline(&sky.sunrise);
+                    pass.set_vertex_buffer(0, self.sunrise_buffer.slice(..));
+                    pass.draw(0..sunrise_fan::VERTICES as u32, 0..1);
+                }
+                if celestial_vertices > 0 {
+                    pass.set_pipeline(&sky.celestial);
+                    pass.set_bind_group(0, &self.entity_group, &[]);
+                    pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.set_vertex_buffer(0, self.celestial_buffer.slice(..));
+                    pass.draw_indexed(0..(celestial_vertices as u32 / 4) * 6, 0, 0..1);
+                    pass.set_bind_group(0, &self.group, &[]);
+                }
+                if frame.stars.is_some() {
+                    self.stars.draw_through(&mut pass, &sky.stars);
+                    pass.set_bind_group(0, &self.group, &[]);
+                }
+                if frame.dark_disc {
+                    pass.set_pipeline(&sky.dark_disc);
+                    pass.draw(0..3, 0..1);
+                }
             }
             if static_entity_quads > 0 {
                 pass.set_pipeline(&self.static_entity_pipeline);

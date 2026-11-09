@@ -12,6 +12,7 @@ pub const HELP: &[&str] = &[
     "particle NAME X Y Z [DX DY DZ] [COUNT]  spawn particles (vanilla /particle spread)",
     "signedit X Y Z [front|back]    open the sign editor for the sign at X Y Z",
     "section-draws [flat|indirect]  how terrain sections are drawn (A/B checks); replies the mode",
+    "sky-order [early|late]         the vanilla sky before or after solid terrain, on Adreno's Vulkan (A/B checks); replies the mode",
     "section-cull [on|off]          occlusion culling of solid sections (A/B checks); replies the mode",
     "section-sides [on|off]         leave out solid quads facing away from the eye (A/B checks); replies the mode",
 ];
@@ -20,6 +21,16 @@ impl Game<'_> {
     /// Parse `name[k=v,...]` into a registry state (defaults for missing properties).
     fn parse_state(&self, text: &str) -> Result<BlockStateId> {
         parse_state(self.pack.assets.registry, text)
+    }
+    pub(super) fn sky_order_command(&mut self, words: &[&str]) -> Result<Option<Value>> {
+        let r = self.renderer.as_mut().ok_or("no renderer")?;
+        match words.get(1).copied() {
+            None => {}
+            Some("early") => r.set_late_sky(false)?,
+            Some("late") => r.set_late_sky(true)?,
+            Some(other) => return Err(format!("unknown sky order {other}").into()),
+        }
+        Ok(Some(json!({ "ok": true, "late": r.late_sky_on() })))
     }
     pub(super) fn render_command(&mut self, words: &[&str]) -> Result<Option<Value>> {
         let int = |i: usize| -> Result<i32> {
