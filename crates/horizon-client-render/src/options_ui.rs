@@ -8877,16 +8877,26 @@ mod tests {
         ui.custom_send.set_value("Home");
         press(&mut ui, &mut s, Act::CustomSlot(id));
         ui.push(Page::CustomPick(id, CustomPick::Keyboard));
-        press(&mut ui, &mut s, Act::CustomInput(id, "key.keyboard.left.shift"));
+        press(
+            &mut ui,
+            &mut s,
+            Act::CustomInput(id, "key.keyboard.left.shift"),
+        );
         press(&mut ui, &mut s, Act::CustomDimension(id, 0));
         ui.back(&mut s);
         assert_eq!(s.custom_buttons[0].label(), "Home");
-        assert_eq!(s.custom_buttons[0].action, CustomAction::Send("/home".into()));
-        assert_eq!(s.custom_buttons[0].bindings[0], Some(CustomAction::Input("key.keyboard.left.shift".into())));
-        assert_eq!(s.custom_buttons[0].dimensions, [125,100]);
+        assert_eq!(
+            s.custom_buttons[0].action,
+            CustomAction::Send("/home".into())
+        );
+        assert_eq!(
+            s.custom_buttons[0].bindings[0],
+            Some(CustomAction::Input("key.keyboard.left.shift".into()))
+        );
+        assert_eq!(s.custom_buttons[0].dimensions, [125, 100]);
         // Restore the automatic label for the remaining legacy editor checks.
         s.custom_buttons[0].custom_label.clear();
-        s.custom_buttons[0].bindings = [None,None];
+        s.custom_buttons[0].bindings = [None, None];
         // A key takes its place, and stays without a line.
         let id = s.custom_buttons[0].id;
         press(&mut ui, &mut s, Act::CustomEdit(id));
