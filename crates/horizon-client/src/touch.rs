@@ -1585,7 +1585,7 @@ impl LayoutEditor {
                     }
                     if action == EditorAction::Interact {
                         config.interact = config.interact.next();
-                        // Attack and Use go with the crosshair.
+                        // Use goes with the crosshair.
                         if matches!(self.selected, Some(Target::Button(b)) if !config.offers(b)) {
                             self.selected = None;
                         }
