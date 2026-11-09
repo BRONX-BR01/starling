@@ -1631,6 +1631,9 @@ enum Act {
     PickSkin,
     OpenSkinFolder,
     ElyBySkins,
+    /// The chosen skin to the Microsoft account's profile; an Ely.by account's skin page.
+    UploadSkin,
+    ElySkinSite,
     /// AI Agent: start or stop the repro recording.
     ToggleRecording,
     /// AI Agent: write the repro bundle now.
@@ -1837,6 +1840,10 @@ pub enum SkinAction {
     PickFile,
     /// Ely.by Skins turned on or off (`elyby`): keep it.
     ElyBy(bool),
+    /// This skin to the playing Microsoft account's profile, for every server to show.
+    Upload(crate::own_skin::SkinChoice),
+    /// Ely.by's page where the playing Ely.by account changes its skin.
+    ElySite,
 }
 /// `SliderableValueSet.applyValueImmediately`: these apply 600 ms after
 /// the last change (`OptionInstanceSliderButton.delayedApplyAt`).
@@ -1952,6 +1959,11 @@ pub struct OptionsUi {
     pub skin_page: bool,
     /// A profile selected by the host: names are managed in Accounts, not the legacy alias box.
     pub profile_name: Option<String>,
+    /// That profile's key (`accounts::player_key`), under which its own skin is kept
+    /// (`own_skin::SkinChoice::for_profile`).
+    pub profile_key: Option<String>,
+    /// Where that profile's skin can go besides this game, set by the game every frame.
+    pub skin_cloud: crate::own_skin::Cloud,
     /// Whether the Mods, Resource Packs and Shader Packs pages have their Catalog button: the
     /// game's options on a phone (`offer_catalog`). The menus before the game can't show it.
     catalog_buttons: bool,
@@ -2051,6 +2063,8 @@ impl Default for OptionsUi {
             shader_profiles: Vec::new(),
             skin_page: false,
             profile_name: None,
+            profile_key: None,
+            skin_cloud: Default::default(),
             catalog_buttons: false,
             skin: SkinPage::default(),
         }
@@ -2523,7 +2537,7 @@ impl OptionsUi {
         }
         page.account = crate::auth::current().map(|a| a.name.clone());
         page.files = crate::own_skin::list(&dir.join(crate::own_skin::DIR));
-        page.choice = crate::own_skin::SkinChoice::load(&dir);
+        page.choice = crate::own_skin::SkinChoice::for_profile(&dir, self.profile_key.as_deref());
         page.elyby = crate::elyby::enabled(&dir);
         page.warning = None;
         if !page.name.focused {
@@ -2537,6 +2551,57 @@ impl OptionsUi {
     /// What Skin Customization asked of the game since the last call.
     pub fn take_skin_actions(&mut self) -> Vec<SkinAction> {
         std::mem::take(&mut self.skin.actions)
+    }
+    /// What the skin button calls no file of `skins/`: an account's own skin, else the default.
+    fn skin_default_name(&self) -> String {
+        lang::get(match self.skin_cloud {
+            crate::own_skin::Cloud::Local => "starling.skin.default",
+            _ => "starling.skin.account",
+        })
+    }
+    /// Skin Customization's rows for the playing profile's account, as Horizon Android's wardrobe
+    /// has them: a Microsoft account's upload of the chosen skin to its profile, and how the last
+    /// one went; an Ely.by account's page on ely.by, where its skin is changed.
+    fn skin_cloud_rows(&self) -> Vec<Row> {
+        use crate::own_skin::{Cloud, Upload};
+        let chosen = self.skin.choice.file.is_some();
+        match &self.skin_cloud {
+            Cloud::Local => Vec::new(),
+            Cloud::Ely => vec![
+                Row::Buttons(
+                    button(
+                        0.0,
+                        0.0,
+                        310.0,
+                        tr("starling.skin.ely_site"),
+                        Act::ElySkinSite,
+                    ),
+                    None,
+                ),
+                Row::Note(lang::get("starling.skin.ely_hint")),
+            ],
+            Cloud::Microsoft(upload) => {
+                let sending = *upload == Upload::Sending;
+                let label = tr(if sending {
+                    "starling.skin.uploading"
+                } else {
+                    "starling.skin.upload"
+                });
+                let upload_button = button(0.0, 0.0, 310.0, label, Act::UploadSkin);
+                let upload_button = if chosen && !sending {
+                    upload_button
+                } else {
+                    inactive(upload_button)
+                };
+                let note = match upload {
+                    Upload::Failed(why) => Row::Warning(lang::get_or(why, why)),
+                    Upload::Sent => Row::Note(lang::get("starling.skin.uploaded")),
+                    _ if !chosen => Row::Note(lang::get("starling.skin.upload_choose")),
+                    _ => Row::Note(lang::get("starling.skin.upload_hint")),
+                };
+                vec![Row::Buttons(upload_button, None), note]
+            }
+        }
     }
     /// The name box loses the focus: a changed name is kept when it is one, else refused and
     /// the old one back in the box.
@@ -3113,11 +3178,12 @@ impl OptionsUi {
                         ),
                     });
                 }
+                let default = self.skin_default_name();
                 let skin = page
                     .choice
                     .file
                     .as_deref()
-                    .map_or("Default", crate::own_skin::shown_name);
+                    .map_or(default.as_str(), crate::own_skin::shown_name);
                 let skin = button(
                     0.0,
                     0.0,
@@ -3140,6 +3206,7 @@ impl OptionsUi {
                     inactive(model)
                 };
                 rows.push(Row::Buttons(skin, Some(model)));
+                rows.extend(self.skin_cloud_rows());
                 let elyby = |width: f32| {
                     let on = if page.elyby { "ON" } else { "OFF" };
                     button(
@@ -5618,6 +5685,12 @@ impl OptionsUi {
                             page.actions.push(SkinAction::ElyBy(page.elyby));
                         }
                         Act::OpenSkinFolder => self.skin.actions.push(SkinAction::OpenFolder),
+                        Act::UploadSkin => {
+                            let page = &mut self.skin;
+                            page.warning = None;
+                            page.actions.push(SkinAction::Upload(page.choice.clone()));
+                        }
+                        Act::ElySkinSite => self.skin.actions.push(SkinAction::ElySite),
                         Act::ToggleRecording => events.push(Event::ToggleRecording),
                         Act::DiagnosticsExport => events.push(Event::DiagnosticsExport),
                         Act::DiagnosticsOpen => events.push(Event::DiagnosticsOpen),
@@ -6701,7 +6774,9 @@ impl OptionsUi {
                         | Act::SkinModel
                         | Act::PickSkin
                         | Act::OpenSkinFolder
-                        | Act::ElyBySkins => {}
+                        | Act::ElyBySkins
+                        | Act::UploadSkin
+                        | Act::ElySkinSite => {}
                         Act::None => {}
                     }
                     return events;
@@ -8978,6 +9053,73 @@ mod tests {
             .collect();
         assert!(acts.contains(&&Act::Cycle(Opt::ModelPart(0))));
         assert!(!acts.contains(&&Act::NextSkin) && !acts.contains(&&Act::OpenSkinFolder));
+    }
+
+    #[test]
+    fn an_account_profile_sends_its_skin_where_its_account_keeps_it() {
+        use crate::own_skin::{Cloud, SkinChoice, Upload};
+        let atlas = atlas();
+        let mut s = Settings::default();
+        let mut ui = OptionsUi {
+            skin_page: true,
+            profile_name: Some("Notch".into()),
+            skin_cloud: Cloud::Microsoft(Upload::None),
+            ..Default::default()
+        };
+        ui.stack.push(Page::Skin);
+        ui.skin.files = vec!["alex.png".into()];
+        let size = (427.0, 240.0);
+        let buttons = |ui: &mut OptionsUi| {
+            let (widgets, ..) = ui.layout(&Settings::default(), size.0, size.1);
+            widgets
+                .iter()
+                .filter_map(|w| match &w.kind {
+                    WKind::Button { act, active, .. } => {
+                        Some((act.clone(), (w.x + 2.0, w.y + 2.0), *active))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let find = |ui: &mut OptionsUi, wanted: Act| {
+            buttons(ui)
+                .into_iter()
+                .find(|(act, ..)| *act == wanted)
+                .map(|(_, at, active)| (at, active))
+        };
+        // The account's own skin is nothing to upload.
+        assert_eq!(find(&mut ui, Act::UploadSkin).map(|b| b.1), Some(false));
+        ui.skin.choice = SkinChoice {
+            file: Some("alex.png".into()),
+            slim: true,
+        };
+        let (at, active) = find(&mut ui, Act::UploadSkin).unwrap();
+        assert!(active);
+        ui.click(&mut s, &atlas, at.0, at.1, size, [1281, 720], false, false);
+        assert_eq!(
+            ui.take_skin_actions(),
+            [SkinAction::Upload(ui.skin.choice.clone())]
+        );
+        // One upload at a time; a refusal shows in red.
+        ui.skin_cloud = Cloud::Microsoft(Upload::Sending);
+        assert_eq!(find(&mut ui, Act::UploadSkin).map(|b| b.1), Some(false));
+        ui.skin_cloud = Cloud::Microsoft(Upload::Failed("Mojang said no".into()));
+        assert!(
+            ui.list_rows(&s)
+                .iter()
+                .any(|r| matches!(r, Row::Warning(w) if w == "Mojang said no"))
+        );
+        // Ely.by takes no uploads: its page instead.
+        ui.skin_cloud = Cloud::Ely;
+        assert_eq!(find(&mut ui, Act::UploadSkin), None);
+        let (at, active) = find(&mut ui, Act::ElySkinSite).unwrap();
+        assert!(active);
+        ui.click(&mut s, &atlas, at.0, at.1, size, [1281, 720], false, false);
+        assert_eq!(ui.take_skin_actions(), [SkinAction::ElySite]);
+        // An offline profile's skin stays in this game.
+        ui.skin_cloud = Cloud::Local;
+        let acts: Vec<Act> = buttons(&mut ui).into_iter().map(|b| b.0).collect();
+        assert!(!acts.contains(&Act::UploadSkin) && !acts.contains(&Act::ElySkinSite));
     }
 
     #[test]
