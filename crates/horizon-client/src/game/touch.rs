@@ -1,3 +1,6 @@
+// Custom button extensions adapted from Horizon Android (MIT).
+// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! Touch input (horizon_client::touch): on the playing screen the touch controls, drawn over the
 //! HUD and turned into the virtual pad, mouse motion and the hotbar, laid out as the player's
 //! touch-layout.json says (edited in place: a long press on pause); on every other screen the
@@ -236,6 +239,7 @@ fn plate_of(ui: &mut Ui, shape: Shape, c: [f32; 2], r: f32, fill: u32) {
     let corner = match shape {
         Shape::Square => r * 0.3,
         Shape::Round | Shape::Wide(_) => r,
+        Shape::Rect([w, h]) => r * w.min(h) * 0.3,
     };
     ui.rounded(
         (c[0] - hw) / d,
@@ -252,6 +256,7 @@ fn ring_of(ui: &mut Ui, shape: Shape, c: [f32; 2], r: f32, line: u32) {
     let corner = match shape {
         Shape::Square => r * 0.3,
         Shape::Round | Shape::Wide(_) => r,
+        Shape::Rect([w, h]) => r * w.min(h) * 0.3,
     };
     ui.border(
         (c[0] - hw) / d,
@@ -278,6 +283,7 @@ fn text_r(shape: Shape, r: f32) -> f32 {
     match shape {
         Shape::Wide(_) => r * 1.5,
         Shape::Round | Shape::Square => r,
+        Shape::Rect([w, h]) => r * w.min(h),
     }
 }
 
@@ -314,7 +320,22 @@ pub(super) fn draw_editor(
             && let Some(sprite) = skin(target)
         {
             let a = if place.show == Show::Off { 0.4 } else { a };
-            icon(ui, &sprite, c, r, 1.0, a);
+            if let Shape::Rect(_) = shape {
+                let [hw, hh] = shape.half(r);
+                let scale = ui.batch.scale;
+                horizon_client::ui::sprite_sized(
+                    ui.batch,
+                    ui.atlas,
+                    &sprite,
+                    (c[0] - hw) / scale,
+                    (c[1] - hh) / scale,
+                    2. * hw / scale,
+                    2. * hh / scale,
+                    ink(a),
+                );
+            } else {
+                icon(ui, &sprite, c, r, 1.0, a);
+            }
             if editor.selected == Some(target) {
                 ring_of(ui, shape, c, r, color::ACCENT);
             }
@@ -1393,7 +1414,22 @@ impl Game<'_> {
                 if let Some((skin, lit)) = &face.skin {
                     // One image for both: dimmed while held.
                     let held = if on && skin == lit { *a * 0.6 } else { *a };
-                    icon(&mut ui, if on { lit } else { skin }, *c, *r, 1.0, held);
+                    if let Shape::Rect(_) = shape {
+                        let [hw, hh] = shape.half(*r);
+                        let scale = ui.batch.scale;
+                        horizon_client::ui::sprite_sized(
+                            ui.batch,
+                            ui.atlas,
+                            if on { lit } else { skin },
+                            (c[0] - hw) / scale,
+                            (c[1] - hh) / scale,
+                            2. * hw / scale,
+                            2. * hh / scale,
+                            ink(held),
+                        );
+                    } else {
+                        icon(&mut ui, if on { lit } else { skin }, *c, *r, 1.0, held);
+                    }
                     continue;
                 }
                 let fill = if on { pressed(*a) } else { plate(*a) };
@@ -1618,6 +1654,7 @@ impl Game<'_> {
         if id != touch::CUSTOM_BUTTONS {
             return;
         }
+        let before = self.custom_held_keys();
         let held = format!("{id}:{bind}");
         let button = self
             .touch
@@ -1639,40 +1676,49 @@ impl Game<'_> {
         if on {
             self.touch.custom_down.push(held);
         }
-        match button.map(|b| b.action) {
-            Some(CustomAction::Send(line)) if finger => self.handle_chat_input(&line),
-            Some(action) => self.custom_key(&action, on),
-            None => {}
+        if finger && let Some(CustomAction::Send(line)) = button.map(|b| b.action) {
+            self.handle_chat_input(&line);
         }
+        let after = self.custom_held_keys();
+        self.sync_custom_keys(before, after);
     }
 
-    /// The custom buttons on let go, as a screen opening lets go of every key.
-    fn custom_buttons_up(&mut self) {
-        for held in std::mem::take(&mut self.touch.custom_down) {
-            let action = self.touch.config.as_ref().and_then(|c| {
-                let id = held
-                    .strip_prefix(touch::CUSTOM_BUTTONS)?
-                    .strip_prefix(':')?;
-                let button = c.custom.iter().find(|b| b.id.to_string() == id)?;
-                Some(button.action.clone())
-            });
-            if let Some(action) = action {
-                self.custom_key(&action, false);
+    fn custom_held_keys(&self) -> Vec<KeyCode> {
+        let Some(config) = &self.touch.config else {
+            return Vec::new();
+        };
+        touch::held_custom_keys(&config.custom, &self.touch.custom_down, |a| match a {
+            horizon_client::settings::CustomAction::Key(name) => {
+                horizon_client::keybinds::key_code(self.settings.keys.get(name))
             }
+            horizon_client::settings::CustomAction::Input(name) => {
+                horizon_client::keybinds::key_code(name)
+            }
+            horizon_client::settings::CustomAction::Send(_) => None,
+        })
+    }
+    fn sync_custom_keys(&mut self, before: Vec<KeyCode>, after: Vec<KeyCode>) {
+        // Release the chord in reverse order; modifiers were pressed first.
+        for key in before.iter().rev().filter(|k| !after.contains(k)) {
+            self.custom_key_code(*key, false);
         }
+        for key in after.iter().filter(|k| !before.contains(k)) {
+            // Inventory/chat bindings may leave gameplay while a chord is being pressed.
+            if self.screen != Screen::Playing {
+                break;
+            }
+            self.custom_key_code(*key, true);
+        }
+    }
+    /// Screen changes release every custom hold and toggle together.
+    fn custom_buttons_up(&mut self) {
+        let before = self.custom_held_keys();
+        self.touch.custom_down.clear();
+        self.sync_custom_keys(before, Vec::new());
     }
 
     /// A custom button's key goes down or up.
-    fn custom_key(&mut self, action: &horizon_client::settings::CustomAction, pressed: bool) {
-        use horizon_client::settings::CustomAction;
-        let key = match action {
-            CustomAction::Send(_) => return,
-            CustomAction::Key(name) => {
-                horizon_client::keybinds::key_code(self.settings.keys.get(name))
-            }
-            CustomAction::Input(name) => horizon_client::keybinds::key_code(name),
-        };
-        let Some(key) = key else { return };
+    fn custom_key_code(&mut self, key: KeyCode, pressed: bool) {
         // F3 acts on its release, through its own handler (the game's F3 button too).
         if key == KeyCode::F3 {
             let state = if pressed {
@@ -1811,7 +1857,17 @@ impl Game<'_> {
                     key: format!("{}:{}", touch::CUSTOM_BUTTONS, b.id),
                     label,
                     icon: None,
-                    shape: if skin.is_some() {
+                    shape: if b.dimensions != [100, 100] {
+                        let base = if skin.is_some() {
+                            1.0
+                        } else {
+                            (width / WIDE_HEIGHT).max(1.0)
+                        };
+                        Shape::Rect([
+                            base * b.dimensions[0] as f32 / 100.,
+                            b.dimensions[1] as f32 / 100.,
+                        ])
+                    } else if skin.is_some() {
                         Shape::Square
                     } else {
                         Shape::Wide(width / WIDE_HEIGHT)

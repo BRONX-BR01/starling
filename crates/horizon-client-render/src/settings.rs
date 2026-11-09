@@ -1,3 +1,6 @@
+// Custom button extensions adapted from Horizon Android (MIT).
+// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! Player settings persisted in `options.txt` with vanilla's keys and value
 //! encodings (Options.processOptions); lines Horizon does not know are kept.
 //! The option screens live in `options_ui`.
@@ -104,6 +107,11 @@ pub enum CustomAction {
 /// A button of the player's own on the touch controls (its place is the layout's).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CustomButton {
+    pub custom_label: String,
+    /// Extra simultaneous bindings, as in Horizon Android.
+    pub bindings: [Option<CustomAction>; 2],
+    /// Independent dimensions, percentages of the original size.
+    pub dimensions: [u16; 2],
     pub id: u32,
     pub action: CustomAction,
     /// One of [`CUSTOM_ICONS`]; none shows what it does in words.
@@ -126,7 +134,36 @@ pub const CUSTOM_ICONS: [&str; 15] = [
 impl CustomButton {
     /// What it shows on it.
     pub fn label(&self) -> String {
-        match &self.action {
+        if !self.custom_label.trim().is_empty() {
+            return self.custom_label.trim().to_owned();
+        }
+        self.actions()
+            .map(CustomAction::label)
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" + ")
+    }
+    pub fn actions(&self) -> impl Iterator<Item = &CustomAction> {
+        std::iter::once(&self.action).chain(self.bindings.iter().flatten())
+    }
+    pub fn binding(&self, slot: usize) -> Option<&CustomAction> {
+        if slot == 0 {
+            Some(&self.action)
+        } else {
+            self.bindings.get(slot - 1)?.as_ref()
+        }
+    }
+    pub fn set_binding(&mut self, slot: usize, action: CustomAction) {
+        if slot == 0 {
+            self.action = action;
+        } else if let Some(b) = self.bindings.get_mut(slot - 1) {
+            *b = Some(action);
+        }
+    }
+}
+impl CustomAction {
+    pub fn label(&self) -> String {
+        match self {
             CustomAction::Key(name) => crate::lang::get(name),
             CustomAction::Input(name) => crate::keybinds::display_name(name).plain(),
             CustomAction::Send(line) => line.clone(),

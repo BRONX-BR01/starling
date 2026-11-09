@@ -515,5 +515,12 @@
   "starling.diagnostics.hardware": "GPU: %s (%s)",
   "starling.diagnostics.last_error": "Last error: %s",
   "starling.native_builds.arm64_only": "The native mod build service currently supports ARM64 only. This app architecture cannot use its builds.",
-  "starling.native_builds.wrong_architecture": "That native build is for another architecture."
+  "starling.native_builds.wrong_architecture": "That native build is for another architecture.",
+  "starling.touch.edit_label": "Field: button label (tap to change)",
+  "starling.touch.edit_command": "Field: chat / command (tap to change)",
+  "starling.touch.binding": "Binding",
+  "starling.touch.clear_binding": "Clear binding",
+  "starling.touch.chord_hint": "All three bindings are held together. Tap Binding to choose a slot.",
+  "starling.touch.width": "Width",
+  "starling.touch.height": "Height"
 }

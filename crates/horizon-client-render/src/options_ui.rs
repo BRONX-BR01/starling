@@ -1,3 +1,6 @@
+// Custom button extensions adapted from Horizon Android (MIT).
+// Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
+// See THIRD_PARTY_NOTICES.md and LICENSE.
 //! The options screens: OptionsScreen, Video Settings, Music & Sounds,
 //! Controls, Key Binds, Mouse Settings, Chat Settings, Accessibility,
 //! Language and Resource Packs, laid out like vanilla's HeaderAndFooter /
@@ -1585,6 +1588,10 @@ enum Act {
     CustomDelete(u32),
     /// Toggled or held.
     CustomToggle(u32),
+    CustomField(u32),
+    CustomSlot(u32),
+    CustomClear(u32),
+    CustomDimension(u32, usize),
     CustomKey(u32, &'static str),
     CustomInput(u32, &'static str),
     /// A native mod's key (the mod's index in the installed list, the key's in its page) as the
@@ -1885,6 +1892,8 @@ pub struct OptionsUi {
     pub(crate) settings_search: ui::EditBox,
     /// What the custom button on its page sends.
     custom_send: ui::EditBox,
+    custom_label_edit: bool,
+    custom_slot: usize,
     /// The custom button on its page came from the touch editor's Add, and goes back there.
     back_to_editor: bool,
     /// The canvas of a custom button's image.
@@ -2016,6 +2025,8 @@ impl Default for OptionsUi {
             language_search: search,
             settings_search,
             custom_send,
+            custom_label_edit: false,
+            custom_slot: 0,
             back_to_editor: false,
             painter: Painter::default(),
             pack_infos: Vec::new(),
@@ -3653,9 +3664,13 @@ impl OptionsUi {
             Page::CustomButton(id) => {
                 use crate::settings::CustomAction as A;
                 let b = s.custom_buttons.iter().find(|b| b.id == id);
-                let held = |pick: CustomPick| match b.map(|b| &b.action) {
-                    Some(A::Key(_)) if pick == CustomPick::Control => b.map(|b| b.label()),
-                    Some(A::Input(_)) if pick == CustomPick::Keyboard => b.map(|b| b.label()),
+                let held = |pick: CustomPick| match b.and_then(|b| b.binding(self.custom_slot)) {
+                    Some(A::Key(_)) if pick == CustomPick::Control => {
+                        b.and_then(|b| b.binding(self.custom_slot)).map(A::label)
+                    }
+                    Some(A::Input(_)) if pick == CustomPick::Keyboard => {
+                        b.and_then(|b| b.binding(self.custom_slot)).map(A::label)
+                    }
                     _ => None,
                 };
                 let choice = |caption: &str, pick: CustomPick| {
@@ -3677,12 +3692,72 @@ impl OptionsUi {
                     None => "Its Name",
                 };
                 vec![
-                    Row::Note("Sends a /command or a chat line when pressed".into()),
+                    Row::Buttons(
+                        button(
+                            0.,
+                            0.,
+                            310.,
+                            Text::tr(
+                                if self.custom_label_edit {
+                                    "starling.touch.edit_label"
+                                } else {
+                                    "starling.touch.edit_command"
+                                },
+                                &[],
+                            ),
+                            Act::CustomField(id),
+                        ),
+                        None,
+                    ),
                     Row::SendField,
-                    Row::Note("Or holds a key while pressed".into()),
+                    Row::Buttons(
+                        button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::literal(format!(
+                                "{}: {}",
+                                crate::lang::get("starling.touch.binding"),
+                                self.custom_slot + 1
+                            )),
+                            Act::CustomSlot(id),
+                        ),
+                        Some(button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::tr("starling.touch.clear_binding", &[]),
+                            Act::CustomClear(id),
+                        )),
+                    ),
+                    Row::Note(crate::lang::get("starling.touch.chord_hint")),
                     Row::Buttons(
                         choice("Game Control", CustomPick::Control),
                         Some(choice("Keyboard Key", CustomPick::Keyboard)),
+                    ),
+                    Row::Buttons(
+                        button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::literal(format!(
+                                "{}: {}%",
+                                crate::lang::get("starling.touch.width"),
+                                b.map_or(100, |b| b.dimensions[0])
+                            )),
+                            Act::CustomDimension(id, 0),
+                        ),
+                        Some(button(
+                            0.,
+                            0.,
+                            150.,
+                            Text::literal(format!(
+                                "{}: {}%",
+                                crate::lang::get("starling.touch.height"),
+                                b.map_or(100, |b| b.dimensions[1])
+                            )),
+                            Act::CustomDimension(id, 1),
+                        )),
                     ),
                     Row::Note("How it looks".into()),
                     Row::Buttons(
@@ -5443,6 +5518,8 @@ impl OptionsUi {
                             self.custom_add(s);
                         }
                         Act::CustomEdit(id) => {
+                            self.custom_label_edit = false;
+                            self.custom_slot = 0;
                             let line =
                                 s.custom_buttons.iter().find(|b| b.id == id).map(|b| {
                                     match &b.action {
@@ -5460,28 +5537,76 @@ impl OptionsUi {
                             s.custom_buttons.retain(|b| b.id != id);
                             events.push(Event::CustomButtons);
                         }
+                        Act::CustomField(id) => {
+                            self.commit_custom_field(s, id);
+                            self.custom_label_edit = !self.custom_label_edit;
+                            let b = s.custom_buttons.iter().find(|b| b.id == id);
+                            let text = if self.custom_label_edit {
+                                b.map(|b| b.custom_label.as_str())
+                            } else {
+                                b.and_then(|b| match &b.action {
+                                    crate::settings::CustomAction::Send(t) => Some(t.as_str()),
+                                    _ => None,
+                                })
+                            };
+                            self.custom_send.set_value(text.unwrap_or_default());
+                            self.custom_send.focused = false;
+                        }
+                        Act::CustomSlot(_) => self.custom_slot = (self.custom_slot + 1) % 3,
+                        Act::CustomClear(id) => {
+                            self.commit_custom_field(s, id);
+                            if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
+                                if self.custom_slot == 0 {
+                                    b.action = crate::settings::CustomAction::Send(String::new());
+                                } else {
+                                    b.bindings[self.custom_slot - 1] = None;
+                                }
+                            }
+                            if !self.custom_label_edit && self.custom_slot == 0 {
+                                self.custom_send.set_value("");
+                            }
+                        }
+                        Act::CustomDimension(id, axis) => {
+                            if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
+                                let v = &mut b.dimensions[axis];
+                                *v = if *v >= 300 { 25 } else { *v + 25 };
+                            }
+                        }
                         Act::CustomToggle(id) => {
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
                                 b.toggle = !b.toggle;
                             }
                         }
                         Act::CustomKey(id, name) => {
+                            self.commit_custom_field(s, id);
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                b.action = crate::settings::CustomAction::Key(name.to_owned());
+                                b.set_binding(
+                                    self.custom_slot,
+                                    crate::settings::CustomAction::Key(name.to_owned()),
+                                );
                             }
-                            self.custom_send.set_value("");
+                            if !self.custom_label_edit && self.custom_slot == 0 {
+                                self.custom_send.set_value("");
+                            }
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
                         Act::CustomInput(id, name) => {
+                            self.commit_custom_field(s, id);
                             if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
-                                b.action = crate::settings::CustomAction::Input(name.to_owned());
+                                b.set_binding(
+                                    self.custom_slot,
+                                    crate::settings::CustomAction::Input(name.to_owned()),
+                                );
                             }
-                            self.custom_send.set_value("");
+                            if !self.custom_label_edit && self.custom_slot == 0 {
+                                self.custom_send.set_value("");
+                            }
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
                         Act::CustomModKey(id, i, k) => {
+                            self.commit_custom_field(s, id);
                             let key = s.mods.installed.get(i).and_then(|m| {
                                 let [name, _, default] = m.native.as_ref()?.keys.get(k)?;
                                 let chosen = s.mods.keys.get(&m.id).and_then(|c| c.get(name));
@@ -5490,9 +5615,14 @@ impl OptionsUi {
                             if let Some(key) = key
                                 && let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id)
                             {
-                                b.action = crate::settings::CustomAction::Input(key);
+                                b.set_binding(
+                                    self.custom_slot,
+                                    crate::settings::CustomAction::Input(key),
+                                );
                             }
-                            self.custom_send.set_value("");
+                            if !self.custom_label_edit && self.custom_slot == 0 {
+                                self.custom_send.set_value("");
+                            }
                             self.custom_send.focused = false;
                             events.extend(self.back(s));
                         }
@@ -5990,16 +6120,12 @@ impl OptionsUi {
             }
             // What the box holds is what it sends; one that does nothing goes.
             Page::CustomButton(id) => {
-                let line = self.custom_send.value.trim().to_owned();
+                self.commit_custom_field(s, id);
                 self.custom_send.focused = false;
-                if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id)
-                    && (!line.is_empty()
-                        || matches!(b.action, crate::settings::CustomAction::Send(_)))
-                {
-                    b.action = crate::settings::CustomAction::Send(line);
-                }
-                s.custom_buttons
-                    .retain(|b| b.action != crate::settings::CustomAction::Send(String::new()));
+                s.custom_buttons.retain(|b| {
+                    b.actions()
+                        .any(|a| *a != crate::settings::CustomAction::Send(String::new()))
+                });
                 events.push(Event::CustomButtons);
             }
             _ => {}
@@ -6014,14 +6140,30 @@ impl OptionsUi {
         }
         events
     }
+    fn commit_custom_field(&mut self, s: &mut Settings, id: u32) {
+        let text = self.custom_send.value.trim().to_owned();
+        if let Some(b) = s.custom_buttons.iter_mut().find(|b| b.id == id) {
+            if self.custom_label_edit {
+                b.custom_label = text.chars().take(64).collect();
+            } else if !text.is_empty() || matches!(b.action, crate::settings::CustomAction::Send(_))
+            {
+                b.action = crate::settings::CustomAction::Send(text);
+            }
+        }
+    }
     /// A new custom button's page. False with every slot taken.
     fn custom_add(&mut self, s: &mut Settings) -> bool {
+        self.custom_label_edit = false;
+        self.custom_slot = 0;
         // A button's id is the slot of its image: the first one free.
         let free = (0..own_buttons::SLOTS).find(|id| !s.custom_buttons.iter().any(|b| b.id == *id));
         let Some(id) = free else {
             return false;
         };
         s.custom_buttons.push(crate::settings::CustomButton {
+            custom_label: String::new(),
+            bindings: [None, None],
+            dimensions: [100, 100],
             id,
             action: crate::settings::CustomAction::Send(String::new()),
             icon: None,
@@ -6656,6 +6798,10 @@ impl OptionsUi {
                         | Act::CustomModKey(..)
                         | Act::CustomIcon(..)
                         | Act::CustomDraw(_)
+                        | Act::CustomField(_)
+                        | Act::CustomSlot(_)
+                        | Act::CustomClear(_)
+                        | Act::CustomDimension(..)
                         | Act::CustomToggle(_)
                         | Act::CanvasClear
                         | Act::CanvasPlate
@@ -8724,6 +8870,23 @@ mod tests {
             CustomAction::Send("/home".into())
         );
         assert_eq!(s.custom_buttons[0].label(), "/home");
+        // A custom caption and additional key do not overwrite the command.
+        let id = s.custom_buttons[0].id;
+        press(&mut ui, &mut s, Act::CustomEdit(id));
+        press(&mut ui, &mut s, Act::CustomField(id));
+        ui.custom_send.set_value("Home");
+        press(&mut ui, &mut s, Act::CustomSlot(id));
+        ui.push(Page::CustomPick(id, CustomPick::Keyboard));
+        press(&mut ui, &mut s, Act::CustomInput(id, "key.keyboard.left.shift"));
+        press(&mut ui, &mut s, Act::CustomDimension(id, 0));
+        ui.back(&mut s);
+        assert_eq!(s.custom_buttons[0].label(), "Home");
+        assert_eq!(s.custom_buttons[0].action, CustomAction::Send("/home".into()));
+        assert_eq!(s.custom_buttons[0].bindings[0], Some(CustomAction::Input("key.keyboard.left.shift".into())));
+        assert_eq!(s.custom_buttons[0].dimensions, [125,100]);
+        // Restore the automatic label for the remaining legacy editor checks.
+        s.custom_buttons[0].custom_label.clear();
+        s.custom_buttons[0].bindings = [None,None];
         // A key takes its place, and stays without a line.
         let id = s.custom_buttons[0].id;
         press(&mut ui, &mut s, Act::CustomEdit(id));
