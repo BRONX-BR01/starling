@@ -12,6 +12,7 @@ mod launcher {
     pub mod browser;
 }
 pub use launcher::browser;
+pub mod list;
 
 use browser::{
     horizon::Registry,
@@ -65,14 +66,16 @@ pub fn search(
 ) -> Result<Vec<Project>, String> {
     match shelf {
         Shelf::Mods => {
+            // Left out first, then paged: a page that lost all its rows would look like the end.
             let mut query = Query::new(text, Kind::Mod);
-            query.offset = offset;
-            query.limit = limit;
+            query.limit = usize::MAX;
             Ok(Registry
                 .search(&query)?
                 .into_iter()
                 .filter(|p| p.support().installable())
                 .filter(|p| NATIVE_MODS_BUILD || !is_native_mod(p))
+                .skip(offset)
+                .take(limit)
                 .collect())
         }
         Shelf::ResourcePacks => {
@@ -193,13 +196,38 @@ fn is_modrinth_shader_pack(project: &Project) -> bool {
     project.kind == Kind::Shader && project.source == SourceId::Modrinth
 }
 
-/// The ids of the projects the catalog has installed in the game folder `home`.
+/// The ids of the projects the catalog has installed in the game folder `home`: those whose file
+/// is still there. One the player deleted by hand is not installed any more.
 pub fn installed_projects(home: &Path) -> HashSet<String> {
     Installed::load(home)
         .entries
         .into_iter()
+        .filter(|entry| home.join(&entry.file).exists())
         .map(|entry| entry.project)
         .collect()
+}
+
+/// Takes off the list what the player deleted by hand, so an install puts it back instead of
+/// finding its version already there.
+pub fn forget_missing(home: &Path) {
+    let mut list = Installed::load(home);
+    let before = list.entries.len();
+    list.entries.retain(|entry| home.join(&entry.file).exists());
+    if list.entries.len() != before {
+        let _ = list.save(home);
+    }
+}
+
+/// Removes what the catalog installed for `project`: its file (a mod's folder) and its entry.
+/// Gives the entry, which says what was removed and where it was.
+pub fn remove(home: &Path, project: &Project) -> Result<Entry, String> {
+    installed::remove(home, &project.id)
+}
+
+/// The mod id of an installed mod's entry (its file's name in `horizon-mods/` or
+/// `horizon-native-mods/`), which the Mods page and `horizon-mods.txt` know it by.
+pub fn mod_id(entry: &Entry) -> Option<String> {
+    browser::horizon::mod_id(entry).map(str::to_owned)
 }
 
 /// Installs `project` (and what it needs) into the game folder `home`, its download checked.
@@ -210,6 +238,7 @@ pub fn install(
     home: &Path,
     progress: &dyn Fn(&str, f32),
 ) -> Result<Done, String> {
+    forget_missing(home);
     if is_modrinth_shader_pack(project) {
         install_modrinth_shader_pack(project, home, progress)?;
         return Ok(Done::ShaderPack);

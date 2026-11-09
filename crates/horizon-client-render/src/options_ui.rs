@@ -1253,6 +1253,16 @@ fn with_diagnostics<const N: usize>(
     all
 }
 
+/// The catalog's shelf for a page with a footer that has a Catalog button. The Resource Packs page
+/// draws its own (`pack_screen`).
+fn catalog_shelf(page: Page) -> Option<CatalogShelf> {
+    match page {
+        Page::Mods => Some(CatalogShelf::Mods),
+        Page::ShaderPacks => Some(CatalogShelf::ShaderPacks),
+        _ => None,
+    }
+}
+
 fn graphics_api_tooltip(s: &Settings) -> Text {
     let line = |key: &str| lang::get_or(key, key);
     let mut lines = Vec::new();
@@ -1606,7 +1616,7 @@ enum Act {
     NativeKey(usize, usize),
     NativeButton(usize, usize),
     OpenModFolder,
-    OpenCatalog,
+    OpenCatalog(CatalogShelf),
     /// The creative screen with the inventory beside it, or as the game draws it.
     BedrockInventory,
     /// The touch layout editor (phones).
@@ -1712,6 +1722,15 @@ fn matches_focus(id: &FocusId, i: usize, wd: &Widget) -> bool {
         _ => false,
     }
 }
+/// The catalog's shelf a page's Catalog button opens. This crate can't depend on
+/// `starling-catalog`, so the game maps it to the catalog's own (game/options.rs).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CatalogShelf {
+    Mods,
+    ResourcePacks,
+    ShaderPacks,
+}
+
 /// What the game must do after an interaction.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
@@ -1740,8 +1759,8 @@ pub enum Event {
     /// Data Packs' Open Pack Folder: create the folder if needed and open it.
     OpenDataPackFolder(std::path::PathBuf),
     OpenModFolder,
-    /// Android: the Mods page's Catalog button (game/mod_catalog.rs).
-    OpenCatalog,
+    /// Android: a page's Catalog button (game/mod_catalog.rs).
+    OpenCatalog(CatalogShelf),
     /// The Shader Packs page opened: list `shaderpacks/` into `shader_packs`.
     ListShaderPacks,
     /// A shader pack or its profile was picked, or the pack turned off: save and apply it.
@@ -1931,6 +1950,9 @@ pub struct OptionsUi {
     /// Whether Options opens Skin Customization: the game's options do; the menus before the
     /// game, which can't put a skin on, keep vanilla's greyed button.
     pub skin_page: bool,
+    /// Whether the Mods, Resource Packs and Shader Packs pages have their Catalog button: the
+    /// game's options on a phone (`offer_catalog`). The menus before the game can't show it.
+    catalog_buttons: bool,
     skin: SkinPage,
 }
 /// The Skin Customization page: the name being typed and the skins to choose from, read from
@@ -2026,6 +2048,7 @@ impl Default for OptionsUi {
             row_bands: Vec::new(),
             shader_profiles: Vec::new(),
             skin_page: false,
+            catalog_buttons: false,
             skin: SkinPage::default(),
         }
     }
@@ -2532,10 +2555,18 @@ impl OptionsUi {
     pub fn resource_packs_open(&self) -> bool {
         self.page() == Page::Packs && self.data_pack_dir.is_none()
     }
+    /// The game is up, so on a phone the pages can open its catalog.
+    pub fn offer_catalog(&mut self) {
+        self.catalog_buttons = ON_A_PHONE;
+    }
     /// The packs in `resourcepacks/` changed while the pack screen is open
     /// (`PackSelectionScreen`'s directory watcher): the screen is made again over
     /// `infos`, keeping the selection made on it so far.
     pub fn update_pack_infos(&mut self, infos: Vec<crate::pack_screen::PackInfo>) {
+        // Create World's data packs are what this page lists then, and they have their watcher.
+        if self.data_pack_dir.is_some() {
+            return;
+        }
         if let Some(p) = self.pack_screen.take()
             && p.changed
         {
@@ -4446,16 +4477,24 @@ impl OptionsUi {
                 };
                 if let Some((label, act)) = folder {
                     // Android's way to find mods, resource packs and shader packs.
-                    if ON_A_PHONE && matches!(page, Page::Mods) {
+                    let shelf = catalog_shelf(page).filter(|_| self.catalog_buttons);
+                    let (open_w, catalog) =
+                        crate::pack_screen::open_folder_slot(cx - 154.0, shelf.is_some());
+                    if let (Some(shelf), Some((x, width))) = (shelf, catalog) {
                         out.push(button(
-                            cx - 258.0,
+                            x,
                             h - 27.0,
-                            100.0,
+                            width,
                             tr("Catalog"),
-                            Act::OpenCatalog,
+                            Act::OpenCatalog(shelf),
                         ));
                     }
-                    out.push(button(cx - 154.0, h - 27.0, 150.0, tr(label), act));
+                    let label = if catalog.is_some() {
+                        crate::pack_screen::SHORT_OPEN_FOLDER
+                    } else {
+                        label
+                    };
+                    out.push(button(cx - 154.0, h - 27.0, open_w, tr(label), act));
                     out.push(button(cx + 4.0, h - 27.0, 150.0, tr("gui.done"), Act::Done));
                 } else {
                     out.push(done(h - 27.0));
@@ -5073,6 +5112,9 @@ impl OptionsUi {
                     None => Event::OpenPackFolder,
                 }),
                 crate::pack_screen::Action::Done => events.extend(self.back(s)),
+                crate::pack_screen::Action::Catalog => {
+                    events.push(Event::OpenCatalog(CatalogShelf::ResourcePacks));
+                }
                 crate::pack_screen::Action::None => {}
             }
             return events;
@@ -5359,7 +5401,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
-                        Act::OpenCatalog => events.push(Event::OpenCatalog),
+                        Act::OpenCatalog(shelf) => events.push(Event::OpenCatalog(shelf)),
                         Act::OpenShaderPackFolder => events.push(Event::OpenShaderPackFolder),
                         Act::ShaderResolution => {
                             const STEPS: [u32; 6] = [100, 75, 50, 40, 30, 25];
@@ -5814,7 +5856,11 @@ impl OptionsUi {
                 self.pack_screen = Some(screen);
             }
         }
-        self.pack_screen.as_mut().expect("made above")
+        // Here, not when it's made: the menu's screen goes on as the game's (`offer_catalog`).
+        let catalog = self.catalog_buttons && self.data_pack_dir.is_none();
+        let screen = self.pack_screen.as_mut().expect("made above");
+        screen.catalog = catalog;
+        screen
     }
     /// Escape or Done: leave the current page, applying page results.
     /// After an input on HDR calibration: Save keeps what it landed on, Cancel what was
@@ -6504,7 +6550,7 @@ impl OptionsUi {
                         }
                         Act::NativeButton(i, b) => events.push(Event::NativeButton(i, b)),
                         Act::OpenModFolder => events.push(Event::OpenModFolder),
-                        Act::OpenCatalog => events.push(Event::OpenCatalog),
+                        Act::OpenCatalog(shelf) => events.push(Event::OpenCatalog(shelf)),
                         Act::PickShaderPack(i) => {
                             let pick = match i {
                                 Some(i) => s.shader_packs.get(i).map(|p| p.file.clone()),
@@ -9417,5 +9463,213 @@ mod tests {
         let events = ui.click(&mut s, &atlas, x, y, size, [854, 480], false, false);
         assert!(events.contains(&Event::Changed));
         assert!(s.extras.music_off.is_empty());
+    }
+
+    /// The GUI sizes a landscape phone has, across its GUI scales.
+    const PHONE_GUI: [(f32, f32); 5] = [
+        (427.0, 240.0),
+        (533.0, 240.0),
+        (600.0, 270.0),
+        (800.0, 360.0),
+        (1200.0, 540.0),
+    ];
+
+    /// A pack as the pack screen lists it.
+    fn pack_info(id: &str) -> crate::pack_screen::PackInfo {
+        crate::pack_screen::PackInfo {
+            id: id.into(),
+            title: Text::literal(id),
+            description: Text::literal(""),
+            description_style: crate::text::Style::default(),
+            source: crate::pack_screen::Source::Default,
+            compat: crate::pack_screen::Compat::Compatible,
+            icon: None,
+            required: false,
+            position: crate::packs::Position::Top,
+            fixed: false,
+        }
+    }
+
+    #[test]
+    fn the_mods_and_shader_packs_pages_open_the_catalog_on_their_own_shelf() {
+        let atlas = atlas();
+        let mut s = Settings::default();
+        for size in PHONE_GUI {
+            for (page, shelf) in [
+                (Page::Mods, CatalogShelf::Mods),
+                (Page::ShaderPacks, CatalogShelf::ShaderPacks),
+            ] {
+                let mut ui = OptionsUi {
+                    catalog_buttons: true,
+                    ..OptionsUi::default()
+                };
+                ui.show(page);
+                let (widgets, ..) = ui.layout(&s, size.0, size.1);
+                let footer: Vec<&Widget> = widgets
+                    .iter()
+                    .filter(|w| !w.list && matches!(w.kind, WKind::Button { .. }))
+                    .collect();
+                assert_eq!(footer.len(), 3, "{page:?} at {size:?}");
+                let catalog = footer
+                    .iter()
+                    .find(|w| {
+                        matches!(&w.kind, WKind::Button { act: Act::OpenCatalog(on), .. } if *on == shelf)
+                    })
+                    .expect("Catalog button");
+                // On the screen, on the footer's row, and clear of its two buttons.
+                assert!(catalog.x >= 0.0, "{page:?} at {size:?}");
+                for other in &footer {
+                    assert_eq!(other.y, size.1 - 27.0);
+                    if std::ptr::eq(*other, *catalog) {
+                        continue;
+                    }
+                    // Open Folder is left of it and Done right of it, with room between.
+                    let clear = if other.x < catalog.x {
+                        other.x + other.w < catalog.x
+                    } else {
+                        catalog.x + catalog.w < other.x
+                    };
+                    assert!(
+                        clear,
+                        "{page:?} at {size:?}: Catalog runs into the button at {}",
+                        other.x
+                    );
+                    if other.x < catalog.x {
+                        // Together they fill the 150 Open Folder had.
+                        assert_eq!(catalog.x + catalog.w - other.x, 150.0);
+                    }
+                }
+                let (x, y) = (catalog.x + catalog.w / 2.0, catalog.y + catalog.h / 2.0);
+                let events = ui.click(&mut s, &atlas, x, y, size, [854, 480], false, false);
+                assert_eq!(events, vec![Event::ButtonClick, Event::OpenCatalog(shelf)]);
+            }
+        }
+    }
+
+    #[test]
+    fn the_resource_packs_page_opens_the_catalog_on_its_shelf() {
+        let atlas = atlas();
+        let mut s = Settings::default();
+        let size = (800.0, 360.0);
+        let mut ui = OptionsUi {
+            catalog_buttons: true,
+            ..OptionsUi::default()
+        };
+        ui.show(Page::Packs);
+        // The right half of Open Folder's slot: the footer starts at (800 - 308) / 2.
+        let events = ui.click(&mut s, &atlas, 330.0, 344.0, size, [854, 480], false, false);
+        assert_eq!(
+            events,
+            vec![
+                Event::ButtonClick,
+                Event::OpenCatalog(CatalogShelf::ResourcePacks)
+            ]
+        );
+        assert_eq!(ui.page(), Page::Packs);
+    }
+
+    #[test]
+    fn without_the_offer_no_page_has_a_catalog_button() {
+        let atlas = atlas();
+        let mut s = Settings::default();
+        let size = (800.0, 360.0);
+        let mut ui = OptionsUi::default();
+        for page in [Page::Mods, Page::ShaderPacks] {
+            ui.show(page);
+            let (widgets, ..) = ui.layout(&s, size.0, size.1);
+            assert!(!widgets.iter().any(|w| matches!(
+                w.kind,
+                WKind::Button {
+                    act: Act::OpenCatalog(_),
+                    ..
+                }
+            )));
+        }
+        ui.show(Page::Packs);
+        // Left of the footer, where the button used to be.
+        let events = ui.click(&mut s, &atlas, 200.0, 344.0, size, [854, 480], false, false);
+        assert_eq!(events, Vec::new());
+    }
+
+    #[test]
+    fn only_a_phone_takes_the_offer_of_the_catalog() {
+        let mut ui = OptionsUi::default();
+        ui.offer_catalog();
+        assert_eq!(ui.catalog_buttons, cfg!(target_os = "android"));
+    }
+
+    #[test]
+    fn create_worlds_data_packs_have_no_catalog_button() {
+        let atlas = atlas();
+        let mut s = Settings::default();
+        let dir = std::env::temp_dir().join(format!("horizon-catalog-{}", std::process::id()));
+        let mut ui = OptionsUi {
+            catalog_buttons: true,
+            ..OptionsUi::default()
+        };
+        ui.open_data_packs(dir.clone(), Vec::new(), dir);
+        let events = ui.click(
+            &mut s,
+            &atlas,
+            192.0,
+            344.0,
+            (800.0, 360.0),
+            [854, 480],
+            false,
+            false,
+        );
+        assert_eq!(events, Vec::new());
+    }
+
+    /// The catalog installs with Options open: from the Mods page there was no reading the folder
+    /// again, as `pack_infos` is read when Options opens and the watcher runs on this page only.
+    #[test]
+    fn a_pack_installed_with_options_open_is_on_the_resource_packs_page() {
+        let atlas = atlas();
+        let mut ui = OptionsUi {
+            pack_infos: vec![pack_info("file/old")],
+            ..OptionsUi::default()
+        };
+        ui.show(Page::Mods);
+        ui.update_pack_infos(vec![pack_info("file/old"), pack_info("file/new")]);
+        ui.show(Page::Packs);
+        let listed = &ui.packs(&atlas, (800.0, 360.0)).model.unselected;
+        assert!(listed.iter().any(|p| p.id == "file/new"));
+    }
+
+    #[test]
+    fn a_pack_installed_over_the_page_keeps_what_was_chosen_on_it() {
+        let atlas = atlas();
+        let size = (800.0, 360.0);
+        let mut ui = OptionsUi {
+            pack_infos: vec![pack_info("file/a"), pack_info("file/b")],
+            ..OptionsUi::default()
+        };
+        ui.show(Page::Packs);
+        let screen = ui.packs(&atlas, size);
+        screen.model.activate(false, 0, true);
+        screen.changed = true;
+        let chosen = screen.commit();
+        assert_eq!(chosen.len(), 1);
+        ui.update_pack_infos(vec![
+            pack_info("file/a"),
+            pack_info("file/b"),
+            pack_info("file/new"),
+        ]);
+        let screen = ui.packs(&atlas, size);
+        assert_eq!(screen.commit(), chosen);
+        assert!(screen.changed, "Done still applies it");
+        assert!(screen.model.unselected.iter().any(|p| p.id == "file/new"));
+    }
+
+    #[test]
+    fn a_resource_pack_installed_leaves_create_worlds_data_packs_alone() {
+        let dir = std::env::temp_dir().join(format!("horizon-catalog-{}", std::process::id()));
+        let mut ui = OptionsUi::default();
+        ui.open_data_packs(dir.clone(), Vec::new(), dir);
+        let listed = ui.pack_infos.len();
+        ui.update_pack_infos(vec![pack_info("file/new")]);
+        assert_eq!(ui.pack_infos.len(), listed);
+        assert!(!ui.pack_infos.iter().any(|p| p.id == "file/new"));
     }
 }

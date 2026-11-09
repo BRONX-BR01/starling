@@ -19,6 +19,17 @@ pub(super) const CONTROL_HELP: &[&str] = &[
     "graphics-set KEY VALUE         set a Horizon graphics setting (resolutionScale 25..200, presentMode, workers...), apply and save it",
 ];
 
+/// The catalog's shelf for a page's Catalog button.
+#[cfg(target_os = "android")]
+fn catalog_shelf(shelf: horizon_client::options_ui::CatalogShelf) -> starling_catalog::Shelf {
+    use horizon_client::options_ui::CatalogShelf;
+    match shelf {
+        CatalogShelf::Mods => starling_catalog::Shelf::Mods,
+        CatalogShelf::ResourcePacks => starling_catalog::Shelf::ResourcePacks,
+        CatalogShelf::ShaderPacks => starling_catalog::Shelf::ShaderPacks,
+    }
+}
+
 impl Game<'_> {
     /// One of the game's folders (packs, shader packs, mods) in the file manager. On a phone that
     /// keeps the game in the app's private files, which no file manager opens, the offer of the
@@ -192,6 +203,7 @@ impl Game<'_> {
         let ui = &mut self.ui.options;
         // The game puts the skin on (game/own_skin.rs).
         ui.skin_page = true;
+        ui.offer_catalog();
         ui.open_at(!from_title && self.title.is_none(), page);
         ui.minecart_improvements = minecart_improvements;
         let root = self.options.resources.clone();
@@ -443,9 +455,9 @@ impl Game<'_> {
                     self.open_game_folder(&Self::game_dir().join(horizon_client::mod_list::DIR))
                 }
                 #[cfg(target_os = "android")]
-                Event::OpenCatalog => self.open_catalog(),
+                Event::OpenCatalog(shelf) => self.open_catalog_on(catalog_shelf(shelf)),
                 #[cfg(not(target_os = "android"))]
-                Event::OpenCatalog => {}
+                Event::OpenCatalog(_) => {}
                 Event::DataPacks(ids) => {
                     let resources = self.vanilla_root();
                     if let Some(title) = &mut self.title {

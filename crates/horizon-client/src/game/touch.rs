@@ -778,13 +778,21 @@ impl Game<'_> {
         true
     }
 
+    /// The catalog is only on Android (`mod_catalog`): elsewhere Back has none to close.
+    #[cfg(not(target_os = "android"))]
+    fn catalog_back(&mut self) -> bool {
+        false
+    }
+
     /// Android's back key: Escape (pause, close a screen), or Done in the layout editor.
     pub(super) fn touch_back_key(&mut self, event: &KeyEvent) -> bool {
         if event.logical_key != Key::Named(NamedKey::BrowserBack) {
             return false;
         }
         if event.state == ElementState::Pressed && !event.repeat {
-            if self.touch.editor.take().is_some() {
+            if self.catalog_back() {
+                // The catalog closes, and the page it was opened from stays.
+            } else if self.touch.editor.take().is_some() {
                 self.save_touch_layout();
             } else {
                 let _ = self.touch_key_tap(KeyCode::Escape);

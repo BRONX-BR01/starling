@@ -27,14 +27,43 @@ pub enum Compat {
 /// they go in the game's folder in its shared storage (`datapacks` for data packs).
 fn drop_info(data: bool) -> Text {
     if cfg!(target_os = "android") {
-        Text::literal(if data {
-            "Put data packs in Starling/datapacks, mods in Starling/horizon-mods"
-        } else {
-            "Put packs in Starling/resourcepacks"
-        })
+        Text::literal(phone_drop_info(data, phone_game_folder().as_deref()))
     } else {
         tr("pack.dropInfo")
     }
+}
+/// The game's folder on a phone, unless it is in the app's own files.
+fn phone_game_folder() -> Option<std::path::PathBuf> {
+    let shared = crate::logging::game_home() != crate::logging::private_home();
+    shared.then(|| std::env::current_dir().unwrap_or_default())
+}
+/// `drop_info` on a phone, for the game's folder. It differs between the builds (Starling,
+/// StarlingPreview, StarlingDev): shown from the storage's root, as a file manager does.
+fn phone_drop_info(data: bool, folder: Option<&std::path::Path>) -> String {
+    let Some(folder) = folder else {
+        return "In the app's own files: Open Pack Folder to reach them".into();
+    };
+    let shown = folder.strip_prefix("/storage/emulated/0").unwrap_or(folder);
+    let shown = shown.display();
+    if data {
+        format!("Put data packs in {shown}/datapacks, mods in {shown}/horizon-mods")
+    } else {
+        format!("Put packs in {shown}/resourcepacks")
+    }
+}
+/// The footer's first button is 150 wide. With a Catalog button the two share that width, a gap
+/// between: each is this wide.
+const HALF_BUTTON: f32 = 73.0;
+/// Open Folder's label when it shares the slot with Catalog: the longer ones ("Open Pack Folder")
+/// don't fit half a button, and a label that doesn't fit scrolls.
+pub(crate) const SHORT_OPEN_FOLDER: &str = "Open Folder";
+/// The footer's first slot, at `x`: Open Folder's width and, when the page has a Catalog button,
+/// its x and width. Open Folder keeps the left half and Catalog takes the right.
+pub(crate) fn open_folder_slot(x: f32, catalog: bool) -> (f32, Option<(f32, f32)>) {
+    if !catalog {
+        return (150.0, None);
+    }
+    (HALF_BUTTON, Some((x + 150.0 - HALF_BUTTON, HALF_BUTTON)))
 }
 impl Compat {
     fn key(self) -> &'static str {
@@ -326,6 +355,8 @@ pub enum Action {
     OpenFolder,
     /// The Done button (`onClose`: commit).
     Done,
+    /// The Catalog button (Android).
+    Catalog,
 }
 
 /// The pack screen and its state.
@@ -349,6 +380,8 @@ pub struct PackScreen {
     icons: HashMap<String, Arc<[u8]>>,
     /// Data packs and world mods (Create New World's) rather than resource packs.
     pub data: bool,
+    /// A Catalog button beside the footer's two (`OptionsUi::offer_catalog`).
+    pub catalog: bool,
 }
 
 fn tr(key: &str) -> Text {
@@ -391,6 +424,7 @@ impl PackScreen {
             confirm: None,
             changed: false,
             data: false,
+            catalog: false,
         };
         s.reposition(m);
         s.populate(None);
@@ -430,6 +464,25 @@ impl PackScreen {
         let x = (0.5 * (frame - 308) as f32) as i32;
         let y = self.height - 33 + (0.5f32 * 13.0).round() as i32;
         [(x, y), (x + 158, y)]
+    }
+    /// A footer button's width: Open Folder shares its slot with Catalog when there is one.
+    fn footer_w(&self, i: usize) -> i32 {
+        match i {
+            0 => open_folder_slot(0.0, self.catalog).0 as i32,
+            _ => 150,
+        }
+    }
+    /// The Catalog button, if it has one: x, y and width.
+    fn catalog_button(&self) -> Option<(i32, i32, i32)> {
+        let (footer_x, y) = self.footer()[0];
+        let (x, width) = open_folder_slot(footer_x as f32, self.catalog).1?;
+        Some((x as i32, y, width as i32))
+    }
+    /// Whether `(x, y)` is on the Catalog button.
+    fn on_catalog(&self, x: f64, y: f64) -> bool {
+        self.catalog_button().is_some_and(|(bx, by, width)| {
+            x >= bx as f64 && y >= by as f64 && x < (bx + width) as f64 && y < (by + 20) as f64
+        })
     }
     /// `repositionElements`.
     fn reposition(&mut self, m: &Measure) {
@@ -549,9 +602,15 @@ impl PackScreen {
         } else {
             self.footer()
         };
-        buttons.into_iter().any(|(bx, by)| {
-            x >= bx as f64 && y >= by as f64 && x < (bx + 150) as f64 && y < (by + 20) as f64
-        })
+        (self.confirm.is_none() && self.on_catalog(x, y))
+            || buttons.into_iter().enumerate().any(|(i, (bx, by))| {
+                let w = if self.confirm.is_none() {
+                    self.footer_w(i)
+                } else {
+                    150
+                };
+                x >= bx as f64 && y >= by as f64 && x < (bx + w) as f64 && y < (by + 20) as f64
+            })
     }
     /// A left click (`Screen.mouseClicked`).
     pub fn click(&mut self, m: &Measure, x: f64, y: f64) -> Action {
@@ -612,7 +671,8 @@ impl PackScreen {
             return Action::None;
         }
         for (i, (bx, by)) in self.footer().into_iter().enumerate() {
-            if x >= bx as f64 && y >= by as f64 && x < (bx + 150) as f64 && y < (by + 20) as f64 {
+            let w = self.footer_w(i);
+            if x >= bx as f64 && y >= by as f64 && x < (bx + w) as f64 && y < (by + 20) as f64 {
                 self.set_focus(Focus::Button(i));
                 return if i == 0 {
                     Action::OpenFolder
@@ -620,6 +680,9 @@ impl PackScreen {
                     Action::Done
                 };
             }
+        }
+        if self.on_catalog(x, y) {
+            return Action::Catalog;
         }
         Action::None
     }
@@ -897,13 +960,28 @@ impl PackScreen {
         for side in 0..2 {
             self.draw_list(&mut out, m, side, mouse);
         }
-        self.draw_footer(
-            &mut out,
-            m,
-            mouse,
-            now_ms,
-            [&tr("pack.openFolder"), &tr("gui.done")],
-        );
+        let open_folder = if self.catalog {
+            tr(SHORT_OPEN_FOLDER)
+        } else {
+            tr("pack.openFolder")
+        };
+        self.draw_footer(&mut out, m, mouse, now_ms, [&open_folder, &tr("gui.done")]);
+        if let Some((x, y, width)) = self.catalog_button() {
+            let hover = d::inside(mouse, x, y, width, 20);
+            crate::widgets::widget_cursor(hover, true);
+            d::button(
+                &mut out,
+                m,
+                &tr("Catalog"),
+                x,
+                y,
+                width,
+                20,
+                true,
+                hover,
+                now_ms,
+            );
+        }
         out
     }
     /// The footer's two buttons, "Open Pack Folder" and "Done", over their
@@ -917,7 +995,8 @@ impl PackScreen {
         labels: [&Text; 2],
     ) {
         for (i, ((bx, by), label)) in self.footer().into_iter().zip(labels).enumerate() {
-            let hover = d::inside(mouse, bx, by, 150, 20);
+            let w = self.footer_w(i);
+            let hover = d::inside(mouse, bx, by, w, 20);
             // The cursor follows the mouse; the highlight also keyboard focus.
             crate::widgets::widget_cursor(hover, true);
             d::button(
@@ -926,7 +1005,7 @@ impl PackScreen {
                 label,
                 bx,
                 by,
-                150,
+                w,
                 20,
                 true,
                 hover || self.focus == Focus::Button(i),
@@ -1288,6 +1367,146 @@ mod click_sound_tests {
             Action::None
         );
         assert!(!screen.confirming());
+    }
+}
+
+#[cfg(test)]
+mod catalog_button_tests {
+    use super::*;
+    use std::path::Path;
+
+    fn atlas() -> HudAtlas {
+        HudAtlas::build(Path::new("/nonexistent/horizon-test-assets")).unwrap()
+    }
+
+    #[test]
+    fn it_takes_the_right_half_of_open_folders_slot_at_a_phones_gui_sizes() {
+        let atlas = atlas();
+        let m = Measure(&atlas.font);
+        for (w, h) in [(427, 240), (533, 240), (600, 270), (800, 360), (1200, 540)] {
+            let packs = Vec::new();
+            let mut screen = PackScreen::new(&m, tr("resourcePack.title"), w, h, false, packs, &[]);
+            screen.catalog = true;
+            let (x, y, width) = screen.catalog_button().expect("room for it");
+            let [(footer_x, footer_y), (done_x, _)] = screen.footer();
+            assert_eq!(y, footer_y, "on the footer's row at {w}x{h}");
+            assert!(
+                x >= footer_x + screen.footer_w(0),
+                "clear of Open Pack Folder at {w}x{h}"
+            );
+            assert!(x + width <= footer_x + 150, "inside the slot at {w}x{h}");
+            assert!(x + width < done_x, "clear of Done at {w}x{h}");
+            assert!(y >= screen.lists[0].bottom(), "below the lists at {w}x{h}");
+            assert!(screen.button_at(&m, x as f64 + 1.0, y as f64 + 1.0));
+            assert_eq!(
+                screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
+                Action::Catalog
+            );
+        }
+    }
+
+    #[test]
+    fn the_labels_fit_half_a_button() {
+        let atlas = atlas();
+        let m = Measure(&atlas.font);
+        for label in [SHORT_OPEN_FOLDER, "Catalog"] {
+            assert!(m.width(&tr(label)) <= HALF_BUTTON as i32 - 4, "{label}");
+        }
+    }
+
+    #[test]
+    fn the_slot_splits_in_two_halves_with_a_gap_and_keeps_its_width() {
+        assert_eq!(open_folder_slot(100.0, false), (150.0, None));
+        let (open, catalog) = open_folder_slot(100.0, true);
+        let (x, width) = catalog.unwrap();
+        assert_eq!((open, width), (73.0, 73.0));
+        assert_eq!(x, 177.0);
+        // The same 150 from the left of Open Folder to the right of Catalog.
+        assert_eq!(x + width, 100.0 + 150.0);
+        assert!(x - (100.0 + open) > 0.0);
+    }
+
+    #[test]
+    fn a_screen_without_it_draws_nothing_there_and_a_click_there_is_nothing() {
+        let atlas = atlas();
+        let m = Measure(&atlas.font);
+        let packs = Vec::new();
+        let mut screen = PackScreen::new(&m, tr("resourcePack.title"), 800, 360, false, packs, &[]);
+        let (x, y) = (screen.footer()[0].0 + 77, screen.footer()[0].1);
+        let drawn_at = |screen: &PackScreen| {
+            screen
+                .draw(&m, (0, 0), 0, 0)
+                .iter()
+                .any(|d| matches!(d, Draw::Sprite { x: dx, y: dy, .. } if (*dx, *dy) == (x, y)))
+        };
+        assert!(!drawn_at(&screen));
+        // Open Folder keeps its whole button.
+        assert_eq!(
+            screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
+            Action::OpenFolder
+        );
+        screen.catalog = true;
+        assert!(drawn_at(&screen));
+        assert_eq!(
+            screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
+            Action::Catalog
+        );
+        // Open Folder's half still opens the folder.
+        let (fx, fy) = screen.footer()[0];
+        assert_eq!(
+            screen.click(&m, fx as f64 + 1.0, fy as f64 + 1.0),
+            Action::OpenFolder
+        );
+    }
+
+    #[test]
+    fn a_confirmation_over_the_screen_hides_it() {
+        let atlas = atlas();
+        let m = Measure(&atlas.font);
+        let packs = Vec::new();
+        let mut screen = PackScreen::new(&m, tr("resourcePack.title"), 800, 360, false, packs, &[]);
+        screen.catalog = true;
+        screen.confirm = Some(Confirm {
+            id: "incompatible".into(),
+            title: Text::literal("Confirm"),
+            message: Text::literal("Use this pack?"),
+        });
+        let (x, y, _) = screen.catalog_button().unwrap();
+        assert!(!screen.button_at(&m, x as f64 + 1.0, y as f64 + 1.0));
+        assert_eq!(
+            screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
+            Action::None
+        );
+    }
+
+    #[test]
+    fn a_phones_line_names_the_folder_of_the_build_it_is() {
+        let info = |data, folder: &str| phone_drop_info(data, Some(Path::new(folder)));
+        assert_eq!(
+            info(false, "/storage/emulated/0/Starling"),
+            "Put packs in Starling/resourcepacks"
+        );
+        assert_eq!(
+            info(false, "/storage/emulated/0/StarlingPreview"),
+            "Put packs in StarlingPreview/resourcepacks"
+        );
+        assert_eq!(
+            info(true, "/storage/emulated/0/StarlingPreview"),
+            "Put data packs in StarlingPreview/datapacks, mods in StarlingPreview/horizon-mods"
+        );
+        // Another user's storage: the whole path, the root isn't what a file manager opens on.
+        assert_eq!(
+            info(false, "/storage/emulated/10/Starling"),
+            "Put packs in /storage/emulated/10/Starling/resourcepacks"
+        );
+    }
+
+    #[test]
+    fn a_game_in_the_apps_own_files_points_at_the_folder_button() {
+        assert_eq!(
+            phone_drop_info(false, None),
+            "In the app's own files: Open Pack Folder to reach them"
+        );
     }
 }
 

@@ -3,7 +3,7 @@ use serde_json::json;
 use starling_catalog::browser::{Kind, Project, SourceId};
 use starling_catalog::{caution, installed_projects, is_native_mod, is_shader_pack, shader_hits};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn folder(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("starling-catalog-{name}-{}", std::process::id()));
@@ -121,4 +121,67 @@ fn nothing_installed_is_an_empty_list() {
     let dir = folder("empty");
     assert!(installed_projects(&dir).is_empty());
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+fn listed(home: &Path, file: &str) {
+    use starling_catalog::browser::installed::{Entry, Installed};
+    let mut list = Installed::load(home);
+    list.entries.push(Entry {
+        source: SourceId::Modrinth,
+        project: file.into(),
+        slug: file.into(),
+        title: file.into(),
+        kind: Kind::ResourcePack,
+        version: "v".into(),
+        number: "1".into(),
+        file: format!("resourcepacks/{file}.zip"),
+        checksum: "SHA-512:00".into(),
+        page: String::new(),
+        dependency: false,
+        verdict: None,
+        skipped: Vec::new(),
+        namespaces: Vec::new(),
+    });
+    list.save(home).unwrap();
+}
+
+#[test]
+fn installed_means_the_file_is_there_not_that_it_was_once() {
+    let home = folder("installed-honest");
+    std::fs::create_dir_all(home.join("resourcepacks")).unwrap();
+    listed(&home, "kept");
+    listed(&home, "gone");
+    std::fs::write(home.join("resourcepacks/kept.zip"), b"x").unwrap();
+    let now = installed_projects(&home);
+    assert!(now.contains("kept") && !now.contains("gone"));
+    // Deleted by hand later: not installed any more.
+    std::fs::remove_file(home.join("resourcepacks/kept.zip")).unwrap();
+    assert!(installed_projects(&home).is_empty());
+}
+
+#[test]
+fn forgetting_the_missing_leaves_the_ones_that_are_there() {
+    let home = folder("forget");
+    std::fs::create_dir_all(home.join("resourcepacks")).unwrap();
+    listed(&home, "kept");
+    listed(&home, "gone");
+    std::fs::write(home.join("resourcepacks/kept.zip"), b"x").unwrap();
+    starling_catalog::forget_missing(&home);
+    let list = starling_catalog::browser::installed::Installed::load(&home);
+    assert_eq!(list.entries.len(), 1);
+    assert_eq!(list.entries[0].project, "kept");
+}
+
+#[test]
+fn removing_deletes_the_file_and_the_row_goes_back_to_installable() {
+    let home = folder("remove");
+    std::fs::create_dir_all(home.join("resourcepacks")).unwrap();
+    listed(&home, "pack");
+    std::fs::write(home.join("resourcepacks/pack.zip"), b"x").unwrap();
+    let mut project = project(Kind::ResourcePack, SourceId::Modrinth, &[], &[]);
+    project.id = "pack".into();
+    let entry = starling_catalog::remove(&home, &project).unwrap();
+    assert_eq!(entry.file, "resourcepacks/pack.zip");
+    assert!(!home.join("resourcepacks/pack.zip").exists());
+    assert!(installed_projects(&home).is_empty());
 }
