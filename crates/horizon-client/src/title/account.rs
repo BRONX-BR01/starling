@@ -221,12 +221,12 @@ impl Screen {
                     b(0.0, h - 52.0, 148.0, tr("open"), true, 62),
                     b(152.0, h - 52.0, 148.0, tr("copy"), true, 63),
                     b(0.0, h - 28.0, 148.0, tr("cancel"), true, 61),
-                    b(152.0, h - 28.0, 148.0, tr("done"), true, 69),
+                    b(152.0, h - 28.0, 148.0, tr("done"), false, 69),
                 ],
                 State::Failed(_) => vec![b(50.0, h - 28.0, 200.0, tr("back"), true, 70)],
                 _ => vec![
                     b(0.0, h - 28.0, 148.0, tr("cancel"), true, 61),
-                    b(152.0, h - 28.0, 148.0, tr("done"), true, 69),
+                    b(152.0, h - 28.0, 148.0, tr("done"), false, 69),
                 ],
             };
         }
@@ -419,6 +419,14 @@ impl Screen {
         false
     }
     pub(super) fn back(&mut self) -> bool {
+        if matches!(
+            accounts::state(),
+            State::Starting | State::Resuming | State::Code { .. }
+        ) {
+            accounts::cancel();
+            self.clear();
+            return true;
+        }
         if self.page != Page::List {
             self.clear();
             true

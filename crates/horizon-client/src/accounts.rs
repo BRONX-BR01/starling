@@ -163,6 +163,7 @@ pub enum Files {
 
 #[derive(Default)]
 struct Shared {
+    profiles: Option<starling_account::Accounts>,
     generation: u64,
     state: State,
     files: Files,
@@ -200,7 +201,10 @@ pub fn files() -> Files {
 
 /// Saved profiles, including offline names; metadata only, never credentials.
 pub fn profiles() -> starling_account::Accounts {
-    starling_account::Accounts::load(&dir())
+    shared()
+        .profiles
+        .get_or_insert_with(|| starling_account::Accounts::load(&dir()))
+        .clone()
 }
 
 pub fn player_name() -> Option<String> {
@@ -232,7 +236,7 @@ fn renew(generation: u64) -> Result<State, String> {
         Ok(State::SignedIn(account))
     } else {
         crate::auth::clear_current();
-        Ok(match profiles().player() {
+        Ok(match starling_account::Accounts::load(&dir()).player() {
             Some(starling_account::Player::Offline(name)) => State::OfflineProfile(name),
             _ => State::Offline,
         })
@@ -241,6 +245,7 @@ fn renew(generation: u64) -> Result<State, String> {
 fn finish(generation: u64, result: Result<State, String>) {
     let mut s = shared();
     if s.generation == generation {
+        s.profiles = Some(starling_account::Accounts::load(&dir()));
         s.state = result.unwrap_or_else(State::Failed);
         s.cancel = None;
     }
@@ -265,10 +270,13 @@ fn keep_renewing() {
                 let s = shared();
                 (s.generation, matches!(s.state, State::SignedIn(_)))
             };
-            if signed_in && renew(generation).is_err() {
-                log::warn!(
-                    "Starling: background account renewal failed; open Accounts to sign in again."
-                );
+            if signed_in {
+                match renew(generation) {
+                    Ok(state) => finish(generation, Ok(state)),
+                    Err(_) => log::warn!(
+                        "Starling: background account renewal failed; open Accounts to sign in again."
+                    ),
+                }
             }
         }
     });

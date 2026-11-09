@@ -552,7 +552,7 @@ impl Options {
     fn player_name(&self) -> String {
         self.player_name
             .clone()
-            .or_else(|| crate::accounts::player_name())
+            .or_else(crate::accounts::player_name)
             .unwrap_or_else(|| {
                 std::env::current_dir().map_or_else(
                     |_| horizon_client::offline_name::generate(0),
