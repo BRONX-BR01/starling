@@ -161,10 +161,7 @@ fn translucent_batchable(info: &wgpu::AdapterInfo, multi_draw: bool) -> bool {
 /// Adreno 710). A Mali-G57 gained no GPU time from it, and PowerVR hasn't been measured. Elsewhere
 /// the second pass would double the solid draw calls and vertex work for nothing.
 fn splits_solid(info: &wgpu::AdapterInfo) -> bool {
-    info.backend == wgpu::Backend::Metal
-        || (cfg!(target_os = "android")
-            && info.backend == wgpu::Backend::Vulkan
-            && info.name.contains("Adreno"))
+    info.backend == wgpu::Backend::Metal || adreno::adreno_vulkan(info)
 }
 
 /// The vertices flat draws bind for a call's page key: a page of the section arena, or of
@@ -188,6 +185,7 @@ fn translucent_split(batching: bool, flat_draws: bool, terrain: bool, shadow: bo
     batching && !(flat_draws && (terrain || shadow))
 }
 
+mod adreno;
 mod animate;
 mod arena;
 pub mod compositor;

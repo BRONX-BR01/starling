@@ -69,6 +69,7 @@ pub struct Reuse {
     bind_group_layouts: Kept<wgpu::BindGroupLayout>,
     pipeline_layouts: Kept<wgpu::PipelineLayout>,
     render: Kept<wgpu::RenderPipeline>,
+    tried: Kept<Option<wgpu::RenderPipeline>>,
 }
 
 impl Reuse {
@@ -86,6 +87,7 @@ impl Reuse {
         self.bind_group_layouts.keep_only(generation);
         self.pipeline_layouts.keep_only(generation);
         self.render.keep_only(generation);
+        self.tried.keep_only(generation);
     }
     /// How many objects are kept.
     pub fn len(&self) -> usize {
@@ -93,6 +95,7 @@ impl Reuse {
             + self.bind_group_layouts.len()
             + self.pipeline_layouts.len()
             + self.render.len()
+            + self.tried.len()
     }
     fn current(&self) -> u32 {
         self.generation.load(std::sync::atomic::Ordering::Relaxed)
@@ -151,11 +154,84 @@ impl On<'_> {
             self.device.create_render_pipeline(descriptor)
         })
     }
+    /// `create_render_pipeline` for a path only some GPUs take: None where the device refuses it,
+    /// so the frame can keep the usual pipeline. A refusal is kept too: only the first attempt
+    /// reports one, and a pipeline kept after it would be invalid.
+    pub fn try_create_render_pipeline(
+        &self,
+        descriptor: &wgpu::RenderPipelineDescriptor<'_>,
+    ) -> Option<wgpu::RenderPipeline> {
+        let key = format!("{descriptor:?}");
+        self.reuse.tried.get(key, self.generation, || {
+            let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let internal = self.device.push_error_scope(wgpu::ErrorFilter::Internal);
+            let pipeline = self.device.create_render_pipeline(descriptor);
+            let internal = pollster::block_on(internal.pop());
+            match internal.or(pollster::block_on(validation.pop())) {
+                Some(error) => {
+                    log::warn!("{:?} unavailable: {error}", descriptor.label);
+                    None
+                }
+                None => Some(pipeline),
+            }
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Kept;
+    use super::{Kept, Reuse};
+
+    /// A pipeline the device refuses comes back as None, without an uncaptured error and without
+    /// trying again; a good one is kept.
+    #[test]
+    fn a_refused_pipeline_is_none_and_stays_none() {
+        let instance = crate::gfx::test_gpu::instance();
+        let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
+            eprintln!("no GPU adapter: skipped");
+            return;
+        };
+        let Ok((device, _)) = pollster::block_on(adapter.request_device(&Default::default()))
+        else {
+            eprintln!("no GPU device: skipped");
+            return;
+        };
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(
+                "@vertex fn vs() -> @builtin(position) vec4<f32> { return vec4(0.0); }".into(),
+            ),
+        });
+        let reuse = Reuse::default();
+        reuse.begin();
+        let kept = reuse.on(&device);
+        let descriptor = |entry| wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: None,
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        };
+        assert!(kept.try_create_render_pipeline(&descriptor("vs")).is_some());
+        assert!(kept.try_create_render_pipeline(&descriptor("no")).is_none());
+        assert!(kept.try_create_render_pipeline(&descriptor("no")).is_none());
+        assert_eq!(reuse.len(), 2);
+    }
 
     /// A key asked for again gets the kept object without making one; what
     /// the latest generation did not ask for is let go when it finishes.
