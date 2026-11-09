@@ -143,6 +143,26 @@ pub(super) const UNIFORM_STATE: [&str; 5] = [
     "gl_NormalMatrix",
     "gl_TextureMatrix",
 ];
+/// The core profile's names for the matrices of [`UNIFORM_STATE`], with the type a program
+/// declares them with, and what each reads: the same as the compatibility name in every kind of
+/// program (the frame's, the shadow camera's, a full-screen pass's). `chunkOffset` is not here:
+/// our vertices are already relative to the camera, so its zero is right.
+pub(super) const CORE_MATRICES: [(&str, &str, &str); 6] = [
+    ("modelViewMatrix", "mat4", "hz_ModelViewMatrix"),
+    (
+        "modelViewMatrixInverse",
+        "mat4",
+        "hz_ModelViewMatrixInverse",
+    ),
+    ("projectionMatrix", "mat4", "hz_ProjectionMatrix"),
+    (
+        "projectionMatrixInverse",
+        "mat4",
+        "hz_ProjectionMatrixInverse",
+    ),
+    ("normalMatrix", "mat3", "hz_NormalMatrix"),
+    ("textureMatrix", "mat4", "hz_TextureMatrix[0]"),
+];
 /// The compatibility profile's vertex inputs.
 pub(super) const VERTEX_INPUTS: [&str; 6] = [
     "gl_Vertex",

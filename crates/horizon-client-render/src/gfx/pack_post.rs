@@ -1484,7 +1484,8 @@ fn build_pass(
         targets.pop();
     }
     // A program that only writes images draws into a sink that keeps nothing; one drawing
-    // geometry has the depth buffer, and draws with no colour target at all.
+    // geometry has the depth buffer, and draws with no colour target at all (a shadow pass that
+    // only wants the shadow map: Pixel Perfect's `/* DRAWBUFFERS: */`).
     let sink = !final_pass && writes.is_empty() && !program.interface.images.is_empty();
     if sink && geometry.is_none() {
         targets = vec![Some(wgpu::ColorTargetState {
@@ -1492,7 +1493,7 @@ fn build_pass(
             blend: None,
             write_mask: wgpu::ColorWrites::empty(),
         })];
-    } else if !final_pass && writes.is_empty() && !sink {
+    } else if !final_pass && writes.is_empty() && !sink && geometry.is_none() {
         notes.push(format!("{}: writes no buffer; skipped", p.name));
         return None;
     }
@@ -3544,9 +3545,25 @@ impl PackPost {
         self.water.is_some()
     }
 
-    /// The names of the programs that run, in order.
+    /// The names of the programs that run: the full-screen ones in order, then those that draw
+    /// the world. A pack may have only these (Round World).
     pub fn programs(&self) -> Vec<&str> {
-        self.passes.iter().map(|p| p.name.as_str()).collect()
+        let sky = self
+            .sky
+            .iter()
+            .flat_map(|s| s.basic.iter().chain(&s.textured));
+        let entities = self.entities.iter().flat_map(|e| e.passes.iter().flatten());
+        self.passes
+            .iter()
+            .chain(&self.terrain)
+            .chain(&self.water)
+            .chain(sky)
+            .chain(entities)
+            .chain(&self.clouds)
+            .chain(self.weather.iter().flatten())
+            .chain(self.hand.iter().map(|h| &h.0))
+            .map(|p| p.name.as_str())
+            .collect()
     }
 
     /// The programs that run and the notes of loading them.
