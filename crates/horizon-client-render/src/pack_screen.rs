@@ -54,6 +54,9 @@ fn phone_drop_info(data: bool, folder: Option<&std::path::Path>) -> String {
 /// The footer's first button is 150 wide. With a Catalog button the two share that width, a gap
 /// between: each is this wide.
 const HALF_BUTTON: f32 = 73.0;
+/// Open Folder's label when it shares the slot with Catalog: the longer ones ("Open Pack Folder")
+/// don't fit half a button, and a label that doesn't fit scrolls.
+pub(crate) const SHORT_OPEN_FOLDER: &str = "Open Folder";
 /// The footer's first slot, at `x`: Open Folder's width and, when the page has a Catalog button,
 /// its x and width. Open Folder keeps the left half and Catalog takes the right.
 pub(crate) fn open_folder_slot(x: f32, catalog: bool) -> (f32, Option<(f32, f32)>) {
@@ -957,13 +960,12 @@ impl PackScreen {
         for side in 0..2 {
             self.draw_list(&mut out, m, side, mouse);
         }
-        self.draw_footer(
-            &mut out,
-            m,
-            mouse,
-            now_ms,
-            [&tr("pack.openFolder"), &tr("gui.done")],
-        );
+        let open_folder = if self.catalog {
+            tr(SHORT_OPEN_FOLDER)
+        } else {
+            tr("pack.openFolder")
+        };
+        self.draw_footer(&mut out, m, mouse, now_ms, [&open_folder, &tr("gui.done")]);
         if let Some((x, y, width)) = self.catalog_button() {
             let hover = d::inside(mouse, x, y, width, 20);
             crate::widgets::widget_cursor(hover, true);
@@ -1400,6 +1402,15 @@ mod catalog_button_tests {
                 screen.click(&m, x as f64 + 1.0, y as f64 + 1.0),
                 Action::Catalog
             );
+        }
+    }
+
+    #[test]
+    fn the_labels_fit_half_a_button() {
+        let atlas = atlas();
+        let m = Measure(&atlas.font);
+        for label in [SHORT_OPEN_FOLDER, "Catalog"] {
+            assert!(m.width(&tr(label)) <= HALF_BUTTON as i32 - 4, "{label}");
         }
     }
 

@@ -4489,6 +4489,11 @@ impl OptionsUi {
                             Act::OpenCatalog(shelf),
                         ));
                     }
+                    let label = if catalog.is_some() {
+                        crate::pack_screen::SHORT_OPEN_FOLDER
+                    } else {
+                        label
+                    };
                     out.push(button(cx - 154.0, h - 27.0, open_w, tr(label), act));
                     out.push(button(cx + 4.0, h - 27.0, 150.0, tr("gui.done"), Act::Done));
                 } else {
