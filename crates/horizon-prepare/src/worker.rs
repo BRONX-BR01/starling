@@ -15,8 +15,8 @@ impl Worker {
         let log = run.log_file(&run.local.join(format!("{name}-worker.log")))?;
         let mut child = java::command(&run.jdk.java)
             .args(java::BATCH_OPTIONS)
+            .arg(java::heap_arg("2G"))
             .args([
-                "-Xmx2G",
                 "-cp",
                 &format!(
                     "{}{}{}",

@@ -14,6 +14,7 @@
 # NATIVE_CACHE (default ~/.cache/starling-native) keeps horizon-mixins and the build folder with
 # its target between builds: a file a build leaves as it was keeps its time, so Cargo recompiles
 # only the crates the mods change. PROFILE defaults to fast, a release's.
+# ABI selects the Android architecture (default arm64-v8a); VARIANT can be --preview or --dev.
 set -euo pipefail
 
 MIXINS_GIT=https://github.com/horizon-rust/horizon-mixins
@@ -28,6 +29,16 @@ out=$(cd "$2" && pwd)
 shift 2
 cache=${NATIVE_CACHE:-$HOME/.cache/starling-native}
 profile=${PROFILE:-fast}
+abi=${ABI:-arm64-v8a}
+case "$abi" in
+  arm64-v8a|armeabi-v7a|x86|x86_64) ;;
+  *) fail "unsupported Android ABI: $abi" ;;
+esac
+variant=${VARIANT:-}
+case "$variant" in
+  ''|--preview|--dev) ;;
+  *) fail "unsupported APK variant: $variant" ;;
+esac
 mkdir -p "$cache"
 
 tools=$cache/mixins-${MIXINS_REV:0:12}
@@ -79,7 +90,7 @@ python3 "$source/packaging/android/native_mod_adapt.py" "$work/source" "$work/mo
 # What went in names the build: the commit, the profile, horizon-mixins, every bundle file.
 key=$(
   {
-    echo "$commit $profile $MIXINS_REV"
+    echo "$commit $profile $abi $variant $MIXINS_REV"
     (cd "$work/mods" && find . -type f -print0 | sort -z | xargs -0 sha256sum)
   } | sha256sum | cut -c1-16
 )
@@ -92,7 +103,7 @@ cargo fetch --locked --manifest-path "$work/source/Cargo.toml" > /dev/null
 # Into the build folder: a file whose bytes changed gets the time of now (no -t), one that did not
 # keeps its time, so Cargo recompiles what changed even when the commit is older than the last
 # build. horizon-android's manifest goes back to building android_lib.rs.
-build=$cache/build
+build=$cache/build-$abi
 mkdir -p "$build"
 rsync -r --checksum --delete --exclude /target/ --exclude "/$manifest" \
   --exclude /crates/horizon-android/plan-stub.rs "$work/stage/" "$build/"
@@ -101,15 +112,15 @@ cmp -s "$work/manifest" "$build/$manifest" || cp "$work/manifest" "$build/$manif
 
 rm -f "$build"/target/android/starling-*.apk
 # NATIVE_LIBRARY_ONLY: the library is all the game downloads, and the APK takes time to make.
-(cd "$build" && python3 packaging/android/build_apk.py --profile "$profile" \
+(cd "$build" && python3 packaging/android/build_apk.py --abi "$abi" --profile "$profile" $variant \
   ${NATIVE_LIBRARY_ONLY:+--library-only})
 
 library=$build/target/android/libhorizon_android.so
 cp "$library" "$out/libhorizon_android.so"
-[ -n "${NATIVE_LIBRARY_ONLY:-}" ] || cp "$build"/target/android/starling-*-arm64-v8a.apk "$out/"
-python3 - "$build" "$work/mods" "$out" "$key" "$commit" "$profile" "$MIXINS_REV" <<'EOF'
+[ -n "${NATIVE_LIBRARY_ONLY:-}" ] || cp "$build"/target/android/starling-*-"$abi".apk "$out/"
+python3 - "$build" "$work/mods" "$out" "$key" "$commit" "$profile" "$MIXINS_REV" "$abi" <<'EOF'
 import hashlib, json, pathlib, re, sys, tomllib
-build, mods, out, key, commit, profile, mixins = sys.argv[1:]
+build, mods, out, key, commit, profile, mixins, abi = sys.argv[1:]
 sys.path.insert(0, str(pathlib.Path(build) / "packaging/android"))
 from native_mod_permissions import needs
 version = re.search(r'^VERSION_NAME = "([^"]+)"',
@@ -131,6 +142,7 @@ json.dump({
     "version": version,
     "commit": commit,
     "profile": profile,
+    "abi": abi,
     "mixins": mixins,
     "mods": listed,
     "permissions": sorted({p for m in listed for p in m.get("permissions", [])}),

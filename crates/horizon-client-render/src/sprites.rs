@@ -797,7 +797,9 @@ mod tests {
     #[test]
     fn the_texture_budget_picks_the_largest_side_that_fits() {
         // 1300 layers: vanilla's count, about.
-        assert_eq!(side_within(512, 1300, DEFAULT_TEXTURE_BUDGET), 128);
+        assert_eq!(side_within(512, 1300, 256 << 20), 128);
+        assert_eq!(side_within(512, 1300, 64 << 20), 64);
+        assert_eq!(side_within(512, 1300, 128 << 20), 128);
         assert_eq!(side_within(512, 1300, 1536 << 20), 512);
         assert_eq!(side_within(64, 1300, 1536 << 20), 64);
         // Never under vanilla's size, whatever the budget.

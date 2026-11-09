@@ -241,5 +241,7 @@
   "starling.diagnostics.gpu_off": "Подробные тайминги GPU: выключены",
   "starling.diagnostics.overhead": "Запись CPU/GPU влияет на производительность.",
   "starling.diagnostics.hardware": "GPU: %s (%s)",
-  "starling.diagnostics.last_error": "Последняя ошибка: %s"
+  "starling.diagnostics.last_error": "Последняя ошибка: %s",
+  "starling.native_builds.arm64_only": "Сервис сборки нативных модов пока поддерживает только ARM64. Архитектура этого приложения не может использовать его сборки.",
+  "starling.native_builds.wrong_architecture": "Эта нативная сборка предназначена для другой архитектуры."
 }

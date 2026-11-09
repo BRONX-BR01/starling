@@ -4,6 +4,10 @@ Release folders include `exporters/server`, `exporters/client` and an integrity 
 These contain only Horizon's original Java exporter classes. Minecraft jars, libraries,
 assets and generated resources remain local and are verified against `research-lock.json`.
 The same platform-independent class bundle is used in game and dedicated-server releases.
+Starling's APK builder uses the same bundle for Android: a host JDK compiles it,
+and only its manifest-listed original classes enter `prepare-kit.zip`. This also
+supports the ARM32 Java runtime, which does not ship `jdk.compiler`. Android
+checks its source/pin key and every class hash before starting preparation.
 
 The release runner compiles the server and client source sets separately with
 `javac --release <pinned major> -proc:none -encoding UTF-8`, resolving shared helpers once

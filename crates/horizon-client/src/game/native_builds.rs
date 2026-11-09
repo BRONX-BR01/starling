@@ -48,6 +48,12 @@ const SHOWN: usize = 4;
 /// with one button. (Not in native_hooks.rs, which keeps no `cfg`.)
 const ID: &str = "starling-native-builds";
 
+// The hosted build service and prebuilt libraries currently target ARM64 only.
+const SERVICE_SUPPORTED: bool = cfg!(target_arch = "aarch64");
+fn unsupported() -> String {
+    horizon_client::lang::tr("starling.native_builds.arm64_only", &[])
+}
+
 #[derive(Clone, PartialEq)]
 enum Stage {
     Loading,
@@ -234,10 +240,20 @@ fn list(version: &str) -> Result<Vec<Build>, String> {
 /// The build's library into files/native/NAME/, checked against its JSON, and chosen for the next
 /// start.
 fn download(build: &Build, version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
+    if !SERVICE_SUPPORTED {
+        return Err(unsupported());
+    }
     let text = get(&build.json, version)?
         .into_string()
         .map_err(|e| e.to_string())?;
     let about: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    // Old metadata predates `abi` and describes the same ARM64-only service.
+    if !releases::native_build_matches(&about, releases::process_abi()) {
+        return Err(horizon_client::lang::tr(
+            "starling.native_builds.wrong_architecture",
+            &[],
+        ));
+    }
     if about["version"].as_str() != Some(version) {
         return Err(format!("That build is not for Starling {version}."));
     }
@@ -426,6 +442,9 @@ fn fetch_library(
 /// This version's game compiled with the folder's mods on the build service, downloaded and chosen
 /// for the next start: the folder's name.
 fn compile(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
+    if !SERVICE_SUPPORTED {
+        return Err(unsupported());
+    }
     let say = |text: String| {
         let mut s = shared.lock().unwrap_or_else(PoisonError::into_inner);
         s.status = text;
@@ -513,6 +532,12 @@ fn compile(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
         }
     };
     let want = finished["sha256"].as_str().unwrap_or_default().to_owned();
+    if !releases::native_build_matches(&finished["build"], releases::process_abi()) {
+        return Err(horizon_client::lang::tr(
+            "starling.native_builds.wrong_architecture",
+            &[],
+        ));
+    }
     let size = finished["size"].as_u64().unwrap_or(0);
     if want.len() != 64 || size == 0 {
         return Err("The build does not say its SHA-256.".into());
@@ -553,6 +578,11 @@ impl Game<'_> {
     pub(super) fn offer_compile(&mut self) {
         for row in &mut self.settings.mods.installed {
             if row.problem.as_deref() == Some(horizon_client::mod_list::NOT_BUILT) {
+                if !SERVICE_SUPPORTED {
+                    row.problem = Some(unsupported());
+                    row.native = None;
+                    continue;
+                }
                 row.native = Some(horizon_client::mod_list::NativePage {
                     keys: Vec::new(),
                     buttons: vec!["Compile".into()],
@@ -565,6 +595,9 @@ impl Game<'_> {
     pub(super) fn list_native_builds_row(&mut self) {
         let installed = &mut self.settings.mods.installed;
         installed.retain(|row| row.id != ID);
+        if !SERVICE_SUPPORTED {
+            return;
+        }
         installed.push(horizon_client::mod_list::Installed {
             id: ID.into(),
             title: "Native mods".into(),
@@ -583,6 +616,9 @@ impl Game<'_> {
     /// A button of the native mod page `i` of Options > Mods: true when it was the Native mods
     /// row's, which opens the card.
     pub(super) fn native_builds_button(&mut self, i: usize) -> bool {
+        if !SERVICE_SUPPORTED {
+            return false;
+        }
         let Some(row) = self.settings.mods.installed.get(i) else {
             return false;
         };
@@ -611,6 +647,9 @@ impl Game<'_> {
 
     /// Shows the card: the builds for this version, looked up now.
     pub(super) fn open_native_builds(&mut self) {
+        if !SERVICE_SUPPORTED {
+            return;
+        }
         self.native_builds.compile_failed = false;
         let Some((version, _)) = crate::android::app_version() else {
             return;
