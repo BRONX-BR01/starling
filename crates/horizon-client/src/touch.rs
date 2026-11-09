@@ -1,8 +1,8 @@
 //! Touch controls for phones (horizon-android): a stick that walks (floating under the finger,
 //! or fixed with its knob going to the finger), dragging anywhere else that turns the view (a tap there uses the held item, a still press breaks), buttons for
-//! every other action (jump, sneak, attack, use, inventory, chat, commands, pause, camera, drop,
-//! offhand, the debug screen), and the hotbar's slots to tap. Each finger is claimed by one
-//! control when it lands and keeps it until it lifts.
+//! every other action (jump, sneak, attack, use, a shield raised from one tap to the next,
+//! inventory, chat, commands, pause, camera, drop, offhand, the debug screen), and the hotbar's
+//! slots to tap. Each finger is claimed by one control when it lands and keeps it until it lifts.
 //!
 //! As Bedrock's control modes, the taps and presses act on what is under the finger ("tap to
 //! interact", [`Interact::Tap`], the default: no crosshair, no Attack and Use buttons) or on what
@@ -54,6 +54,9 @@ pub enum Button {
     Pick,
     /// key.playerlist, held: the list of the server's players.
     Players,
+    /// A tap raises the shield, the next lowers it: only the hand holding one is used, so a
+    /// block in the other hand is never placed (game/touch.rs).
+    Shield,
 }
 
 /// F3's combinations offered while the F3 button is held: the key binding pressed with it and
@@ -84,7 +87,7 @@ pub const FUNCTION_KEYS: [&str; 11] = [
 ];
 
 impl Button {
-    pub const ALL: [Button; 14] = [
+    pub const ALL: [Button; 15] = [
         Button::Jump,
         Button::Sneak,
         Button::Inventory,
@@ -99,6 +102,7 @@ impl Button {
         Button::Debug,
         Button::Pick,
         Button::Players,
+        Button::Shield,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -116,6 +120,7 @@ impl Button {
             Button::Debug => "F3",
             Button::Pick => "Pick",
             Button::Players => "List",
+            Button::Shield => "Shield",
         }
     }
     /// Its name in touch-layout.json.
@@ -135,6 +140,7 @@ impl Button {
             Button::Debug => "debug",
             Button::Pick => "pick",
             Button::Players => "players",
+            Button::Shield => "shield",
         }
     }
     /// Only for aiming the crosshair: tap to interact has no Attack and Use buttons (Bedrock's
@@ -363,6 +369,9 @@ pub struct LayoutConfig {
     /// Three fingers landing together show or hide the Stats overlay. Off by default: many
     /// play with three fingers.
     pub three_fingers: bool,
+    /// Sneaking raises the shield as the Shield button does, and lowers it when the sneak ends
+    /// (Bedrock's sneak). Off by default.
+    pub sneak_shield: bool,
     /// Buttons of the player's own; their places are among `extra`.
     pub custom: Vec<CustomButton>,
 }
@@ -385,8 +394,9 @@ pub fn gyro_turn(turned: [f32; 2], rotation: i32) -> [f32; 2] {
 }
 
 impl Default for LayoutConfig {
-    /// Laid out on a 20:9 phone: the stick at the bottom left, jump, attack, use and sneak at the
-    /// bottom right, the menus along the top, drop and offhand beside the hotbar.
+    /// Laid out on a 20:9 phone: the stick at the bottom left and the shield above it, jump,
+    /// attack, use and sneak at the bottom right, the menus along the top, drop and offhand
+    /// beside the hotbar.
     fn default() -> Self {
         LayoutConfig {
             stick: place(0.12, 0.733, 1.3),
@@ -406,6 +416,7 @@ impl Default for LayoutConfig {
                 (Button::Offhand, place(0.289, 0.951, 0.4)),
                 (Button::Pick, place_off(0.83, 0.4, 0.5)),
                 (Button::Players, place_off(0.36, 0.0833, 0.45)),
+                (Button::Shield, place(0.12, 0.45, 0.6)),
             ],
             extra: Vec::new(),
             opacity: 1.0,
@@ -415,6 +426,7 @@ impl Default for LayoutConfig {
             vibrate: true,
             gyro: false,
             three_fingers: false,
+            sneak_shield: false,
             custom: Vec::new(),
         }
     }
@@ -469,6 +481,7 @@ impl LayoutConfig {
         config.vibrate = value["vibrate"].as_bool().unwrap_or(true);
         config.gyro = value["gyro"].as_bool().unwrap_or(false);
         config.three_fingers = value["three_fingers"].as_bool().unwrap_or(false);
+        config.sneak_shield = value["sneak_shield"].as_bool().unwrap_or(false);
         if value["stick"].is_object() {
             read(&value["stick"], &mut config.stick, MIN_SIZE);
             if config.stick.show == Show::Off {
@@ -609,6 +622,7 @@ impl LayoutConfig {
             "vibrate": self.vibrate,
             "gyro": self.gyro,
             "three_fingers": self.three_fingers,
+            "sneak_shield": self.sneak_shield,
             "stick": entry(&self.stick),
             "buttons": buttons,
             "mods": mods,
@@ -1017,6 +1031,9 @@ pub struct TouchControls {
     /// The Sneak button's mode and whether the player flies ([`TouchControls::set_sneak`]).
     sneak_mode: SneakMode,
     flying: bool,
+    /// The Shield button tapped on: the shield stays up until it is tapped again, outlasting
+    /// screens, as the toggled sneak does.
+    shield_on: bool,
 }
 
 impl TouchControls {
@@ -1049,6 +1066,17 @@ impl TouchControls {
         if self.sneak_mode == SneakMode::Toggle && !self.flying {
             self.sneak_on = !self.sneak_on;
         }
+    }
+
+    /// Whether the Shield button holds the shield up now.
+    pub fn shield_up(&self) -> bool {
+        self.shield_on
+    }
+
+    /// Lower the shield the button raised: there is none in either hand to raise, or the player
+    /// died.
+    pub fn lower_shield(&mut self) {
+        self.shield_on = false;
     }
 
     pub fn event(
@@ -1087,6 +1115,9 @@ impl TouchControls {
                     }
                     if button == Button::Sneak {
                         self.tap_sneak();
+                    }
+                    if button == Button::Shield {
+                        self.shield_on = !self.shield_on;
                     }
                     Role::Button(button, now)
                 } else if let Some(slot) = layout.slot_at(p) {
@@ -1143,9 +1174,12 @@ impl TouchControls {
                 if self.three_fingers && self.landed.len() >= 3 && self.fingers.len() >= 3 {
                     // The three fingers stop whatever they began.
                     self.landed.clear();
-                    // A Sneak pressed by this finger is taken back with its toggle.
+                    // A Sneak or a Shield pressed by this finger is taken back with its toggle.
                     if out.contains(&Action::Press(Button::Sneak)) {
                         self.tap_sneak();
+                    }
+                    if out.contains(&Action::Press(Button::Shield)) {
+                        self.shield_on = !self.shield_on;
                     }
                     let start = self.fingers.len() - 3;
                     for i in start..self.fingers.len() {
@@ -1400,6 +1434,8 @@ pub enum EditorAction {
     Gyro,
     /// The three-finger tap or not ([`LayoutConfig::three_fingers`]).
     ThreeFingers,
+    /// Sneaking raising the shield or not ([`LayoutConfig::sneak_shield`]).
+    SneakShield,
 }
 
 /// The layout editor: drag a control to move it; the one last touched gets chips to make it
@@ -1419,20 +1455,21 @@ const SIZE_STEP: f32 = 0.1;
 
 impl LayoutEditor {
     /// Done, a new button, the movement control, the interaction mode, vibration, the gyroscope,
-    /// the three-finger tap and Reset, near the top centre, under the row of buttons the default
-    /// layout puts there.
-    pub fn bar(width: f32, height: f32) -> [(EditorAction, [f32; 2], f32); 8] {
+    /// the three-finger tap, sneak raising the shield and Reset, near the top centre, under the
+    /// row of buttons the default layout puts there.
+    pub fn bar(width: f32, height: f32) -> [(EditorAction, [f32; 2], f32); 9] {
         let u = unit(width, height);
         let at = |x: f32| [width / 2.0 + x * u, 2.6 * u];
         [
-            (EditorAction::Done, at(-4.69), 0.6 * u),
-            (EditorAction::Add, at(-3.35), 0.6 * u),
-            (EditorAction::Movement, at(-2.01), 0.6 * u),
-            (EditorAction::Interact, at(-0.67), 0.6 * u),
-            (EditorAction::Vibrate, at(0.67), 0.6 * u),
-            (EditorAction::Gyro, at(2.01), 0.6 * u),
-            (EditorAction::ThreeFingers, at(3.35), 0.6 * u),
-            (EditorAction::Reset, at(4.69), 0.6 * u),
+            (EditorAction::Done, at(-5.36), 0.6 * u),
+            (EditorAction::Add, at(-4.02), 0.6 * u),
+            (EditorAction::Movement, at(-2.68), 0.6 * u),
+            (EditorAction::Interact, at(-1.34), 0.6 * u),
+            (EditorAction::Vibrate, at(0.0), 0.6 * u),
+            (EditorAction::Gyro, at(1.34), 0.6 * u),
+            (EditorAction::ThreeFingers, at(2.68), 0.6 * u),
+            (EditorAction::SneakShield, at(4.02), 0.6 * u),
+            (EditorAction::Reset, at(5.36), 0.6 * u),
         ]
     }
 
@@ -1582,6 +1619,9 @@ impl LayoutEditor {
                     }
                     if action == EditorAction::ThreeFingers {
                         config.three_fingers = !config.three_fingers;
+                    }
+                    if action == EditorAction::SneakShield {
+                        config.sneak_shield = !config.sneak_shield;
                     }
                     if action == EditorAction::Interact {
                         config.interact = config.interact.next();
@@ -2411,6 +2451,132 @@ mod tests {
         assert_eq!(config.sneak, SneakMode::Toggle);
         // Nothing else of the button changed.
         assert_eq!(config, LayoutConfig::default());
+    }
+
+    #[test]
+    fn the_shield_shows_in_both_modes_above_the_stick_and_use_only_when_aiming() {
+        let (w, h) = (3200.0, 1440.0);
+        for interact in [Interact::Tap, Interact::Crosshair] {
+            let config = LayoutConfig {
+                interact,
+                ..LayoutConfig::default()
+            };
+            let layout = Layout::from_config(&config, w, h, 6.0);
+            let has = |button: Button| layout.buttons.iter().any(|(b, ..)| *b == button);
+            assert!(has(Button::Shield));
+            assert_eq!(has(Button::Use), interact == Interact::Crosshair);
+            assert!(
+                LayoutEditor::targets(&config, w, h)
+                    .iter()
+                    .any(|(t, ..)| *t == Target::Button(Button::Shield))
+            );
+            // On the left, above the stick and clear of it and of every other button.
+            let &(_, c, r, _) = layout
+                .buttons
+                .iter()
+                .find(|(b, ..)| *b == Button::Shield)
+                .unwrap();
+            assert!(c[0] < w / 2.0 && c[1] + r < layout.stick_home[1] - layout.stick_radius);
+            assert!(
+                layout
+                    .buttons
+                    .iter()
+                    .filter(|(b, ..)| *b != Button::Shield)
+                    .all(|(_, o, s, _)| dist(c, *o) > r + s)
+            );
+        }
+        // A layout saved before the button gets it where it goes by default.
+        let shield = |c: &LayoutConfig| {
+            c.buttons
+                .iter()
+                .find(|(b, _)| *b == Button::Shield)
+                .cloned()
+        };
+        let old = r#"{"buttons":{"jump":{"x":0.9}}}"#;
+        assert_eq!(
+            shield(&LayoutConfig::from_json(old)),
+            shield(&LayoutConfig::default())
+        );
+    }
+
+    #[test]
+    fn the_shield_goes_up_on_a_tap_and_down_on_the_next() {
+        let (l, now) = (layout(), Instant::now());
+        let shield = l
+            .buttons
+            .iter()
+            .find(|(b, ..)| *b == Button::Shield)
+            .unwrap()
+            .1;
+        let mut t = TouchControls::default();
+        // In the floating stick's corner, the button takes the finger.
+        assert_eq!(
+            t.event(&l, 1, TouchPhase::Started, shield, now),
+            vec![Action::Press(Button::Shield)]
+        );
+        assert!(t.shield_up() && t.stick.is_none());
+        // Lifting the finger leaves it up; screens lift the fingers, not the shield.
+        assert_eq!(
+            t.event(&l, 1, TouchPhase::Ended, shield, now),
+            vec![Action::Release(Button::Shield)]
+        );
+        assert!(t.shield_up());
+        assert!(t.reset().is_empty());
+        assert!(t.shield_up());
+        // The next tap lowers it.
+        assert_eq!(
+            t.event(&l, 2, TouchPhase::Started, shield, now),
+            vec![Action::Press(Button::Shield)]
+        );
+        assert!(!t.shield_up());
+        t.event(&l, 2, TouchPhase::Ended, shield, now);
+        assert!(!t.shield_up());
+        // The game lowers it when there is no shield to raise.
+        t.event(&l, 3, TouchPhase::Started, shield, now);
+        t.lower_shield();
+        t.event(&l, 3, TouchPhase::Ended, shield, now);
+        assert!(!t.shield_up());
+        // A Shield press that is one of a three-finger tap is taken back.
+        t.three_fingers = true;
+        t.event(&l, 4, TouchPhase::Started, [2000.0, 600.0], now);
+        t.event(&l, 5, TouchPhase::Started, [2200.0, 600.0], now);
+        let chord = t.event(&l, 6, TouchPhase::Started, shield, now);
+        assert_eq!(
+            chord,
+            vec![Action::Release(Button::Shield), Action::ToggleStats]
+        );
+        assert!(!t.shield_up());
+    }
+
+    #[test]
+    fn sneak_raising_the_shield_is_switched_in_the_editor_and_off_for_older_layouts() {
+        let (w, h) = (3200.0, 1440.0);
+        let mut config = LayoutConfig::default();
+        assert!(!config.sneak_shield);
+        let at = LayoutEditor::bar(w, h)
+            .into_iter()
+            .find(|(a, ..)| *a == EditorAction::SneakShield)
+            .unwrap()
+            .1;
+        let mut editor = LayoutEditor::default();
+        assert_eq!(
+            editor.event(&mut config, w, h, 1, TouchPhase::Started, at),
+            Some(EditorAction::SneakShield)
+        );
+        assert!(config.sneak_shield);
+        assert_eq!(LayoutConfig::from_json(&config.to_json()), config);
+        // A layout saved before the option.
+        assert!(!LayoutConfig::from_json(r#"{"three_fingers":true}"#).sneak_shield);
+        editor.event(&mut config, w, h, 2, TouchPhase::Started, at);
+        assert_eq!(config, LayoutConfig::default());
+        // The bar, one button longer, still fits a 4:3 tablet and none covers another.
+        for (w, h) in [(3200.0, 1440.0), (2048.0, 1536.0)] {
+            let bar = LayoutEditor::bar(w, h);
+            assert!(bar.iter().all(|(_, c, r)| c[0] - r >= 0.0 && c[0] + r <= w));
+            for (i, (_, a, ra)) in bar.iter().enumerate() {
+                assert!(bar[i + 1..].iter().all(|(_, b, rb)| dist(*a, *b) > ra + rb));
+            }
+        }
     }
 
     #[test]

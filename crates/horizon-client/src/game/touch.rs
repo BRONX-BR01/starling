@@ -11,6 +11,7 @@ mod text_mirror;
 use super::input_trace::InputOrigin;
 use super::{Game, Screen, event_loop::EventLoopCtl};
 use horizon_client::debug_keys::KeyAction;
+use horizon_client::first_person::Hand;
 use horizon_client::gamepad::ServerStick;
 use horizon_client::input_mode::InputMode;
 use horizon_client::{
@@ -419,7 +420,8 @@ pub(super) fn draw_editor(
             | EditorAction::Interact
             | EditorAction::Vibrate
             | EditorAction::Gyro
-            | EditorAction::ThreeFingers => color::with_alpha(color::BG, 0.85),
+            | EditorAction::ThreeFingers
+            | EditorAction::SneakShield => color::with_alpha(color::BG, 0.85),
         };
         circle(ui, c, r, fill);
         let text = match action {
@@ -441,6 +443,9 @@ pub(super) fn draw_editor(
             EditorAction::Gyro => "Gyro off",
             EditorAction::ThreeFingers if config.three_fingers => "3-tap on",
             EditorAction::ThreeFingers => "3-tap off",
+            // Sneaking raises the shield (Bedrock's sneak) or not.
+            EditorAction::SneakShield if config.sneak_shield => "Snk shd on",
+            EditorAction::SneakShield => "Snk shd off",
         };
         label(ui, c, r, text, ink(1.0));
     }
@@ -578,6 +583,50 @@ impl Game<'_> {
     }
     pub(super) fn touch_hides_outline(&self) -> bool {
         self.touch_taps() && self.touch_aim_point().is_none()
+    }
+
+    /// The hand the touch controls raise a shield with: the off hand when its item blocks
+    /// attacks, else the main hand when its item does. Only that hand is used for it, so a block
+    /// or a bucket in the other is never placed or emptied, and nothing aimed at is used.
+    pub(super) fn touch_shield_hand(&self) -> Option<Hand> {
+        let blocks = |stack: Option<&horizon_client::items::ItemStack>| {
+            stack.is_some_and(|s| self.blocks_attacks(s).is_some())
+        };
+        if blocks(self.offhand.as_ref()) {
+            Some(Hand::Off)
+        } else if blocks(self.stack_in(self.selected)) {
+            Some(Hand::Main)
+        } else {
+            None
+        }
+    }
+
+    /// Whether the touch controls want the shield up while they play: the Shield button tapped
+    /// on (and still in the layout), or the player sneaking, not flying, with "Sneak raises
+    /// shield" on.
+    pub(super) fn touch_shield_wanted(&self) -> bool {
+        if !self.touch.live || self.touch.editor.is_some() || !self.has_touch() {
+            return false;
+        }
+        let config = self.touch.config.as_ref();
+        let button = self.touch.controls.shield_up()
+            && config.is_none_or(|c| {
+                (c.buttons.iter()).any(|(b, p)| *b == Button::Shield && p.show != Show::Off)
+            });
+        let sneak = config.is_some_and(|c| c.sneak_shield)
+            && (self.player.as_ref()).is_some_and(|p| p.shift_key_down && !p.flying);
+        button || sneak
+    }
+
+    /// The shield the touch controls want is the item in use: the use key's tick keeps it up as
+    /// if the key were held (game/remote.rs), which starts nothing else while it is in use.
+    pub(super) fn touch_shield_up(&self) -> bool {
+        let slot = match self.touch_shield_hand() {
+            Some(Hand::Off) => super::shield::OFFHAND_SLOT,
+            Some(Hand::Main) => self.selected,
+            None => return false,
+        };
+        self.using.is_some_and(|(s, _)| s == slot) && self.touch_shield_wanted()
     }
 
     /// A short buzz of the phone (Bedrock's "Vibrate when breaking blocks" and "when splitting
@@ -1144,6 +1193,13 @@ impl Game<'_> {
                 // Held as the pad's View (key.playerlist) while the finger is on it.
                 Action::Press(Button::Players) => self.pad.touch_hold(Pad::Select, true),
                 Action::Release(Button::Players) => self.pad.touch_hold(Pad::Select, false),
+                // The button's own toggle holds the shield up (touch_shield_wanted, then
+                // game/remote.rs); with none in either hand to raise it stays down.
+                Action::Press(Button::Shield) => {
+                    if self.touch_shield_hand().is_none() {
+                        self.touch.controls.lower_shield();
+                    }
+                }
                 Action::Release(_) => {}
                 Action::Tap(p) => {
                     let now = Instant::now();
@@ -1166,6 +1222,10 @@ impl Game<'_> {
             }
         }
         self.touch_sync_sneak();
+        // KeyMapping.resetToggleKeys when the player respawns, as for the toggled sneak.
+        if self.screen == Screen::Dead {
+            self.touch.controls.lower_shield();
+        }
     }
 
     /// Whether the touch Sneak button holds sneak now (`sync_toggle` adds it to the key's state).
@@ -1337,8 +1397,9 @@ impl Game<'_> {
                 if *a <= 0.0 {
                     continue;
                 }
-                let on =
-                    self.touch.controls.held(*button) || (*button == Button::Sneak && sneaking);
+                let on = self.touch.controls.held(*button)
+                    || (*button == Button::Sneak && sneaking)
+                    || (*button == Button::Shield && self.touch.controls.shield_up());
                 let face = self.control_face(*button);
                 // A pack's button is drawn whole, else it is a plate with its label.
                 if let Some((skin, lit)) = &face.skin {

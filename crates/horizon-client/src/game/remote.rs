@@ -9204,7 +9204,9 @@ impl Game<'_> {
         }
         // MultiPlayerGameMode.tick syncs the carried slot before keybinds.
         self.remote_send_carried();
-        let (attack, use_item) = (self.left, self.right);
+        // The touch controls' shield, once up, is kept up as the held use key keeps an item in
+        // use, which starts nothing else meanwhile (`remote_touch_shield` raised it).
+        let (attack, use_item) = (self.left, self.right || self.touch_shield_up());
         // A tick that clicks, attacks or uses acts with the slot its number
         // keys select (`ensureHasSentCarriedItem` before the packets).
         let acts = input.has_clicks() || attack || use_item;
@@ -9220,9 +9222,43 @@ impl Game<'_> {
             }
         }
         input.tick(&mut RemoteInputWorld(self, acts), attack, use_item);
+        self.remote_touch_shield();
         self.remote_queued_keys();
         if let Some(r) = self.remote.as_mut() {
             r.input = input;
+        }
+    }
+
+    /// The touch controls' shield (game/touch.rs) going up: `MultiPlayerGameMode.useItem` with the
+    /// hand that holds it alone, as `Minecraft.startUseItem` does for each hand, but with no block,
+    /// entity or other hand before it, so nothing is placed, opened or used instead. While it is
+    /// wanted and nothing is in use it is tried again every `rightClickDelay` (4 ticks), so a
+    /// shield an axe disabled comes back up when its cooldown ends, still from its own hand.
+    fn remote_touch_shield(&mut self) {
+        if self.right
+            || self.using.is_some()
+            || self.use_delay > 0
+            || self.spectator()
+            || self.hands_busy()
+            || self.remote.as_ref().is_some_and(|r| r.is_destroying)
+            || !self.touch_shield_wanted()
+        {
+            return;
+        }
+        let Some(hand) = self.touch_shield_hand() else {
+            return;
+        };
+        self.use_delay = 4;
+        // InputEvent.InteractionKeyMappingTriggered for that hand: a mod's cancel ends it.
+        if let Some(swing) = self.native_interaction(1, hand) {
+            if swing {
+                self.swing_hand(hand, SwingAnimation::DEFAULT);
+            }
+            return;
+        }
+        // A successful Item.use drops the hand (LocalPlayer.itemUsed).
+        if self.remote_use_item(hand) {
+            self.heights.item_used(hand);
         }
     }
 
