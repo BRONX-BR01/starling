@@ -100,11 +100,12 @@ fn fetch_once(
         .call()
         .map_err(|e| match e {
             ureq::Error::Status(code, _) => {
-                let e = format!("GitHub refused {NAME} ({code}).");
-                if code >= 500 {
-                    Failure::Again(e)
+                if crate::files::may_pass(code) {
+                    Failure::Again(format!(
+                        "GitHub refused {NAME} ({code}). Try again in a few minutes."
+                    ))
                 } else {
-                    Failure::Final(e)
+                    Failure::Final(format!("GitHub refused {NAME} ({code})."))
                 }
             }
             ureq::Error::Transport(t) => Failure::Again(format!(
