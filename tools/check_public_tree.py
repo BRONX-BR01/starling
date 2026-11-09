@@ -8,7 +8,7 @@ import sys
 
 PRIVATE_ROOTS = {".local", "decompiled", "minecraft", "assets", "run", "logs"}
 PRIVATE_EXTENSIONS = {".jar", ".class", ".jfr", ".hprof", ".java"}
-ORIGINAL_JDK_TOOLS = {"tools/JfrSummary.java", "tests/java/JfrFixture.java"}
+ORIGINAL_JDK_TOOLS = {"tools/JfrSummary.java", "tests/java/JfrFixture.java", "tests/java/GameFolderChecks.java"}
 # The Android app's own classes (packaging/android/build_apk.py), Horizon's code like the above.
 ORIGINAL_ANDROID = {
     "packaging/android/java/io/github/juanluci/starling/StarlingActivity.java",
@@ -21,6 +21,8 @@ ORIGINAL_ANDROID = {
     "packaging/android/java/io/github/juanluci/starling/NativeMods.java",
     "packaging/android/java/io/github/juanluci/starling/WorkService.java",
     "packaging/android/java/io/github/juanluci/starling/HorizonImport.java",
+    "packaging/android/java/io/github/juanluci/starling/GameFolder.java",
+    "packaging/android/java/io/github/juanluci/starling/GameFolderProvider.java",
     # The same activity before the app was named Starling, in the history.
     "packaging/android/java/dev/horizon/android/HorizonActivity.java",
 }
