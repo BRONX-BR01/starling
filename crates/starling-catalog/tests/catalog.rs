@@ -3,7 +3,7 @@ use serde_json::json;
 use starling_catalog::browser::{Kind, Project, SourceId};
 use starling_catalog::{caution, installed_projects, is_native_mod, is_shader_pack, shader_hits};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn folder(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("starling-catalog-{name}-{}", std::process::id()));
@@ -123,7 +123,7 @@ fn nothing_installed_is_an_empty_list() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-fn listed(home: &PathBuf, file: &str) {
+fn listed(home: &Path, file: &str) {
     use starling_catalog::browser::installed::{Entry, Installed};
     let mut list = Installed::load(home);
     list.entries.push(Entry {
