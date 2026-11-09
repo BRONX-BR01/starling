@@ -7,8 +7,8 @@ use std::fmt::Write;
 use naga::ShaderStage;
 
 use super::scan::{
-    LATER_KEYWORDS, NOT_CONSTANT, Stage, UNIFORM_STATE, VERTEX_INPUTS, is_ident, is_sampler_type,
-    significant,
+    CORE_MATRICES, LATER_KEYWORDS, NOT_CONSTANT, Stage, UNIFORM_STATE, VERTEX_INPUTS, is_ident,
+    is_sampler_type, significant,
 };
 use super::{Sampler, split_sampler};
 
@@ -326,9 +326,11 @@ impl Stage<'_> {
             }
             // `float specular`: a variable of the same name as a sampler or a sampler parameter,
             // from the end of its initializer to the function's end; `.specular` a member.
+            let core_matrix = self.core_matrix(t);
             if sampler_ty.contains_key(t)
                 || params.contains_key(t)
                 || uniforms.get(t).is_some_and(|ty| ty == "bool")
+                || core_matrix.is_some()
             {
                 let before = prev(i).map(|j| self.tokens[j]);
                 if before == Some(".") {
@@ -378,6 +380,10 @@ impl Stage<'_> {
             }
             if uniforms.get(t).is_some_and(|ty| ty == "bool") {
                 write!(out, "(hz_bool_{t} != 0)").unwrap();
+                continue;
+            }
+            if let Some(matrix) = core_matrix {
+                out.push_str(matrix);
                 continue;
             }
             let replaced: Option<String> = match t {
@@ -577,6 +583,14 @@ impl Stage<'_> {
 
     /// Whether the name at `i`, after a `,`, is another declarator of the statement's type
     /// (`bool a = 1, x = 0;`): the statement starts with a type and a name.
+    /// What a use of this name reads, when it is a matrix of the core profile that this stage
+    /// declares as a uniform. A compute program has no such matrices and keeps the uniform.
+    fn core_matrix(&self, t: &str) -> Option<&'static str> {
+        let &(_, ty, value) = CORE_MATRICES.iter().find(|m| m.0 == t)?;
+        (self.kind != ShaderStage::Compute && self.uniforms.iter().any(|u| u.0 == t && u.1 == ty))
+            .then_some(value)
+    }
+
     fn is_next_declarator(&self, i: usize) -> bool {
         let follows = (i + 1..self.tokens.len())
             .find(|&j| significant(self.tokens[j]))

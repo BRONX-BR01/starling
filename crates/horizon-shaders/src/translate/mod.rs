@@ -286,6 +286,10 @@ fn translate(
     let mut samplers: BTreeMap<String, String> = BTreeMap::new();
     for stage in [&v, &f] {
         for (name, ty, at) in &stage.uniforms {
+            // Read through the compatibility profile's matrices instead (`rewrite`).
+            if scan::CORE_MATRICES.iter().any(|m| m.0 == name && m.1 == ty) {
+                continue;
+            }
             if let Some(old) = uniforms.insert(name.clone(), ty.clone())
                 && &old != ty
             {
@@ -1608,11 +1612,74 @@ mod tests {
         .unwrap();
         assert_eq!(p.interface.outputs, [2]);
         assert!(
+            !p.interface
+                .uniforms
+                .iter()
+                .any(|u| u.name == "projectionMatrix" || u.name == "modelViewMatrix")
+        );
+    }
+
+    /// The core profile's matrices in the programs that draw the world (Pixel Perfect, Round
+    /// World): zero, they would put every vertex in one point and the world would not draw. A
+    /// parameter or a member of the same name stays what it is.
+    #[test]
+    fn core_matrices_read_the_programs_own() {
+        let vsh = "#version 330 core\nin vec3 vaPosition;\nin vec3 vaNormal;\nin ivec2 vaUV2;\n\
+                   uniform mat4 modelViewMatrix, projectionMatrix;\nuniform mat3 normalMatrix;\n\
+                   uniform mat4 modelViewMatrixInverse;\nuniform vec3 chunkOffset;\n\
+                   struct S { mat4 projectionMatrix; };\nout vec3 n;\n\
+                   vec4 place(mat4 projectionMatrix, vec3 p) { return projectionMatrix * vec4(p, 1.0); }\n\
+                   void main() {\n    S s;\n    s.projectionMatrix = projectionMatrix;\n    \
+                   n = normalMatrix * vaNormal + (modelViewMatrixInverse * vec4(0.0)).xyz + vec3(vaUV2, 0.0);\n    \
+                   gl_Position = place(s.projectionMatrix * modelViewMatrix, vaPosition + chunkOffset);\n}\n";
+        let fsh = "#version 330 core\nuniform mat4 projectionMatrixInverse;\nin vec3 n;\n\
+                   /* DRAWBUFFERS:0 */\nlayout(location = 0) out vec4 color;\n\
+                   void main() {\n    color = projectionMatrixInverse * vec4(n, 1.0);\n}\n";
+        let files = [
+            ("shaders/gbuffers_terrain.vsh", vsh),
+            ("shaders/gbuffers_terrain.fsh", fsh),
+        ];
+        let pack = Pack::from_zip_bytes("P.zip", zip(&files)).unwrap();
+        let m = Macros::standard();
+        let inputs = GbuffersInputs {
+            body: "    hz_Vertex = vec4(0.0, 0.0, 0.0, 1.0);\n".into(),
+            attributes: [
+                ("vaPosition", "hz_Vertex.xyz"),
+                ("vaNormal", "vec3(0.0, 1.0, 0.0)"),
+                ("vaUV2", "vec2(0.0)"),
+            ]
+            .iter()
+            .map(|&(n, v)| (n.to_owned(), v.to_owned()))
+            .collect(),
+            ..Default::default()
+        };
+        let vertex = preprocess(&pack, "gbuffers_terrain.vsh", &m);
+        let fragment = preprocess(&pack, "gbuffers_terrain.fsh", &m);
+        let drawn = translate_gbuffers(&vertex, &fragment, Target::Buffers, &inputs)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let shadow =
+            translate_shadow(&vertex, &fragment, &inputs).unwrap_or_else(|e| panic!("{e:?}"));
+        for p in [&drawn, &shadow] {
+            let names: Vec<&str> = p
+                .interface
+                .uniforms
+                .iter()
+                .map(|u| u.name.as_str())
+                .collect();
+            for (matrix, ..) in scan::CORE_MATRICES {
+                assert!(!names.contains(&matrix), "{matrix} in {names:?}");
+            }
+            assert!(names.contains(&"gbufferModelView"));
+            assert!(names.contains(&"chunkOffset"));
+        }
+        let names = |p: &Program| {
             p.interface
                 .uniforms
                 .iter()
-                .any(|u| u.name == "projectionMatrix" && u.ty == "mat4")
-        );
+                .any(|u| u.name == "shadowModelView")
+        };
+        assert!(names(&shadow));
+        assert!(!names(&drawn));
     }
 
     /// `gl_FogFragCoord` travels from the vertex stage to the fragment stage as a float (MakeUp,
