@@ -183,11 +183,13 @@ pub mod compositor;
 mod cull;
 mod end_sky;
 pub mod entity_skin;
+mod entity_source;
 mod flat;
 mod frame_gen;
 mod hdr;
 mod hdr_icc;
 mod hdr_stats;
+mod terrain_source;
 pub use hdr::Calibration as HdrCalibration;
 pub mod block_light;
 pub mod lightning;
@@ -1060,6 +1062,7 @@ pub struct Renderer {
     indirect_capacity: u64,
     /// Indirect draws may set `first_instance` (the section origin).
     pub multi_draw: bool,
+    base_vertex: bool,
     /// Per-frame scratch, kept to avoid allocating every frame.
     visible: Vec<resident::Visible>,
     visible_lods: Vec<lod::Visible>,
@@ -2219,10 +2222,11 @@ impl Renderer {
         let kept = reuse.on(&device);
         let pipelines_step = crate::spans::startup::step("renderer.pipelines_textures");
         let terrain_step = crate::spans::startup::step("renderer.terrain_pipelines");
+        let gl = adapter.get_info().backend == wgpu::Backend::Gl;
         let gpu_timer = timing::GpuTimer::new(&device, &queue);
         let shader = kept.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Horizon terrain"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("terrain.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(terrain_source::terrain_shader(gl)),
         });
         let entry = |binding, visibility, ty| wgpu::BindGroupLayoutEntry {
             binding,
@@ -2654,7 +2658,6 @@ impl Renderer {
             ),
         };
         let mut mip_levels = 1;
-        let gl = adapter.get_info().backend == wgpu::Backend::Gl;
         // The resource packs' LabPBR maps, for native shader packs: one array each, cut to
         // the layers the GPU has (`block_normal_map` gives the default past them).
         let pbr_maps = prepared
@@ -2778,7 +2781,7 @@ impl Renderer {
             ..Default::default()
         });
         let emission_stats =
-            hdr_stats::EmissionStats::new(&device, split, sprite_textures.len() as u32);
+            hdr_stats::EmissionStats::new(&device, split, sprite_textures.len() as u32, gl);
         let group = terrain_group(
             &device,
             "Horizon terrain resources",
@@ -2932,11 +2935,19 @@ impl Renderer {
         let entity_step = crate::spans::startup::step("renderer.entity_pipelines");
         let entity_shader = kept.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Horizon entities"),
-            source: wgpu::ShaderSource::Wgsl(entity_shader().into()),
+            source: wgpu::ShaderSource::Wgsl(if gl {
+                entity_source::legacy_overlay(&entity_shader()).into()
+            } else {
+                entity_shader().into()
+            }),
         });
         let static_entity_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Horizon static block entities"),
-            source: wgpu::ShaderSource::Wgsl(static_entity_shader().into()),
+            source: wgpu::ShaderSource::Wgsl(if gl {
+                entity_source::legacy_overlay(&static_entity_shader()).into()
+            } else {
+                static_entity_shader().into()
+            }),
         });
         let entity_bindings = kept.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Entity bindings"),
@@ -3918,6 +3929,10 @@ impl Renderer {
                 },
             )
         });
+        let base_vertex = adapter
+            .get_downlevel_capabilities()
+            .flags
+            .contains(wgpu::DownlevelFlags::BASE_VERTEX);
         let multi_draw = device
             .features()
             .contains(wgpu::Features::INDIRECT_FIRST_INSTANCE)
@@ -3992,8 +4007,12 @@ impl Renderer {
             (&entity_shader, &entity_layout, &entity_vertex),
             config.format.remove_srgb_suffix(),
         );
-        let panorama =
-            panorama::Panorama::new(&device, config.format.remove_srgb_suffix(), panorama_faces);
+        let panorama = panorama::Panorama::new(
+            &device,
+            config.format.remove_srgb_suffix(),
+            panorama_faces,
+            gl,
+        );
         drop(pipelines_step);
         reuse.finish(generation);
         if previous.is_some() {
@@ -4168,6 +4187,7 @@ impl Renderer {
             indirect,
             indirect_capacity: 1024,
             multi_draw,
+            base_vertex,
             visible: Vec::new(),
             visible_lods: Vec::new(),
             shadow_visible: Vec::new(),
@@ -4811,7 +4831,15 @@ impl Renderer {
             };
             pass.set_vertex_buffer(0, vertices);
             pass.set_index_buffer(indices, wgpu::IndexFormat::Uint32);
-            if self.multi_draw {
+            if !self.base_vertex {
+                // Android fork fallback: GLES 3.0 has no base-vertex draws.
+                // Rebase the selected arena's bounded binding instead.
+                for d in &draws[i..i + run] {
+                    let offset = u64::from(d[3]) * std::mem::size_of::<TerrainVertex>() as u64;
+                    pass.set_vertex_buffer(0, vertices.slice(offset..));
+                    pass.draw_indexed(d[2]..d[2] + d[0], 0, d[4]..d[4] + 1);
+                }
+            } else if self.multi_draw {
                 let offset = (i - base as usize) as u64 * 20;
                 pass.multi_draw_indexed_indirect(indirect, offset, run as u32);
             } else {

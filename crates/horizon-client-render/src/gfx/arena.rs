@@ -524,7 +524,14 @@ impl Arena {
     /// by at most `PAGE_BYTES` past that size, so a large page is never left
     /// half empty (nor held twice during the copy) by hundreds of MiB.
     fn grown(&self, current: u64, len: u64) -> u64 {
-        let step = current.min(PAGE_BYTES / self.stride);
+        // Bound geometric growth as in the Android fork: copying a larger page
+        // temporarily holds both allocations in the 32-bit address space.
+        let limit = if cfg!(all(target_os = "android", target_pointer_width = "32")) {
+            (8 * 1024 * 1024 / self.stride / GRAIN * GRAIN).max(GRAIN)
+        } else {
+            PAGE_BYTES / self.stride
+        };
+        let step = current.min(limit);
         (current + step).max(current + len).min(self.page_limit)
     }
     /// Moves a page into a larger buffer; false (the page unchanged) when
@@ -1232,7 +1239,11 @@ mod tests {
         let mut arena = Arena::translucent(&device, 24, GRAIN);
         // Exercise the policy past the test device's own buffer limit.
         arena.page_limit = LARGE_PAGE_BYTES / 24 / GRAIN * GRAIN;
-        let step = PAGE_BYTES / 24;
+        let step = if cfg!(all(target_os = "android", target_pointer_width = "32")) {
+            (8 * 1024 * 1024 / 24) / GRAIN * GRAIN
+        } else {
+            PAGE_BYTES / 24
+        };
         assert_eq!(arena.grown(1 << 18, GRAIN), 1 << 19);
         assert_eq!(arena.grown(step, GRAIN), 2 * step);
         assert_eq!(arena.grown(3 * step, GRAIN), 4 * step);

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build Starling's arm64-v8a Android APK (Horizon on Android): horizon-android as a
+"""Build Starling's Android APK (Horizon on Android): horizon-android as a
 NativeActivity library.
 
 The APK holds the game library, the launcher icon, Starling Visuals and what prepares the game
-files on the phone (the Java launchers in native/ and the exporters' sources), nothing of
+files on the phone (the Java launchers in native/ and original exporter classes/sources), nothing of
 Minecraft: the resources
 horizon-prepare makes from the player's own copy are made on the phone, or copied there.
 
@@ -16,10 +16,13 @@ horizon-prepare makes from the player's own copy are made on the phone, or copie
 
 Needs the Android SDK (ANDROID_HOME, else the default folder) with the build-tools, platform and
 NDK pinned below, the aarch64-linux-android Rust target, cargo-ndk and a JDK (javac, keytool,
-apksigner). Without HORIZON_ANDROID_KEYSTORE it signs with a debug key kept in target/android.
+apksigner), of the pinned Java major (currently 25). Original exporters are compiled
+on the host against checksum-pinned jars, which are never packaged. Without
+HORIZON_ANDROID_KEYSTORE it signs with a debug key kept in target/android.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -48,6 +51,13 @@ BUILD_TOOLS = "35.0.0"
 NDK = "28.2.13676358"
 ABI = "arm64-v8a"
 TRIPLE = "aarch64-linux-android"
+# Rust target, NDK compiler prefix and NDK C++ runtime directory differ on ARMv7.
+TARGETS = {
+    "arm64-v8a": (TRIPLE, TRIPLE, TRIPLE),
+    "armeabi-v7a": ("armv7-linux-androideabi", "armv7a-linux-androideabi", "arm-linux-androideabi"),
+    "x86": ("i686-linux-android", "i686-linux-android", "i686-linux-android"),
+    "x86_64": ("x86_64-linux-android", "x86_64-linux-android", "x86_64-linux-android"),
+}
 LIBRARY = "horizon_android"
 # Every LOAD segment aligned for 16 KB pages, which Android 15 devices may use.
 PAGE_FLAGS = "-C link-arg=-Wl,-z,max-page-size=16384"
@@ -57,7 +67,8 @@ ICONS = {
     "mipmap-xxxhdpi": "256x256",
 }
 # What horizon-prepare reads from its version folder on the phone (assets/prepare-kit.zip):
-# the pins and the exporters' Java sources, which the phone compiles against the player's jars.
+# the pins, original sources and verified original exporter classes. The phone
+# runs these against the player's jars; ARM32's runtime has no javac module.
 PREPARE_KIT = (
     "research-lock.json",
     "crates/horizon-prepare/src/exporters.rs",
@@ -96,7 +107,7 @@ def ndk_tool(ndk, name):
     return tool(ndk / "toolchains" / "llvm" / "prebuilt" / host / "bin", name)
 
 
-def build_library(profile, ndk, sdk):
+def build_library(profile, ndk, sdk, abi=ABI):
     env = dict(os.environ, ANDROID_NDK_HOME=str(ndk), ANDROID_HOME=str(sdk))
     # Preserve source identity in local diagnostic reports, including source builds.
     try:
@@ -108,17 +119,18 @@ def build_library(profile, ndk, sdk):
         pass  # An exported source archive may not have Git metadata.
     env["RUSTFLAGS"] = (env.get("RUSTFLAGS", "") + " " + PAGE_FLAGS).strip()
     run(
-        "cargo", "ndk", "-t", ABI, "--platform", MIN_SDK,
+        "cargo", "ndk", "-t", abi, "--platform", MIN_SDK,
         "build", "--profile", profile, "-p", "horizon-android",
         cwd=ROOT, env=env,
     )
 
 
-def build_launchers(ndk, out):
+def build_launchers(ndk, out, abi=ABI):
     """The `java` and `javac` horizon-prepare runs on the phone (native/java_launcher.c), with the
     C++ runtime the Java runtime's libraries need: an app runs programs only from its library
     folder, so they go in the APK as libraries."""
-    clang = ndk_tool(ndk, f"{TRIPLE}{MIN_SDK}-clang")
+    _, compiler, sysroot_triple = TARGETS[abi]
+    clang = ndk_tool(ndk, f"{compiler}{MIN_SDK}-clang")
     source = HERE / "native" / "java_launcher.c"
     libraries = {}
     for name, flags in (("libstarling_java.so", []), ("libstarling_javac.so", ["-DJAVAC"])):
@@ -129,7 +141,7 @@ def build_launchers(ndk, out):
         )
         libraries[name] = target
     sysroot = ndk_tool(ndk, "clang").parent.parent / "sysroot"
-    libraries["libc++_shared.so"] = sysroot / "usr" / "lib" / TRIPLE / "libc++_shared.so"
+    libraries["libc++_shared.so"] = sysroot / "usr" / "lib" / sysroot_triple / "libc++_shared.so"
     return libraries
 
 
@@ -148,6 +160,7 @@ def assets(out):
     lowbudget.zip, the skin the setup draws the menus with (packaging/lowbudget/pack, made by its
     make.py), and StarlingVisuals.zip, the shader pack the app puts in shaderpacks/ (also left in
     `out` for the release page)."""
+    run(sys.executable, ROOT / "tools/build_android_exporters.py")
     folder = out / "assets"
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir()
@@ -161,6 +174,10 @@ def assets(out):
             files = sorted(p for p in path.rglob("*.java")) if path.is_dir() else [path]
             for file in files:
                 kit.write(file, file.relative_to(ROOT).as_posix())
+        bundle = ROOT / "exporters"
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        for name in ["manifest.json", *sorted(manifest["classes"])]:
+            kit.write(bundle / name, "exporters/" + name)
     zip_folder(HERE.parent / "lowbudget" / "pack", folder / "lowbudget.zip")
     zip_folder(HERE.parent / "shaderpacks" / "starling-visuals", folder / "StarlingVisuals.zip")
     shutil.copyfile(folder / "StarlingVisuals.zip", out / "StarlingVisuals.zip")
@@ -187,7 +204,7 @@ def compile_java(build_tools, android_jar, out):
     return dex / "classes.dex"
 
 
-def link_resources(aapt2, android_jar, out, assets, variant):
+def link_resources(aapt2, android_jar, out, assets, variant, abi=ABI):
     """The manifest, the launcher icon, the themes and `assets`, compiled and linked into
     `out/base.apk`; `variant` is None (the release's app) or a key of VARIANTS."""
     manifest = (HERE / "AndroidManifest.xml").read_text(encoding="utf-8")
@@ -195,6 +212,10 @@ def link_resources(aapt2, android_jar, out, assets, variant):
     application_id = APPLICATION_ID + suffix
     label = LABEL + label_suffix
     manifest = manifest.replace("@APPLICATION_ID@", application_id).replace("@LABEL@", label)
+    if abi != ABI:
+        # Additional architectures may expose GLES only. Validate actual GPU limits.
+        manifest = manifest.replace('android:version="0x400003" android:required="true"',
+                                    'android:version="0x400003" android:required="false"')
     (out / "AndroidManifest.xml").write_text(manifest, encoding="utf-8")
     res = out / "res"
     shutil.rmtree(res, ignore_errors=True)
@@ -238,14 +259,14 @@ def link_resources(aapt2, android_jar, out, assets, variant):
     )
 
 
-def add_code(base, libraries, dex, unsigned):
+def add_code(base, libraries, dex, unsigned, abi=ABI):
     """`base` plus the activity's dex and the libraries, compressed: Android extracts them at
     install (extractNativeLibs), as it must for the Java launchers to run."""
     shutil.copyfile(base, unsigned)
     with zipfile.ZipFile(unsigned, "a") as apk:
         apk.write(dex, "classes.dex", compress_type=zipfile.ZIP_DEFLATED)
         for name, path in sorted(libraries.items()):
-            apk.write(path, f"lib/{ABI}/{name}", compress_type=zipfile.ZIP_DEFLATED)
+            apk.write(path, f"lib/{abi}/{name}", compress_type=zipfile.ZIP_DEFLATED)
 
 
 def sign(build_tools, aligned, apk, out):
@@ -297,7 +318,9 @@ def main():
         "--preview", action="store_true",
         help=f"Starling Preview ({APPLICATION_ID}{VARIANTS['preview'][0]}), the organisation's CI build",
     )
+    parser.add_argument("--abi", choices=TARGETS, default=ABI, help="Android ABI (default: arm64-v8a)")
     args = parser.parse_args()
+    triple, _, _ = TARGETS[args.abi]
 
     sdk = sdk_dir()
     ndk = Path(os.environ.get("ANDROID_NDK_HOME") or sdk / "ndk" / NDK)
@@ -308,9 +331,9 @@ def main():
             sys.exit(f"build_apk: missing {path}")
 
     if not args.no_build:
-        build_library(args.profile, ndk, sdk)
+        build_library(args.profile, ndk, sdk, args.abi)
     profile_dir = "debug" if args.profile == "dev" else args.profile
-    built = ROOT / "target" / TRIPLE / profile_dir / f"lib{LIBRARY}.so"
+    built = ROOT / "target" / triple / profile_dir / f"lib{LIBRARY}.so"
     if not built.is_file():
         sys.exit(f"build_apk: {built} not built")
 
@@ -325,14 +348,14 @@ def main():
         return
 
     variant = "dev" if args.dev else "preview" if args.preview else None
-    link_resources(tool(build_tools, "aapt2"), android_jar, out, assets(out), variant)
+    link_resources(tool(build_tools, "aapt2"), android_jar, out, assets(out), variant, args.abi)
     dex = compile_java(build_tools, android_jar, out)
-    libraries = build_launchers(ndk, out)
+    libraries = build_launchers(ndk, out, args.abi)
     libraries[library.name] = library
-    add_code(out / "base.apk", libraries, dex, out / "unsigned.apk")
+    add_code(out / "base.apk", libraries, dex, out / "unsigned.apk", args.abi)
     aligned = out / "aligned.apk"
     run(tool(build_tools, "zipalign"), "-P", "16", "-f", "4", out / "unsigned.apk", aligned)
-    apk = out / f"starling{'-' + variant if variant else ''}-{VERSION_NAME}-{ABI}.apk"
+    apk = out / f"starling{'-' + variant if variant else ''}-{VERSION_NAME}-{args.abi}.apk"
     sign(build_tools, aligned, apk, out)
     print(apk)
     if args.zip:

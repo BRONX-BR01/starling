@@ -181,8 +181,58 @@ fn projection(width: u32, height: u32, yaw: f32, pitch: f32) -> Mat4 {
         * Mat4::from_rotation_y(yaw.to_radians())
 }
 
+// Explicit cube geometry adapted from the MIT Android fork; see THIRD_PARTY_NOTICES.md.
+fn cube_vertices() -> [[f32; 3]; 36] {
+    let corners = [
+        [-1.0, -1.0, -1.0],
+        [1.0, -1.0, -1.0],
+        [1.0, 1.0, -1.0],
+        [-1.0, 1.0, -1.0],
+        [-1.0, -1.0, 1.0],
+        [1.0, -1.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [-1.0, 1.0, 1.0],
+    ];
+    [
+        4, 7, 6, 4, 6, 5, 5, 6, 2, 5, 2, 1, 1, 2, 3, 1, 3, 0, 0, 3, 7, 0, 7, 4, 7, 3, 2, 7, 2, 6,
+        0, 4, 5, 0, 5, 1,
+    ]
+    .map(|i| corners[i])
+}
+
+fn reduced_texels(size: u32, pixels: Vec<u8>, maximum: u32) -> (u32, Vec<u8>) {
+    let side = size.min(maximum.max(1));
+    if side == size {
+        return (size, pixels);
+    }
+    let face_bytes = (size * size * 4) as usize;
+    let mut smaller = Vec::with_capacity((side * side * 4 * 6) as usize);
+    for face in pixels.chunks_exact(face_bytes) {
+        for y in 0..side {
+            let (y0, y1) = (y * size / side, (y + 1) * size / side);
+            for x in 0..side {
+                let (x0, x1) = (x * size / side, (x + 1) * size / side);
+                let mut sum = [0u64; 4];
+                for sy in y0..y1 {
+                    for sx in x0..x1 {
+                        let at = ((sy * size + sx) * 4) as usize;
+                        for channel in 0..4 {
+                            sum[channel] += u64::from(face[at + channel]);
+                        }
+                    }
+                }
+                let count = u64::from((x1 - x0) * (y1 - y0));
+                smaller.extend(sum.map(|value| ((value + count / 2) / count) as u8));
+            }
+        }
+    }
+    (side, smaller)
+}
+
 pub(super) struct Panorama {
     pipeline: wgpu::RenderPipeline,
+    vertices: wgpu::Buffer,
+    maximum_side: u32,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniform: wgpu::Buffer,
@@ -196,6 +246,7 @@ impl Panorama {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         faces: Arc<Faces>,
+        gl: bool,
     ) -> Self {
         // CubeMapTexture's blur=true metadata: linear minification and magnification, no mips.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -250,6 +301,11 @@ impl Panorama {
             bind_group_layouts: &[Some(&layout)],
             ..Default::default()
         });
+        let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Title panorama vertices"),
+            contents: bytemuck::cast_slice(&cube_vertices()),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Title panorama"),
             layout: Some(&pipeline_layout),
@@ -257,7 +313,11 @@ impl Panorama {
                 module: &shader,
                 entry_point: Some("vs_panorama"),
                 compilation_options: Default::default(),
-                buffers: &[],
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: 12,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                })],
             },
             primitive: wgpu::PrimitiveState {
                 cull_mode: None,
@@ -285,6 +345,12 @@ impl Panorama {
             cache: None,
         });
         Self {
+            vertices,
+            maximum_side: if cfg!(target_os = "android") && gl {
+                256
+            } else {
+                u32::MAX
+            },
             pipeline,
             layout,
             sampler,
@@ -321,13 +387,15 @@ impl Panorama {
     }
 
     fn cube(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> wgpu::BindGroup {
+        let (side, pixels) =
+            reduced_texels(self.faces.size, self.faces.texels(), self.maximum_side);
         let texture = device.create_texture_with_data(
             queue,
             &wgpu::TextureDescriptor {
                 label: Some("Title panorama cube"),
                 size: wgpu::Extent3d {
-                    width: self.faces.size,
-                    height: self.faces.size,
+                    width: side,
+                    height: side,
                     depth_or_array_layers: 6,
                 },
                 mip_level_count: 1,
@@ -338,7 +406,7 @@ impl Panorama {
                 view_formats: &[],
             },
             wgpu::util::TextureDataOrder::LayerMajor,
-            &self.faces.texels(),
+            &pixels,
         );
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::Cube),
@@ -371,6 +439,7 @@ impl Panorama {
         };
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, cube, &[]);
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.draw(0..36, 0..1);
     }
 }
@@ -446,6 +515,39 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn panorama_reduction_averages_each_face_without_mixing_faces() {
+        let pixels = (0..6u8)
+            .flat_map(|face| {
+                [0u8, 2, 4, 6]
+                    .into_iter()
+                    .flat_map(move |delta| [face * 10 + delta, 20, 30, 255])
+            })
+            .collect();
+        let (side, pixels) = reduced_texels(2, pixels, 1);
+        assert_eq!(side, 1);
+        assert_eq!(
+            pixels,
+            (0..6u8)
+                .flat_map(|face| [face * 10 + 3, 20, 30, 255])
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn cube_geometry_covers_six_faces_with_inward_triangles() {
+        let mut faces = [0; 6];
+        for triangle in cube_vertices().as_chunks::<3>().0 {
+            let [a, b, c] = [triangle[0], triangle[1], triangle[2]].map(glam::Vec3::from_array);
+            let normal = (b - a).cross(c - a);
+            assert_eq!(normal.length_squared(), 16.0);
+            assert!(normal.dot(a) < 0.0);
+            let axis = (0..3).find(|&i| normal[i] != 0.0).unwrap();
+            faces[axis * 2 + usize::from(a[axis] > 0.0)] += 1;
+        }
+        assert_eq!(faces, [2; 6]);
     }
 
     #[test]

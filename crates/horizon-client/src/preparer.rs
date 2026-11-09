@@ -5,7 +5,6 @@
 //! game's resources folder; the runtime goes once it is done.
 #[path = "preparer_install.rs"]
 mod install;
-use starling_account::java::JRE25_ANDROID_ARM64 as RUNTIME;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
@@ -62,6 +61,10 @@ fn home() -> PathBuf {
 /// Prepare the fetched files into `resources` (the folder the game reads), on a thread of its
 /// own; `stage` follows it.
 pub fn start(resources: PathBuf) {
+    let Some(runtime) = starling_account::java::android_runtime(std::env::consts::ARCH) else {
+        *shared() = Stage::Failed("On 32-bit x86, import prepared resources as a .starling file. An Android x86 Java 25 runtime is not available.".into());
+        return;
+    };
     {
         let mut stage = shared();
         if matches!(
@@ -70,7 +73,7 @@ pub fn start(resources: PathBuf) {
         ) {
             return;
         }
-        *stage = Stage::Java(0, RUNTIME.size);
+        *stage = Stage::Java(0, runtime.size);
     }
     let spawned = std::thread::Builder::new()
         .name("preparer".into())
@@ -97,13 +100,20 @@ pub fn start(resources: PathBuf) {
 }
 
 fn run(resources: &Path) -> Result<(), String> {
+    let runtime = starling_account::java::android_runtime(std::env::consts::ARCH)
+        .ok_or("No Java runtime is available for this architecture.")?;
     let server_jar = crate::accounts::server_jar()
         .ok_or("The game files are not all there: download them again.")?;
     let library = crate::platform::library_dir().ok_or("Starling cannot find its own files.")?;
     let home = home();
+    let kit = home.join("kit");
+    unpack_kit(&kit)?;
+    if !horizon_prepare::exporters::available(&kit) {
+        return Err("The app's exporter bundle is missing, outdated or damaged. Install the current APK again.".into());
+    }
     let jre = home.join("jre25");
     starling_account::java::install(
-        &RUNTIME,
+        runtime,
         &jre,
         &|done, total| {
             *shared() = if done >= total {
@@ -114,8 +124,6 @@ fn run(resources: &Path) -> Result<(), String> {
         },
         &|| false,
     )?;
-    let kit = home.join("kit");
-    unpack_kit(&kit)?;
     let temp = home.join("tmp");
     std::fs::create_dir_all(&temp).map_err(|e| format!("{}: {e}", temp.display()))?;
     let env = |path: &Path| path.display().to_string();
@@ -140,6 +148,9 @@ fn run(resources: &Path) -> Result<(), String> {
             ),
         ],
     });
+    if let Some(limit) = horizon_prepare::java::max_heap_mib() {
+        log::info!("Horizon: 32-bit preparation Java heap limit: {limit} MiB");
+    }
     *shared() = Stage::Preparing("Starting Java".into());
     let made = horizon_prepare::prepare(
         &horizon_prepare::Options {
@@ -301,6 +312,7 @@ fn crc32(bytes: &[u8]) -> u32 {
 fn unpack_kit(dir: &Path) -> Result<(), String> {
     let bytes = crate::platform::asset("prepare-kit.zip")
         .ok_or("Starling's preparer is missing from the app: install it again.")?;
+    install::reset_kit_sources(dir)?;
     unpack(&bytes, dir)
 }
 

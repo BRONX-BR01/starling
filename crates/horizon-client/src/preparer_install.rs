@@ -1,6 +1,27 @@
 //! Commit prepared resources without deleting the last installation before the rename succeeds.
 use std::{fs, path::Path};
 
+/// APK updates may remove/rename original Java sources. Do not leave those in
+/// the bundle key, but retain the preparer's independent `.local` work cache.
+pub(super) fn reset_kit_sources(dir: &Path) -> Result<(), String> {
+    for name in ["mods", "crates", "exporters"] {
+        let path = dir.join(name);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                let result = if metadata.is_dir() && !metadata.is_symlink() {
+                    fs::remove_dir_all(&path)
+                } else {
+                    fs::remove_file(&path)
+                };
+                result.map_err(|e| format!("Cannot refresh preparer sources: {e}"))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn activate(made: &Path, destination: &Path) -> Result<(), String> {
     if made == destination {
         return Ok(());
@@ -59,6 +80,21 @@ mod tests {
         ));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+    #[test]
+    fn apk_source_refresh_removes_old_inputs_but_keeps_work_cache() {
+        let dir = root();
+        for name in ["mods", "crates", "exporters", ".local"] {
+            fs::create_dir(dir.join(name)).unwrap();
+            fs::write(dir.join(name).join("old"), name).unwrap();
+        }
+        reset_kit_sources(&dir).unwrap();
+        assert_eq!(fs::read(dir.join(".local/old")).unwrap(), b".local");
+        for name in ["mods", "crates", "exporters"] {
+            assert!(!dir.join(name).exists());
+        }
+        reset_kit_sources(&dir).unwrap();
+        fs::remove_dir_all(dir).unwrap();
     }
     #[test]
     fn failed_publish_restores_old_resources_and_a_retry_replaces_them() {
