@@ -1,13 +1,27 @@
-**Starling 0.2.3: bring your worlds over from Horizon Android.**
+**Starling 0.8.0: the first release of Starling and Horizon Android together.**
 
-Horizon Android and Starling are becoming one app, in [starling-client](https://github.com/starling-client/starling). Starling installs beside Horizon Android and takes nothing from it.
+Horizon Android and Starling are now one app, in [starling-client/starling](https://github.com/starling-client/starling). Thanks to [Vasysik](https://github.com/Vasysik), who founded Horizon Android, for the support for older phones, the terrain work on Adreno and the game folder in the Files app in this release.
 
 ## Install
 
 - **Already have Starling:** tap **Update** inside the game.
-- **New here, or coming from Horizon Android:** download **`starling-0.2.3-arm64-v8a.apk`** below and open it.
+- **New here, or coming from Horizon Android:** download the APK for your phone below and open it. Almost every phone takes **`starling-0.8.0-arm64-v8a.apk`**. Older 32-bit phones take `armeabi-v7a`, and x86 tablets and emulators take `x86_64` or `x86`.
 
 ## What's new
+
+- **A catalog inside the game:** the **Catalog** button on the Mods, Resource Packs and Shader Packs pages finds, installs and removes them. Java shader packs like Complementary, BSL and Photon install with a tap and run as they are.
+- **Your game folder in the Files app:** Starling shows up in Android's Files app and file pickers, to browse, copy, rename and delete.
+- **More shader packs work:** packs written for the core profile, like Pixel Perfect, no longer leave a black screen, and packs with only world programs, like Round World, load.
+- **More phones:** 32-bit ARM phones and x86 devices get their own APK, and older GPUs get a game built to run on them.
+- **Fixed the crash on opening a game in OpenGL** on Adreno phones.
+- **Faster terrain on Adreno**, and a lighter upscale on Mali and PowerVR when the resolution is below 100%.
+- **Many more native mods compile**, like Treefall, Eating Animation, Mod Menu, Carry Block and Dynamic FPS.
+- **Clearer build errors:** when a native mod can't compile, the message says which one, right away, and it no longer uses up your builds for the day.
+- **Build server...** on the Compile screen lets you use your own build server.
+- **Diagnostics:** **Options > Diagnostics** shows what happened when something goes wrong, and Starling offers a way back if it can't start.
+- Compiled native mods: compile them again after this update.
+
+## New in 0.2.3
 
 - **Coming from Horizon Android?** Starling offers to bring its worlds and resource packs over: in the setup on the first start, or over the title screen if Starling is already set up. Close Horizon Android, tap **Bring them over**, then **Use this folder** and **Allow**. They are copied: Horizon Android keeps its own.
 - **A new note for what you import:** a banner drops in across the top of the screen, with a sound, and says what each file you open with Starling added, or what went wrong.
