@@ -3927,7 +3927,7 @@ impl Renderer {
             {
                 0
             } else if flat::for_vanilla(&info) {
-                flat::MIN_SECTIONS
+                flat::vanilla_min_sections(&info)
             } else {
                 // Only a shader pack's terrain and shadow pass draw flat here.
                 usize::MAX
@@ -7638,11 +7638,15 @@ impl Renderer {
                 &self.globals,
             );
         }
+        // On Adreno, shader packs keep the draws they had: its bar is for frames without one.
+        let flat_by_count = !adreno::adreno_vulkan(&self.info)
+            || (self.native.is_none() && self.pack_post.is_none());
         let flat_frame = match &mut self.flat {
             Some(flat)
                 if self.flat_on
                     && !self.draws.is_empty()
-                    && (self.drawn_sections >= flat.min_sections
+                    && (((flat_by_count || flat.min_sections == 0)
+                        && self.drawn_sections >= flat.min_sections)
                         || pack_terrain
                         || shadow_view.is_some()) =>
             {
