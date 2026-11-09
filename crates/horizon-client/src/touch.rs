@@ -5,7 +5,7 @@
 //! control when it lands and keeps it until it lifts.
 //!
 //! As Bedrock's control modes, the taps and presses act on what is under the finger ("tap to
-//! interact", [`Interact::Tap`], the default: no crosshair, no Attack and Use buttons) or on what
+//! interact", [`Interact::Tap`], the default: no crosshair, no Use button) or on what
 //! the crosshair is on ("aim crosshair", [`Interact::Crosshair`]).
 //!
 //! Where the controls are is a [`LayoutConfig`] the player edits in place ([`LayoutEditor`]):
@@ -137,10 +137,10 @@ impl Button {
             Button::Players => "players",
         }
     }
-    /// Only for aiming the crosshair: tap to interact has no Attack and Use buttons (Bedrock's
-    /// "Joystick & tap to interact" shows none).
+    /// Only for aiming the crosshair: with tap to interact a tap uses what is under the finger.
+    /// Hit stays in both modes, a left click that lets another finger turn the view meanwhile.
     fn aims(self) -> bool {
-        matches!(self, Button::Attack | Button::Use)
+        matches!(self, Button::Use)
     }
 }
 
@@ -2287,7 +2287,7 @@ mod tests {
                 .unwrap()
                 .1
         };
-        // Aiming the crosshair brings Attack and Use into the layout, touching takes them out.
+        // Aiming the crosshair brings Use into the layout, touching takes it out.
         let has_use = |config: &LayoutConfig| {
             LayoutEditor::targets(config, w, h)
                 .iter()
@@ -2592,7 +2592,7 @@ mod tests {
     }
 
     #[test]
-    fn tap_to_interact_has_no_attack_and_use_and_the_debug_button_is_there() {
+    fn tap_to_interact_keeps_hit_has_no_use_and_the_debug_button_is_there() {
         let (w, h) = (3200.0, 1440.0);
         let has = |config: &LayoutConfig, button: Button| {
             Layout::from_config(config, w, h, 6.0)
@@ -2602,7 +2602,7 @@ mod tests {
         };
         let tap = LayoutConfig::default();
         assert!(Layout::from_config(&tap, w, h, 6.0).tap);
-        assert!(!has(&tap, Button::Attack) && !has(&tap, Button::Use));
+        assert!(has(&tap, Button::Attack) && !has(&tap, Button::Use));
         assert!(has(&tap, Button::Debug) && has(&tap, Button::Jump));
         let aim = LayoutConfig {
             interact: Interact::Crosshair,
