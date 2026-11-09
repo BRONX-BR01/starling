@@ -585,5 +585,20 @@
   "starling.account.setup.ely_title": "Log in to Ely.by",
   "starling.account.setup.offline_title": "Play offline",
   "starling.account.setup.import": "Files from a computer",
-  "starling.account.setup.preparing": "Sign-in complete. Preparing the game files…"
+  "starling.account.setup.preparing": "Sign-in complete. Preparing the game files…",
+  "starling.skin.default": "Default",
+  "starling.skin.account": "Account's",
+  "starling.skin.upload": "Upload to Microsoft profile",
+  "starling.skin.uploading": "Uploading…",
+  "starling.skin.uploaded": "Uploaded: servers now show it to everyone",
+  "starling.skin.upload_hint": "Upload it for others to see it on servers",
+  "starling.skin.upload_choose": "Choose a skin file to upload it",
+  "starling.skin.ely_site": "Change skin on ely.by",
+  "starling.skin.ely_hint": "Ely.by keeps your skin on its website",
+  "starling.skin.error.not_png": "A skin to upload is a PNG of up to 1 MiB.",
+  "starling.skin.error.signed_out": "No account is signed in.",
+  "starling.skin.error.ely_website": "Ely.by skins are changed on ely.by.",
+  "starling.skin.error.refused": "Mojang refused this skin: use 64x64 or 64x32.",
+  "starling.skin.error.busy": "Too many uploads. Try again in a minute.",
+  "starling.skin.error.service": "Minecraft services did not take it. Try later."
 }

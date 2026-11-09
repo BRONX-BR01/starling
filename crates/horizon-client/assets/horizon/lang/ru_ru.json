@@ -314,5 +314,20 @@
   "starling.account.setup.ely_title": "Вход в Ely.by",
   "starling.account.setup.offline_title": "Играть офлайн",
   "starling.account.setup.import": "Файлы с компьютера",
-  "starling.account.setup.preparing": "Вход выполнен. Подготавливаем файлы игры…"
+  "starling.account.setup.preparing": "Вход выполнен. Подготавливаем файлы игры…",
+  "starling.skin.default": "По умолчанию",
+  "starling.skin.account": "Из аккаунта",
+  "starling.skin.upload": "Загрузить в профиль Microsoft",
+  "starling.skin.uploading": "Загрузка…",
+  "starling.skin.uploaded": "Загружено: на серверах его видят все",
+  "starling.skin.upload_hint": "Загрузите, чтобы его видели на серверах",
+  "starling.skin.upload_choose": "Выберите файл скина для загрузки",
+  "starling.skin.ely_site": "Сменить скин на ely.by",
+  "starling.skin.ely_hint": "Ely.by хранит ваш скин на своём сайте",
+  "starling.skin.error.not_png": "Скин для загрузки — PNG до 1 МиБ.",
+  "starling.skin.error.signed_out": "Вход в аккаунт не выполнен.",
+  "starling.skin.error.ely_website": "Скины Ely.by меняются на ely.by.",
+  "starling.skin.error.refused": "Mojang не принял скин: нужен 64x64 или 64x32.",
+  "starling.skin.error.busy": "Слишком много загрузок. Повторите через минуту.",
+  "starling.skin.error.service": "Сервисы Minecraft не приняли скин. Позже."
 }

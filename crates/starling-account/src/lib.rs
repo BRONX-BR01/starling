@@ -18,6 +18,7 @@ pub mod ely;
 pub mod files;
 pub mod java;
 mod profiles;
+pub mod skins;
 pub use profiles::{
     Player, activate_profile, add_offline, add_offline_if, keep_ely, remove_profile,
     remove_profile_if, select_profile, select_profile_if, valid_offline_name,
