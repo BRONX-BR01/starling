@@ -1422,6 +1422,7 @@ fn account_control(words: &[&str]) -> Result<Option<Value>> {
     }
     let mut out = match accounts::state() {
         State::Offline => json!({ "state": "offline" }),
+        State::OfflineProfile(name) => json!({ "state": "offline", "name": name }),
         State::Resuming => json!({ "state": "resuming" }),
         State::Starting => json!({ "state": "starting" }),
         State::Code { code, link } => json!({ "state": "code", "code": code, "link": link }),

@@ -550,16 +550,19 @@ impl Options {
     /// The name to join servers with: the one given, else the offline name kept
     /// next to options.txt (created on first use).
     fn player_name(&self) -> String {
-        self.player_name.clone().unwrap_or_else(|| {
-            std::env::current_dir().map_or_else(
-                |_| horizon_client::offline_name::generate(0),
-                |_| {
-                    horizon_client::offline_name::load_or_create(
-                        &horizon_client::logging::player_dir(),
-                    )
-                },
-            )
-        })
+        self.player_name
+            .clone()
+            .or_else(|| crate::accounts::player_name())
+            .unwrap_or_else(|| {
+                std::env::current_dir().map_or_else(
+                    |_| horizon_client::offline_name::generate(0),
+                    |_| {
+                        horizon_client::offline_name::load_or_create(
+                            &horizon_client::logging::player_dir(),
+                        )
+                    },
+                )
+            })
     }
     /// The command line, then what it asks of the process: the game folder, the account.
     /// A bad command line is a [`launch_api::UsageError`] (exit code 2, no crash report).

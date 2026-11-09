@@ -358,6 +358,12 @@ impl Game<'_> {
         // it, servers keep the account's (remote.rs `join_server`).
         let auth = horizon_client::auth::current();
         let player = match &auth {
+            Some(account)
+                if horizon_client::accounts::in_game()
+                    && horizon_client::accounts::profiles().player().is_some() =>
+            {
+                account.name.clone()
+            }
             Some(account) => std::env::current_dir()
                 .ok()
                 .and_then(|dir| horizon_client::offline_name::chosen(&dir))

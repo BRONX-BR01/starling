@@ -330,8 +330,8 @@ pub enum Mode {
         alert: Option<Alert>,
     },
     Multiplayer(crate::multiplayer::Screen),
-    /// Starling's Microsoft account (`accounts`): signing in, the game's files.
-    Account,
+    /// Starling's profiles (`accounts`): signing in, switching, the game's files.
+    Account(account::Screen),
     /// SafetyScreen: the warning before the first Multiplayer click, with its
     /// "Do not show this screen again" box.
     MultiplayerWarning {
@@ -420,6 +420,7 @@ pub struct Title {
     credits_button: Cell<[f32; 4]>,
     /// `Minecraft.allowsMultiplayer()` once the account's attributes are known.
     pub allows_multiplayer: bool,
+    account_identity: Option<String>,
     /// The ban screens `Gui.addInitialScreens` queued, shown once the title is up.
     ban_queue: std::collections::VecDeque<crate::ban_notice::Notice>,
     /// A ban notice's three buttons as last drawn (`ConfirmLinkScreen`'s row).
@@ -727,7 +728,7 @@ impl Mode {
             Self::MultiplayerWarning { .. } => "multiplayer_warning",
             Self::Onboarding(_) => "onboarding",
             Self::BanNotice(_) => "ban_notice",
-            Self::Account => "account",
+            Self::Account(_) => "account",
         }
     }
 }
@@ -773,6 +774,7 @@ impl Title {
             warning_check: Cell::new([0.0; 4]),
             credits_button: Cell::new([0.0; 4]),
             allows_multiplayer: true,
+            account_identity: None,
             ban_queue: Default::default(),
             ban_buttons: Cell::new([(0.0, 0.0); 3]),
             backup: None,
@@ -2151,7 +2153,8 @@ impl Title {
                     .collect()
             }
             Mode::Backup { .. } => Vec::new(),
-            Mode::Account => account::buttons(w, h)
+            Mode::Account(screen) => screen
+                .buttons(w, h)
                 .into_iter()
                 .map(|(x, y, bw, label, enabled, id)| b(x, y, bw, &label, enabled, id))
                 .collect(),
@@ -2345,7 +2348,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                     ),
                 ),
             ),
-            Mode::Account => ScreenInfo::new("account", "Microsoft Account"),
+            Mode::Account(_) => ScreenInfo::new("account", lang::get("starling.account.title")),
             Mode::Multiplayer(_) => return None,
         };
         Some(info)
@@ -3097,7 +3100,9 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                 self.ban_buttons
                     .set([layout.buttons[0], layout.buttons[1], layout.buttons[2]]);
             }
-            Mode::Account => account::draw(atlas, batch),
+            Mode::Account(screen) => {
+                screen.draw(atlas, batch, &mut self.caret.borrow_mut(), self.started)
+            }
             Mode::Multiplayer(screen) => screen.draw(
                 atlas,
                 batch,
@@ -3443,13 +3448,17 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
                 Action::None
             }
             (Mode::Main, Some(8)) => {
-                self.mode = Mode::Account;
+                self.mode = Mode::Account(account::Screen::default());
                 Action::None
             }
-            (Mode::Account, Some(id)) => {
-                if account::click(id) {
+            (Mode::Account(screen), Some(id)) => {
+                if screen.click(id, h) {
                     self.mode = Mode::Main;
                 }
+                Action::None
+            }
+            (Mode::Account(screen), None) => {
+                screen.focus_at((x, y), w);
                 Action::None
             }
             (Mode::Onboarding(_), Some(onboarding::SOUNDS)) => Action::Sounds,
@@ -3826,7 +3835,14 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if self.preparing {
             return;
         }
-        self.edit_field(|edit| edit.insert_text(text));
+        let secret = self.password_focused();
+        self.edit_field(|edit| {
+            if secret {
+                edit.insert_password(text)
+            } else {
+                edit.insert_text(text)
+            }
+        });
     }
     pub fn backspace(&mut self) {
         self.field_key(winit::keyboard::KeyCode::Backspace, false, false);
@@ -3846,8 +3862,56 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         shortcut: crate::clipboard::EditShortcut,
         board: &mut dyn crate::clipboard::Clipboard,
     ) {
+        if self.password_focused() && shortcut == crate::clipboard::EditShortcut::Paste {
+            self.type_text(&board.get());
+            return;
+        }
+        if self.password_focused()
+            && matches!(
+                shortcut,
+                crate::clipboard::EditShortcut::Copy | crate::clipboard::EditShortcut::Cut
+            )
+        {
+            return;
+        }
         self.edit_field(|edit| {
             edit.shortcut(shortcut, board);
+        });
+    }
+    pub fn password_focused(&self) -> bool {
+        matches!(&self.mode, Mode::Account(screen) if screen.password_focused())
+    }
+    /// An account field mirrored by Android's IME, in character indices.
+    pub fn account_field_selection(&mut self) -> Option<(usize, usize)> {
+        if !matches!(self.mode, Mode::Account(_)) {
+            return None;
+        }
+        let (id, value, max) = self.focused_field()?;
+        let mut value = value.clone();
+        let mut selection = None;
+        self.caret.get_mut().edit(id, &mut value, max, |edit| {
+            selection = Some((edit.cursor, edit.highlight));
+        });
+        selection
+    }
+    /// Apply the whole IME replacement, including its cursor and selection.
+    pub fn set_account_field(&mut self, text: &str, cursor: usize, anchor: usize) {
+        if !matches!(self.mode, Mode::Account(_)) {
+            return;
+        }
+        let secret = self.password_focused();
+        self.edit_field(|edit| {
+            edit.value.clear();
+            edit.cursor = 0;
+            edit.highlight = 0;
+            if secret {
+                edit.insert_password(text);
+            } else {
+                edit.insert_text(text);
+            }
+            let len = edit.value.chars().count();
+            edit.cursor = cursor.min(len);
+            edit.highlight = anchor.min(len);
         });
     }
     /// Whether a text field has the focus.
@@ -3874,6 +3938,7 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
     fn focused_rect(&self, (w, h): (f32, f32)) -> Option<[f32; 4]> {
         let x = (w / 2.0).floor() - 100.0;
         match &self.mode {
+            Mode::Account(screen) => screen.field_rect(w),
             Mode::Select { .. } if self.search_focused => Some([x, 21.0, 200.0, 20.0]),
             Mode::Edit { focused: true, .. } => Some([x, edit_top(h) + 39.0, 200.0, 20.0]),
             Mode::Create { focus, options, .. } => create_world::field_rect(w, h, options.tab)
@@ -3905,8 +3970,15 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if !crate::ui::hovered((x, y), fx, fy, fw, fh) {
             return;
         }
+        let secret = self.password_focused();
         if let Some(field) = caret_field(&mut self.mode, self.search_focused, &mut self.search) {
-            self.caret.get_mut().press(atlas, field, rect, x, shift);
+            if secret {
+                self.caret
+                    .get_mut()
+                    .press_password(atlas, field, rect, x, shift);
+            } else {
+                self.caret.get_mut().press(atlas, field, rect, x, shift);
+            }
         }
     }
     /// The pointer moved with the button held (`EditBox.onDrag`).
@@ -3914,8 +3986,13 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if self.rules.get_mut().is_some() {
             return;
         }
+        let secret = self.password_focused();
         if let Some(field) = caret_field(&mut self.mode, self.search_focused, &mut self.search) {
-            self.caret.get_mut().drag(atlas, field, x);
+            if secret {
+                self.caret.get_mut().drag_password(atlas, field, x);
+            } else {
+                self.caret.get_mut().drag(atlas, field, x);
+            }
         }
     }
     /// The button was released: drags stop selecting.
@@ -3966,6 +4043,12 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
         if self.rules.get_mut().is_some() {
             return (Action::None, false);
         }
+        if let Mode::Account(screen) = &mut self.mode
+            && screen.submit(size.1)
+        {
+            return (Action::None, true);
+        }
+
         if matches!(self.mode, Mode::Edit { .. }) && self.focused_button.is_none() {
             self.confirm_edit();
             return (Action::None, true);
@@ -4021,6 +4104,12 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
     }
     /// Tab navigation through widgets and fields in either forward or reverse order.
     pub fn tab_dir(&mut self, reverse: bool, size: (f32, f32)) {
+        if let Mode::Account(screen) = &mut self.mode
+            && screen.tab(reverse)
+        {
+            self.focused_button = None;
+            return;
+        }
         if self.rules.get_mut().is_some() {
             return;
         }
@@ -4464,37 +4553,65 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
     /// as soon as the title is showing.
     fn poll_account(&mut self) {
         use crate::ban_notice::{AccountStatus, initial_notices};
-        use std::sync::{
-            OnceLock,
-            atomic::{AtomicBool, Ordering},
-        };
-        static STATUS: OnceLock<AccountStatus> = OnceLock::new();
-        static STARTED: AtomicBool = AtomicBool::new(false);
-        static QUEUED: AtomicBool = AtomicBool::new(false);
-        let Some(session) = crate::auth::current() else {
-            return;
-        };
-        if !STARTED.swap(true, Ordering::Relaxed) {
-            let session = session.clone();
-            let spawned = std::thread::Builder::new()
-                .name("Account status".into())
-                .spawn(move || {
-                    let _ = STATUS.set(crate::auth::fetch_account_status(&session));
-                });
-            if spawned.is_err() {
-                log::warn!("Horizon: could not start the account status fetch");
+        use std::sync::{Arc, Mutex, OnceLock};
+        type Cache = std::collections::HashMap<String, (Option<Arc<AccountStatus>>, bool)>;
+        static STATUS: OnceLock<Mutex<Cache>> = OnceLock::new();
+        let session = crate::auth::current();
+        let key = session.as_ref().map(|s| s.account_key());
+        if self.account_identity != key {
+            self.account_identity = key.clone();
+            self.allows_multiplayer = true;
+            self.ban_queue.clear();
+            if matches!(self.mode, Mode::BanNotice(_)) {
+                self.mode = Mode::Main;
             }
         }
-        let Some(status) = STATUS.get() else {
+        let (Some(session), Some(key)) = (session, key) else {
             return;
         };
-        self.allows_multiplayer = status.allows_multiplayer();
-        if !QUEUED.swap(true, Ordering::Relaxed) {
-            self.ban_queue
-                .extend(initial_notices(status, &session.name));
-        }
-        if matches!(self.mode, Mode::Main) {
-            self.next_ban_notice();
+        let cache = STATUS.get_or_init(Mutex::default);
+        let status = {
+            let mut entries = cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let std::collections::hash_map::Entry::Vacant(entry) = entries.entry(key.clone()) {
+                entry.insert((None, false));
+                let account = session.clone();
+                let account_key = key.clone();
+                if std::thread::Builder::new()
+                    .name("Account status".into())
+                    .spawn(move || {
+                        let status = Arc::new(crate::auth::fetch_account_status(&account));
+                        if let Some(entry) = cache
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .get_mut(&account_key)
+                        {
+                            entry.0 = Some(status);
+                        }
+                    })
+                    .is_err()
+                {
+                    entries.remove(&key);
+                }
+            }
+            entries.get_mut(&key).and_then(|(status, queued)| {
+                status.clone().map(|status| {
+                    let first = !*queued;
+                    *queued = true;
+                    (status, first)
+                })
+            })
+        };
+        if let Some((status, first)) = status {
+            self.allows_multiplayer = status.allows_multiplayer();
+            if first {
+                self.ban_queue
+                    .extend(initial_notices(&status, &session.name));
+            }
+            if matches!(self.mode, Mode::Main) {
+                self.next_ban_notice();
+            }
         }
     }
     pub fn escape(&mut self) {
@@ -4514,6 +4631,11 @@ Would you like to enable the Narrator or visit the Accessibility Settings?",
             if let Some(exit) = rules.escape() {
                 self.close_rules(exit);
             }
+            return;
+        }
+        if let Mode::Account(screen) = &mut self.mode
+            && screen.back()
+        {
             return;
         }
         self.remember_direct_address();
@@ -4604,6 +4726,7 @@ fn caret_field<'a>(
     search: &'a mut String,
 ) -> Option<(crate::clipboard::FieldId, &'a mut String, usize)> {
     match mode {
+        Mode::Account(screen) => screen.field(),
         Mode::Select { .. } if search_focused => Some((SEARCH, search, 50)),
         Mode::Edit {
             name,

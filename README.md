@@ -72,6 +72,10 @@ What the Android port covers so far; what is being done now and next is in the [
 | Setting up on the phone | <img src="docs/media/progress/100.svg" alt="100%"> | Prepared on a phone in 79 s from the official 26.3 files, with Java fetched for it; fishing and hand-drawn settings while it works |
 | Microsoft account sign-in | <img src="docs/media/progress/100.svg" alt="100%"> | On the first start and in the game (the title screen's corner); the code and the ownership check work on a phone |
 
+The title screen’s account button also manages saved Microsoft, Ely.by and offline
+profiles. See [Android accounts](docs/android-accounts.md) for switching, registration
+and provider compatibility.
+
 ARMv7 build instructions and GPU/memory limitations are documented in
 [Android architectures](docs/android-armv7.md). Release APKs are published for
 ARM64, ARMv7, x86 and x86_64; install the one matching your device.

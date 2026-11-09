@@ -167,8 +167,10 @@ fn step(setup: &Setup, failure: &str) -> Step {
     }
     match accounts::state() {
         // Play offline tapped, at the start or after a failed sign-in: the question.
-        State::Offline | State::Failed(_) if setup.offline_asked => Step::Offline,
-        State::Offline => {
+        State::Offline | State::OfflineProfile(_) | State::Failed(_) if setup.offline_asked => {
+            Step::Offline
+        }
+        State::Offline | State::OfflineProfile(_) => {
             #[cfg(target_os = "android")]
             if let Some(stage) = folder_offer(setup) {
                 return Step::Folder(stage);
@@ -182,7 +184,11 @@ fn step(setup: &Setup, failure: &str) -> Step {
         }
         State::Resuming | State::Starting | State::SignedIn(_) => Step::Talking,
         State::Code { code, link } => Step::Code { code, link },
-        State::Failed(e) => Step::SignInFailed(e),
+        State::Failed(e) => Step::SignInFailed(if e.starts_with("starling.account.") {
+            horizon_client::lang::get(&e)
+        } else {
+            e
+        }),
     }
 }
 
