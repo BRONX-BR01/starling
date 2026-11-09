@@ -829,6 +829,9 @@ impl Game<'_> {
             self.touch.faces = faces;
         }
         if let Some(id) = self.window.as_ref().map(|w| w.id()) {
+            self.touch.pointer.set_hold_presses(
+                self.title.is_none() && matches!(self.screen, Screen::Inventory | Screen::Creative),
+            );
             for mouse in self.touch.pointer.frame_events(now) {
                 self.handle_window_event(event_loop, id, mouse, InputOrigin::User);
             }
