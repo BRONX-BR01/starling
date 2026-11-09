@@ -294,5 +294,6 @@
   "starling.account.files_ready": "Файлы игры загружены и проверены",
   "starling.account.downloading": "Загрузка",
   "starling.account.signin_required": "Нужен вход: %s",
-  "starling.account.ely_working": "Вход в Ely.by"
+  "starling.account.ely_working": "Вход в Ely.by",
+  "starling.account.name_in_accounts": "Имя и профиль меняются в «Аккаунтах» главного экрана."
 }

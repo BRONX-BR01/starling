@@ -16,6 +16,9 @@ profile and its saved sign-in; worlds and other profiles stay in place.
   registration or online authentication.
 
 Switch profiles from the title screen before opening a world or joining a server.
+The title player preview follows the selected name. While a profile is selected,
+Skin Customization directs name changes to Accounts instead of editing the old
+offline alias.
 A failed sign-in or activation leaves the previous profile selected. Cancelling
 an in-flight sign-in prevents its late completion from replacing a later choice.
 **Game files** still opens Starling's existing resumable official-file download.

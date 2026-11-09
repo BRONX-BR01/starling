@@ -49,9 +49,7 @@ pub(super) fn main_label() -> String {
         return tr("working");
     }
     if matches!(accounts::state(), State::Failed(_)) {
-        return accounts::player_name()
-            .map(|n| with("signin_required", &n))
-            .unwrap_or_else(|| tr("title"));
+        return tr("title");
     }
     accounts::player_name()
         .map(|n| with("active", &n))
