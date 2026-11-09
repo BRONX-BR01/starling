@@ -2516,10 +2516,10 @@ mod tests {
         assert!(!sprint.live && (sprint.place.size - 0.24).abs() < 1e-5);
         let layout = Layout::from_config(&back, w, h, 6.0);
         assert_eq!(layout.extra.len(), 1);
-        // The stick, the buttons but Attack and Use (tap to interact), the running mod's.
+        // The stick, the buttons but Attack (tap to interact), the running mod's.
         assert_eq!(
             LayoutEditor::targets(&back, w, h).len(),
-            1 + Button::ALL.len() - 2 + 1
+            1 + Button::ALL.len() - 1 + 1
         );
         // Reset brings back the mods' own places.
         let mut reset = LayoutConfig::default();
