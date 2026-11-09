@@ -639,6 +639,16 @@ mod tests {
         std::fs::write(dir.join("broken.hnmod"), "not a zip").unwrap();
         // A release: none is built in; the page lists them, sorted, instead of "No mods".
         let rows = not_built(&dir, "", &[]);
+        // The file that isn't a bundle gets a row named after it, saying why, with no Compile.
+        let (broken, rows): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.id.is_empty());
+        assert_eq!(broken.len(), 1);
+        assert_eq!(broken[0].title, "broken.hnmod");
+        assert!(
+            broken[0]
+                .problem
+                .as_deref()
+                .is_some_and(|p| p.starts_with("Not a native mod Starling can read"))
+        );
         let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["minimap", "veinminer", "zoom"]);
         assert_eq!(rows[1].title, "veinminer 0.3.0");
@@ -651,7 +661,8 @@ mod tests {
             id: "minimap".into(),
             ..rows[0].clone()
         };
-        let rows = not_built(&dir, built, &[listed]);
+        // The broken file's row, listed already, isn't added again when the page reads the folder.
+        let rows = not_built(&dir, built, &[listed, broken[0].clone()]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].id, "veinminer");
         // No folder: no rows.
