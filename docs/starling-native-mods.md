@@ -7,8 +7,8 @@ service does it and the phone swaps in the result:
 
 1. **The mod.** The player opens an `.hnmod` with Starling (`import.rs`), which puts it in `horizon-native-mods/`.
 2. **Compile.** Its row on the Mods page has a Compile button (`game/native_builds.rs`). After a warning, the game sends
-   the folder's mods to the service, and the player can fish or mine while it waits (`game/setup/fishing.rs`,
-   `game/build_mining.rs`).
+   the folder's mods, without the assets and data only the game reads, to the service, and the player can fish or mine
+   while it waits (`game/setup/fishing.rs`, `game/build_mining.rs`).
 3. **The download.** The game's library comes back, is checked against its SHA-256, and is chosen for the next start
    (`files/native/current`). A dropped download goes on from where it stopped.
 4. **The swap.** At the next start `StarlingActivity` loads the chosen library in place of the APK's own
@@ -55,12 +55,37 @@ in an overlay thrown away after it, so a mod can't reach a later player's build.
 
 `mod_build_gateway.py`, behind HTTPS on a small machine that stays on, is what the game talks to. The machine that builds
 sleeps until a request wakes it (about 35 seconds) and goes back to sleep once it has been idle for 15 minutes. It limits
-how many builds an address, and everyone together, can ask for in a day.
+how many builds an address, and everyone together (`BUILDS_PER_DAY`, 80 unless set), can ask for in a day, and says which
+limit it was. Mods that are already built pass at any limit, a build that failed gives its place back, and failures have
+a day limit of their own, counted by job. Mods that fail for their own fault (a refused injection, a compile error with
+its code) aren't built again: asking again gets the same error at once and counts nothing.
 
 Each new release needs `versions.json` updated and the clean cache rebuilt on its commit, or its first builds are slow.
+
+## Where the service is
+
+`packaging/android/build-server.txt`, read from the organisation's protected `starling` branch before each compile, says
+the service's address, so it can move without an update. A game that can't read it uses the last address it read, then
+the one built in. Change that file only once the new address answers.
+
+## Another build server
+
+The Native mods card's **Build server...** button lets a player type another server's address. A mod maker or a group can
+run their own: it takes `mod_build_server.py` and `mod_build_sandbox.sh` on a Linux machine, the Android build tools, a
+clean build cache and `versions.json` for each Starling version it serves, behind HTTPS. Most players can't do that, so
+this is not how Starling's own limits go away.
+
+- **Only typed by hand**, in the activity's dialog (`StarlingActivity.askBuildServer`): no link, file or setting from
+  outside can choose it. HTTPS to a host and nothing else, so an address can't hide where it goes.
+- **What it gets:** the same request as Starling's service, the mods' manifests and sources, and nothing else on the
+  phone.
+- **What it can do:** the library it sends back runs as the game, with its worlds and its signed-in account. The red
+  warning is the only protection, and it is a warning: nothing can check another server's build. It shows in the dialog,
+  and with the server's name on the Compile card, on the Native mods card and when such a build is ready.
 
 ## Security
 
 - **No secret in the APK.** It only talks to the gateway, over HTTPS, and needs no account.
 - **A native mod has the game's full access on the phone.** The warning says so; only the player can decide to trust it.
-- **The library is checked** against the SHA-256 the service gives for it.
+- **The library is checked** against the SHA-256 the service gives for it: that catches a damaged download, and proves
+  nothing about the server.

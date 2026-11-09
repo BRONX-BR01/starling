@@ -1,0 +1,50 @@
+"""What horizon-mixins refuses in the functions native mods hook, kept out of Starling's own changes.
+
+The upstream game has none of this in these places, and each one failed every mod hooking there.
+"""
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def body(path, signature):
+    """The braces of the function with this signature."""
+    text = (ROOT / path).read_text(encoding="utf-8").replace("\r\n", "\n")
+    at = text.index(signature)
+    depth, start = 0, None
+    parens = 0
+    for i in range(at, len(text)):
+        c = text[i]
+        parens += (c == "(") - (c == ")")
+        if c == "{" and parens == 0:
+            depth += 1
+            start = i if start is None else start
+        elif c == "}" and parens == 0:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise AssertionError(signature)
+
+
+class Targets(unittest.TestCase):
+    def test_game_has_no_macro_among_its_items(self):
+        text = (ROOT / "crates/horizon-client/src/game.rs").read_text(encoding="utf-8")
+        found = re.findall(r"^[a-zA-Z_][\w:]*!\s*[({\[]", text, re.M)
+        self.assertEqual(found, [], "E_UNSUPPORTED_MACRO for every function under `game`")
+
+    def test_hooked_functions_have_no_cfg_inside(self):
+        for path, signature in (
+            ("crates/horizon-client/src/game.rs", "fn handle_window_event("),
+            ("crates/horizon-client-render/src/options_ui.rs", "fn layout("),
+        ):
+            self.assertNotIn("#[cfg", body(path, signature), signature)
+
+    def test_remote_send_state_does_not_log(self):
+        text = body("crates/horizon-client/src/game/remote.rs", "fn remote_send_state(")
+        self.assertNotIn("log::", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

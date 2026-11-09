@@ -11,7 +11,7 @@ a time, and hands back the library. Python's standard library only.
 
 MOD_BUILD_ROOT (default ~/modbuild) holds versions.json ({"0.1.6": "<commit>"}), base/ (a clean build
 cache), source/ (a clone), jobs/ and results/. The same mods for the same version make the same job, so
-a second request gets the first one's library.
+a second request gets the first one's library, or the error, when the mods themselves were at fault.
 """
 import hashlib
 import http.server
@@ -37,6 +37,9 @@ MAX_QUEUE = 8
 BUILD_SECONDS = 15 * 60
 KEEP_RESULTS = 12
 ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+# A refusal, or a compile error with its code: the same mods on the same game fail the same way.
+# A bare "error: ..." can be the machine's, a full disk for one.
+SETTLED = re.compile(r"\(E_[A-Z_]+\):|error\[E\d+\]")
 
 lock = threading.Lock()
 jobs = {}
@@ -142,6 +145,8 @@ def submit(version, body, client):
         job = jobs.get(key)
         if job and job["state"] in ("queued", "building"):
             return key
+        if job and job["state"] == "failed" and SETTLED.search(job["error"]):
+            return key
         if done.exists():
             jobs[key] = {"state": "done"}
             return key
@@ -175,9 +180,12 @@ def submit(version, body, client):
 def why_failed(log):
     """What a player can read of a failed build: the first errors, without the paths."""
     text = log.read_text(errors="replace")
-    codes = re.findall(r'"code": "(E_[A-Z_]+)",\s*"message": "([^"]*)"', text)
-    if codes:
-        return f"The mod does not fit this game ({codes[0][0]}): {codes[0][1]}"[:600]
+    code = re.search(r'"code": "(E_[A-Z_]+)",\s*"message": "([^"]*)"', text)
+    if code:
+        # All of a player's mods build together: the name says which to take out.
+        named = re.match(r'(?:,\s*"file": "[^"]*")?,\s*"mod_id": "([a-z0-9_-]+)"', text[code.end() :])
+        who = f"The mod {named[1]}" if named else "The mod"
+        return f"{who} does not fit this game ({code[1]}): {code[2]}"[:600]
     errors = [l for l in text.splitlines() if l.startswith("error")]
     if errors:
         lines = [l[:160] for l in errors[:4]]
@@ -282,7 +290,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if state == "building":
             return {"state": state, "seconds": int(time.time() - job["started"])}
         if state == "failed":
-            return {"state": state, "error": job["error"]}
+            return {"state": state, "error": job["error"], "settled": bool(SETTLED.search(job["error"]))}
         if state == "done":
             about = json.loads((result_of(key) / "build.json").read_text())
             return {"state": state, "sha256": about["sha256"], "size": about["size"], "build": about}

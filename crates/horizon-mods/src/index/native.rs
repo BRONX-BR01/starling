@@ -224,6 +224,23 @@ impl Bundle {
         }
         Ok(Self { manifest, files })
     }
+
+    /// The bundle as the Android build service needs it: its manifest and sources, without the
+    /// content only the game reads, so a mod's assets don't count against the request's size. The
+    /// same files always make the same bytes, which is how the service knows it built them before.
+    pub fn for_build(&self) -> Result<Vec<u8>, String> {
+        use std::io::Write as _;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .last_modified_time(zip::DateTime::default());
+        for (name, bytes) in &self.files {
+            zip.start_file(name.as_str(), options)
+                .map_err(|e| e.to_string())?;
+            zip.write_all(bytes).map_err(|e| e.to_string())?;
+        }
+        Ok(zip.finish().map_err(|e| e.to_string())?.into_inner())
+    }
 }
 
 #[cfg(test)]
@@ -284,6 +301,40 @@ mod tests {
         );
         assert_eq!(facts.id.as_deref(), Some("veinminer"));
         assert!(facts.capabilities.is_empty());
+    }
+    #[test]
+    fn what_goes_to_the_build_service_leaves_the_content_out_and_repeats() {
+        let big = [7u8; 4096];
+        let bundle = read(
+            "for-build",
+            &[
+                ("mixins/veinminer/hook.rs", b"fn hook() {}"),
+                ("assets/veinminer/big.bin", &big),
+                ("data/veinminer/loot.json", b"{}"),
+            ],
+            &mixin(),
+        )
+        .unwrap();
+        let sent = bundle.for_build().unwrap();
+        assert_eq!(sent, bundle.for_build().unwrap());
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&sent)).unwrap();
+        let names: Vec<String> = (0..zip.len())
+            .map(|i| zip.by_index(i).unwrap().name().unwrap().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "horizon-native.json",
+                "mixins/veinminer/hook.rs",
+                "mixins/veinminer/horizon-mixin.toml"
+            ]
+        );
+        let path =
+            std::env::temp_dir().join(format!("native-bundle-sent-{}.hnmod", std::process::id()));
+        std::fs::write(&path, &sent).unwrap();
+        let again = Bundle::read(&path);
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(again.unwrap().files, bundle.files);
     }
     #[test]
     fn accepts_binary_data_in_the_bundle_data_directory() {

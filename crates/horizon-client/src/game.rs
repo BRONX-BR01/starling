@@ -105,6 +105,7 @@ mod copper_golems;
 mod cosmetics;
 mod creaking;
 mod creative_hotbar;
+mod creative_shift;
 mod creatures;
 mod crossbow;
 pub(crate) mod cushions;
@@ -2299,10 +2300,7 @@ fn glfw_button(button: MouseButton) -> i32 {
 /// crafting grid and its result it adds to the inventory's.
 const BEDROCK_SHIFT: f32 = 100.0;
 const BEDROCK_CRAFT: [usize; 5] = [100, 101, 102, 103, 200];
-thread_local! {
-    /// Where the creative window is from the middle of the screen (`creative_origin`).
-    static CREATIVE_SHIFT: std::cell::Cell<f32> = const { std::cell::Cell::new(0.0) };
-}
+use creative_shift::CREATIVE_SHIFT;
 
 fn select_creative_tab(
     creative: &mut Creative,
@@ -8358,6 +8356,7 @@ impl Game<'_> {
                     &mut batch,
                     self.cursor,
                     self.settings.file.bool("hideSplashTexts"),
+                    self.settings.file.bool("hideServerAddress"),
                 );
             }
             self.draw_title_player(&mut batch);
@@ -17177,17 +17176,7 @@ impl Game<'_> {
         if !ours {
             return;
         }
-        // The focus goes first when the game leaves the screen (home, the recent apps, a call),
-        // before the window, and the system may end the process from then on: the world is saved
-        // at once, as Bedrock does.
-        #[cfg(target_os = "android")]
-        if let WindowEvent::Focused(focused) = &event {
-            if *focused {
-                self.saved_for_background = false;
-            } else {
-                self.save_for_background();
-            }
-        }
+        self.save_when_focus_leaves(&event);
         if self.touch_event(event_loop, id, &event) {
             return;
         }

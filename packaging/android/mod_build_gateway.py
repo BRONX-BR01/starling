@@ -39,14 +39,20 @@ START_AGAIN_SECONDS = 90
 PER_ADDRESS = 16
 # A build that failed gives its place back, but it took the machine's time, so failing has its own limit.
 FAILED_PER_ADDRESS = 24
-PER_DAY = 80
+PER_DAY = int(os.environ.get("BUILDS_PER_DAY", "80"))
+FAILED_PER_DAY = PER_DAY
 DAY = 24 * 3600
+# As many as the service keeps results of (KEEP_RESULTS): beyond them it would build again, uncounted.
+BUILT_REMEMBERED = 12
+YOUR_LIMIT = "You have reached today's build limit. Try again tomorrow."
+EVERYONES_LIMIT = "The build server has reached today's limit for all players. Try again tomorrow."
 
 lock = threading.Lock()
 last_activity = time.time()
 started_at = None
 asked_at = 0.0
 accepted = []
+built = {}
 
 
 def power(action):
@@ -135,25 +141,43 @@ def sleeper():
                 started_at = None
 
 
-def within_quota(address, request):
-    """Whether this build counts within the day's, asked before it reaches the line: refused after, it
-    would still be built. The same request again costs nothing, unless it failed and would build again."""
+def refusal(address, request):
+    """What to say if this build doesn't count within the day's, asked before it reaches the line:
+    refused after, it would still be built. What is built already costs no build, and neither does the
+    same request again, unless it failed and would build again. None when it may go on."""
     now = time.time()
     with lock:
+        if request in built:
+            return None
         accepted[:] = [a for a in accepted if now - a["at"] < DAY]
+        # Failed for the mods' own fault: the service says so again without building.
+        if any(a["request"] == request and a["settled"] for a in accepted):
+            return None
         own = [a for a in accepted if a["address"] == address]
         if any(a["request"] == request and not a["failed"] for a in own):
-            return True
+            return None
         if (
             sum(not a["failed"] for a in own) >= PER_ADDRESS
             or sum(a["failed"] for a in own) >= FAILED_PER_ADDRESS
-            or len(accepted) >= PER_DAY
         ):
-            return False
+            return YOUR_LIMIT
+        if (
+            sum(not a["failed"] for a in accepted) >= PER_DAY
+            # By job: the same mods asked in another order fail without building.
+            or len({a["job"] for a in accepted if a["failed"] and a["job"]}) >= FAILED_PER_DAY
+        ):
+            return EVERYONES_LIMIT
         accepted.append(
-            {"at": now, "address": address, "request": request, "job": None, "failed": False}
+            {
+                "at": now,
+                "address": address,
+                "request": request,
+                "job": None,
+                "failed": False,
+                "settled": False,
+            }
         )
-    return True
+    return None
 
 
 def note_job(address, request, job):
@@ -165,11 +189,23 @@ def note_job(address, request, job):
                 a["failed"] = job is None
 
 
-def job_failed(job):
+def job_failed(job, settled=False):
     with lock:
         for a in accepted:
             if a["job"] == job:
                 a["failed"] = True
+                a["settled"] = settled
+
+
+def job_done(job):
+    """Remembers what this job was asked with: anyone asking the same gets its library, no build."""
+    with lock:
+        for a in accepted:
+            if a["job"] == job:
+                built.pop(a["request"], None)
+                built[a["request"]] = job
+        while len(built) > BUILT_REMEMBERED:
+            del built[next(iter(built))]
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -203,10 +239,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.answer(413, {"error": "That is too big to compile."})
         body = self.rfile.read(size)
         request = hashlib.sha256(self.path.encode() + body).hexdigest()
-        if not within_quota(self.address(), request):
-            return self.answer(
-                429, {"error": "That is enough builds for today. Try again tomorrow."}
-            )
+        refused = refusal(self.address(), request)
+        if refused:
+            return self.answer(429, {"error": refused})
         if not wake():
             return self.answer(200, {"starting": True})
         try:
@@ -258,10 +293,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data = response.read()
         self.wfile.write(data)
         try:
-            if json.loads(data).get("state") == "failed":
-                job_failed(path.rsplit("/", 1)[-1])
+            status = json.loads(data)
+            state = status.get("state")
         except ValueError:
-            pass
+            return
+        if state == "failed":
+            job_failed(path.rsplit("/", 1)[-1], bool(status.get("settled")))
+        elif state == "done":
+            job_done(path.rsplit("/", 1)[-1])
 
 
 def main():
