@@ -148,6 +148,7 @@ public final class GameFolderProvider extends DocumentsProvider {
             case "txt":
             case "toml":
             case "mcmeta":
+            case "log":
             case "wgsl":
             case "glsl":
             case "fsh":

@@ -366,8 +366,8 @@ pub fn install_update(name: &str) -> bool {
 }
 
 /// What the player made, moved with the game folder when it goes to shared storage: options.txt
-/// last, so a copy cut short is redone next time. All that GameFolder.java shows of the app's own
-/// files, in the same list (tests/test_android_game_folder.py).
+/// last, so a copy cut short is redone next time. GameFolder.java shows these of the app's own
+/// files, from the same list (tests/test_android_game_folder.py), and the logs.
 const PLAYER_FILES: &[&str] = &[
     "saves",
     "backups",

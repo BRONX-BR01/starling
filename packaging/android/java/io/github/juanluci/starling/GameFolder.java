@@ -21,8 +21,8 @@ import java.util.List;
  * tests/test_android_game_folder.py runs it on a computer.
  *
  * <p>In shared storage the whole folder is the player's. In the app's own files it sits beside
- * their sign-ins, native builds and caches, so only PLAYER_FILES show there, and those names stay
- * as they are.
+ * their sign-ins, native builds and caches, so only PLAYER_FILES and LOGS show there, and those
+ * names stay as they are.
  */
 final class GameFolder {
     static final String ROOT = "starling";
@@ -45,6 +45,9 @@ final class GameFolder {
             "horizon.txt",
             "touch-layout.json",
             "options.txt");
+
+    /** Shown in the app's own files but never moved: what players need for a bug report. */
+    private static final List<String> LOGS = Arrays.asList("logs", "crash-reports");
 
     /** Made when the app's own files are listed: nothing can be added at their top. */
     private static final String[] FOLDERS = {"saves", "resourcepacks", "shaderpacks", "horizon-mods"};
@@ -96,7 +99,7 @@ final class GameFolder {
             return file;
         }
         String[] names = id.substring(ROOT.length() + 1).split("/", -1);
-        if (ownFiles && !PLAYER_FILES.contains(names[0])) {
+        if (ownFiles && !PLAYER_FILES.contains(names[0]) && !LOGS.contains(names[0])) {
             throw new FileNotFoundException("Not in the game folder: " + id);
         }
         for (String name : names) {

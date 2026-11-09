@@ -141,6 +141,40 @@ public final class GameFolderChecks {
         }
         check(!top.contains("starling/accounts") && !top.contains("starling/native")
                 && !top.contains("starling/horizon-control.json"), "the private ones are not listed");
+        check(!new File(root, "logs").exists() && !new File(root, "crash-reports").exists(),
+                "the game makes its own logs folders");
+        write(new File(root, "logs/latest.log"), "log");
+        write(new File(root, "crash-reports/crash-1.txt"), "crash");
+        top = folder.children("starling");
+        check(top.contains("starling/logs") && top.contains("starling/crash-reports"), "logs listed");
+        check(!top.contains("starling/accounts") && !top.contains("starling/native"),
+                "still no accounts or native builds");
+        check(folder.children("starling/logs").contains("starling/logs/latest.log"), "a log listed");
+        check(read(folder.file("starling/logs/latest.log")).equals("log"), "a log read");
+        check(read(folder.file("starling/crash-reports/crash-1.txt")).equals("crash"), "a crash read");
+        for (final String id : new String[] {"starling/logs", "starling/crash-reports"}) {
+            check(folder.fixed(id), id + " is fixed");
+            refused(id + " keeps its name", new Action() {
+                @Override
+                public void run() throws IOException {
+                    folder.rename(id, "accounts");
+                }
+            });
+            refused(id + " stays", new Action() {
+                @Override
+                public void run() throws IOException {
+                    folder.delete(id);
+                }
+            });
+        }
+        check(new File(root, "logs/latest.log").isFile()
+                && new File(root, "crash-reports/crash-1.txt").isFile(), "not deleted");
+        refused("no way from the logs to the accounts", new Action() {
+            @Override
+            public void run() throws IOException {
+                folder.file("starling/logs/../accounts/account.json");
+            }
+        });
         check(!folder.takesNew("starling") && folder.takesNew("starling/saves"), "the top is closed");
         refused("nothing new at the top", new Action() {
             @Override
