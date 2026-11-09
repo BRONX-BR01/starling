@@ -969,6 +969,10 @@ impl Game<'_> {
         if self.catalog_typing() {
             return Some("catalog");
         }
+        // A server's dialog takes the input over whatever is under it (`text_field_focused`).
+        if self.dialog_open() {
+            return self.dialog_typing().then_some("dialog");
+        }
         if self.screen == Screen::Chat {
             Some("chat")
         } else if self.sign_edit.is_some() {
@@ -1007,6 +1011,7 @@ impl Game<'_> {
             "options" => Some(self.ui.options.text_field_at(cursor.0, cursor.1)),
             // The tap's click focused the box under it, or none.
             "world" => Some(self.world_options_typing()),
+            "dialog" => Some(self.dialog_typing()),
             context => self.text_field_rect(context).map(inside),
         }
     }

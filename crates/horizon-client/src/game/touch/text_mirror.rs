@@ -8,7 +8,11 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 use super::super::{Game, books::BookScreen};
-use horizon_client::{clipboard::FieldId, containers::BlockEntity};
+use horizon_client::{
+    clipboard::{FieldId, filter_text},
+    containers::BlockEntity,
+    ui::EditBox,
+};
 use winit::keyboard::KeyCode;
 
 /// The editor's flags (TextMirror.java): autocorrect and suggestions (messages, books, signs),
@@ -150,6 +154,22 @@ fn held(field: &Field, shown: Option<&Field>) -> (Option<(usize, usize)>, i32, i
     }
 }
 
+/// The editor's text and selection on a box that keeps its own cursor, through the box's filter
+/// and limit (`EditBox.insertText`): a position after a character it drops moves back with it.
+fn edit_box_set(edit: &mut EditBox, text: &str, cursor: usize, anchor: usize) {
+    let multiline = edit.multiline;
+    let kept = |pos: usize| {
+        let before: String = text.chars().take(pos).collect();
+        filter_text(&before, multiline).chars().count()
+    };
+    let value = filter_text(text, multiline);
+    if value != edit.value {
+        edit.set_value(&value);
+    }
+    edit.set_cursor(kept(anchor), false);
+    edit.set_cursor(kept(cursor), true);
+}
+
 /// Android's KEYCODE_* the editor passes on (TextMirror.key), as winit's.
 fn android_key(code: i32) -> Option<KeyCode> {
     Some(match code {
@@ -254,6 +274,14 @@ impl Game<'_> {
                     DONE | if password { PASSWORD } else { 0 },
                 )
             }
+            // A server dialog's text input; another one of its inputs starts afresh. Enter breaks
+            // a line in a multiline box and does nothing in a one-line box (DialogScreen).
+            "dialog" => {
+                let input = self.dialog_input()?;
+                let flags = if input.multiline { MULTILINE } else { DONE };
+                let id = ("dialog", input.index);
+                field(id, &input.value, input.selection, input.max, flags)
+            }
             _ => return None,
         })
     }
@@ -272,6 +300,10 @@ impl Game<'_> {
             }
             "chat" => self.chat_set_text(text, cursor, anchor),
             "command" => self.command_block_set_text(text, cursor, anchor),
+            "dialog" => match self.dialog_input_box() {
+                Some(edit) => edit_box_set(edit, text, cursor, anchor),
+                None => self.dialog_multiline_set(text),
+            },
             _ => {
                 // A field that types at its end: back to where the two texts part, then the
                 // rest typed.
@@ -356,6 +388,19 @@ impl Game<'_> {
                 }
                 _ => {}
             },
+            // As the dialog takes them from a keyboard: Tab goes to the next text input. Backspace
+            // comes with nothing before the editor's cursor, where a one-line box's cursor is too;
+            // a multiline box's is at its end, which it would cut.
+            Some("dialog") => {
+                let keyed = match key {
+                    KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Tab => true,
+                    KeyCode::Backspace => self.dialog_input_box().is_some(),
+                    _ => false,
+                };
+                if keyed {
+                    let _ = self.dialog_key(key, None, None);
+                }
+            }
             _ => {}
         }
     }
@@ -541,6 +586,25 @@ mod tests {
             m.sync(Some(longer.clone())),
             Some(Push::Update(longer, 4, 4, 3))
         );
+    }
+
+    #[test]
+    fn an_edit_on_a_box_with_a_cursor_keeps_its_filter_and_limit() {
+        // A server dialog's one-line text input, 5 characters at most.
+        let mut edit = EditBox::new(0.0, 0.0, 200.0, 20.0);
+        edit.max_length = 5;
+        // A line break pasted in the editor is dropped; the cursor after it moves back with it.
+        edit_box_set(&mut edit, "ab\ncd", 5, 1);
+        assert_eq!(edit.value, "abcd");
+        assert_eq!((edit.cursor, edit.highlight), (4, 1));
+        // The selection alone moves.
+        edit_box_set(&mut edit, "abcd", 0, 2);
+        assert_eq!(edit.value, "abcd");
+        assert_eq!((edit.cursor, edit.highlight), (0, 2));
+        // Past the box's limit the text is cut, and the cursor with it.
+        edit_box_set(&mut edit, "abcdefg", 7, 7);
+        assert_eq!(edit.value, "abcde");
+        assert_eq!((edit.cursor, edit.highlight), (5, 5));
     }
 
     #[test]
