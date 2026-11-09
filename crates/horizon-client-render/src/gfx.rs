@@ -156,6 +156,28 @@ fn translucent_batchable(info: &wgpu::AdapterInfo, multi_draw: bool) -> bool {
     multi_draw && info.backend != wgpu::Backend::Gl
 }
 
+/// The present mode a new window's swapchain starts with, until the game applies VSync and the
+/// present-mode setting (`Renderer::set_present_mode`): Mailbox where the surface offers it.
+#[cfg(not(target_os = "android"))]
+fn first_present_mode(modes: &[wgpu::PresentMode]) -> wgpu::PresentMode {
+    if modes.contains(&wgpu::PresentMode::Mailbox) {
+        wgpu::PresentMode::Mailbox
+    } else {
+        wgpu::PresentMode::Fifo
+    }
+}
+
+/// The present mode a new window's swapchain starts with, until the game applies VSync and the
+/// present-mode setting (`Renderer::set_present_mode`): Fifo on Android, where a Mali driver was
+/// seen stalling for seconds inside a Mailbox present before the first world frame, long enough
+/// for Android to report the app as not responding. Adapted from Vasysik/horizon-android
+/// (`Renderer::new_with_context`), MIT, copyright (c) 2026 Ludovic Marie and the Horizon
+/// contributors.
+#[cfg(target_os = "android")]
+fn first_present_mode(_modes: &[wgpu::PresentMode]) -> wgpu::PresentMode {
+    wgpu::PresentMode::Fifo
+}
+
 /// Two solid passes only where a discard costs the GPU its hidden surface removal: Apple's tiled
 /// GPUs, behind Metal, and Adreno (Vasysik's Android fork measured 25-27% less GPU time on an
 /// Adreno 710). A Mali-G57 gained no GPU time from it, and PowerVR hasn't been measured. Elsewhere
@@ -2183,13 +2205,7 @@ impl Renderer {
             config.present_mode = previous
                 .map(|renderer| renderer.config.present_mode)
                 .filter(|mode| caps.present_modes.contains(mode))
-                .unwrap_or_else(|| {
-                    if caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
-                        wgpu::PresentMode::Mailbox
-                    } else {
-                        wgpu::PresentMode::Fifo
-                    }
-                });
+                .unwrap_or_else(|| first_present_mode(&caps.present_modes));
             if previous.is_none() {
                 startup_step(format_args!(
                     "device ready; configuring the surface ({}x{} {:?}, {:?})",
