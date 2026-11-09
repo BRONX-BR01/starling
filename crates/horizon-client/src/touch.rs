@@ -1694,7 +1694,8 @@ enum Gesture {
 
 /// Off the playing screen, the first finger is the pointer. It moves the cursor when it lands and
 /// decides later: lifted where it landed it clicks, moved up or down it scrolls, moved sideways
-/// (or held still past [`HOLD`] first) it drags with the button held. Other fingers are ignored.
+/// (or, on a screen of item slots, held still past [`HOLD`] first) it drags with the button held.
+/// Other fingers are ignored.
 #[derive(Default)]
 pub struct TouchPointer {
     finger: Option<u64>,
@@ -1708,6 +1709,8 @@ pub struct TouchPointer {
     scroll_scale: Option<f32>,
     /// The finger landed where a drag is meant (a scrollbar): moving it drags, never scrolls.
     drag: bool,
+    /// A finger held still presses ([`TouchPointer::set_hold_presses`]).
+    hold_presses: bool,
 }
 
 /// The game turns this many wheel pixels into one wheel step...
@@ -1730,6 +1733,12 @@ impl TouchPointer {
     /// scrollbar, which follows it); lifting it ends that.
     pub fn prefer_drag(&mut self) {
         self.drag = true;
+    }
+
+    /// Whether a finger held still presses, which a carried item's drag needs. Elsewhere it would
+    /// click whatever is under a finger that rests before it scrolls a list.
+    pub fn set_hold_presses(&mut self, on: bool) {
+        self.hold_presses = on;
     }
 
     /// Whether `finger` is the pointer.
@@ -1801,7 +1810,8 @@ impl TouchPointer {
 
     /// Each frame: a pointer held still past [`HOLD`] presses (a long press, then a drag).
     pub fn frame(&mut self, now: Instant) -> Vec<Pointer> {
-        if self.finger.is_some()
+        if self.hold_presses
+            && self.finger.is_some()
             && self.gesture == Gesture::Undecided
             && self.down.is_some_and(|d| now - d >= HOLD)
         {
@@ -2120,7 +2130,9 @@ mod tests {
             p.step(3, TouchPhase::Ended, [170.0, 105.0], 20.0, now),
             vec![Pointer::Move([170.0, 105.0]), Pointer::Release]
         );
-        // Held still: pressed by the frame, then free to drag up or down (an item).
+        // Held still on a screen of slots: pressed by the frame, then free to drag up or down (an
+        // item).
+        p.set_hold_presses(true);
         p.step(4, TouchPhase::Started, [100.0, 100.0], 20.0, now);
         assert_eq!(p.frame(now + HOLD), vec![Pointer::Press]);
         assert_eq!(
@@ -2131,6 +2143,30 @@ mod tests {
         assert!(
             p.step(5, TouchPhase::Started, [300.0, 300.0], 20.0, now)
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_finger_resting_on_a_list_clicks_nothing_until_it_lifts_or_scrolls() {
+        let now = Instant::now();
+        let mut p = TouchPointer::default();
+        // It rests on a button, then scrolls: the button is never pressed.
+        p.step(1, TouchPhase::Started, [100.0, 500.0], 20.0, now);
+        assert!(p.frame(now + HOLD).is_empty());
+        assert_eq!(
+            p.step(1, TouchPhase::Moved, [102.0, 400.0], 20.0, now + HOLD),
+            vec![Pointer::Scroll(-50.0)]
+        );
+        assert!(
+            p.step(1, TouchPhase::Ended, [102.0, 400.0], 20.0, now + HOLD)
+                .is_empty()
+        );
+        // However long it rested, lifted where it landed it is a tap.
+        p.step(2, TouchPhase::Started, [100.0, 500.0], 20.0, now);
+        assert!(p.frame(now + HOLD).is_empty());
+        assert_eq!(
+            p.step(2, TouchPhase::Ended, [100.0, 500.0], 20.0, now + HOLD),
+            vec![Pointer::Press, Pointer::Release]
         );
     }
 
