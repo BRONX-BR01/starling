@@ -107,9 +107,9 @@ pub(super) struct Touch {
     tapped: Option<(Instant, [f32; 2])>,
     /// The press held on the view uses (a mob, the air) rather than breaks.
     hold_uses: bool,
-    /// The Hit button is held: it acts along the crosshair, which shows meanwhile, while another
+    /// The Use button is held: it acts along the crosshair, which shows meanwhile, while another
     /// finger turns the view.
-    hit_held: bool,
+    use_held: bool,
     /// The gyroscope is listened to (the layout aims with it and the controls play).
     gyro_on: bool,
     /// The on-screen keyboard was asked for.
@@ -526,7 +526,7 @@ impl Game<'_> {
     /// The window pixel tap to interact aims through: a finger that may still tap or holds, or
     /// a tap whose click is still held.
     fn touch_aim_point(&self) -> Option<[f32; 2]> {
-        if !self.touch_taps() || self.touch.hit_held {
+        if !self.touch_taps() || self.touch.use_held {
             return None;
         }
         self.touch.controls.aim().or_else(|| {
@@ -576,9 +576,9 @@ impl Game<'_> {
     }
 
     /// Tap to interact has no crosshair, and outlines a block only while a finger aims at it, or
-    /// while the Hit button acts along the crosshair.
+    /// while the Use button acts along the crosshair.
     pub(super) fn touch_hides_crosshair(&self) -> bool {
-        self.touch_taps() && !self.touch.hit_held
+        self.touch_taps() && !self.touch.use_held
     }
     pub(super) fn touch_hides_outline(&self) -> bool {
         self.touch_hides_crosshair() && self.touch_aim_point().is_none()
@@ -1079,14 +1079,8 @@ impl Game<'_> {
                 Action::Look(dx, dy) => self.mouse.add_motion(dx as f64, dy as f64),
                 Action::Press(Button::Jump) => self.pad.touch_hold(Pad::South, true),
                 Action::Release(Button::Jump) => self.pad.touch_hold(Pad::South, false),
-                Action::Press(Button::Attack) => {
-                    self.touch.hit_held = true;
-                    self.pad.touch_trigger(1, 1.0);
-                }
-                Action::Release(Button::Attack) => {
-                    self.touch.hit_held = false;
-                    self.pad.touch_trigger(1, 0.0);
-                }
+                Action::Press(Button::Attack) => self.pad.touch_trigger(1, 1.0),
+                Action::Release(Button::Attack) => self.pad.touch_trigger(1, 0.0),
                 // Held on a block it breaks it; on a mob or the air it is the right button
                 // held (interact, eat, draw a bow), as Bedrock's press.
                 Action::HoldStart(_) => {
@@ -1100,10 +1094,14 @@ impl Game<'_> {
                     self.pad.touch_trigger(trigger, 0.0);
                 }
                 Action::Press(Button::Use) => {
+                    self.touch.use_held = true;
                     self.touch.use_until = None;
                     self.pad.touch_trigger(0, 1.0);
                 }
-                Action::Release(Button::Use) => self.pad.touch_trigger(0, 0.0),
+                Action::Release(Button::Use) => {
+                    self.touch.use_held = false;
+                    self.pad.touch_trigger(0, 0.0);
+                }
                 // Sneak holds the key itself, in its own mode (touch_sync_sneak); the pad's
                 // buttons for the rest (docs/controllers.md).
                 Action::Press(Button::Sneak) => {}
