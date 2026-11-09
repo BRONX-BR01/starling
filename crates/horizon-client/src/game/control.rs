@@ -403,6 +403,7 @@ impl Game<'_> {
                 }
                 Ok(Some(json!({ "ok": true, "cull": r.section_cull() })))
             }
+            "settled-terrain" => self.settled_terrain_command(&words),
             "gpu-passes" => {
                 match words.get(1).copied() {
                     None => {}

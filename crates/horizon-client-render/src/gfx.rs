@@ -4575,6 +4575,19 @@ impl Renderer {
         }
         Ok(())
     }
+    /// Whether frames that may take it draw whole sections through less work (`solid_paths`).
+    pub fn settled_terrain_on(&self) -> bool {
+        self.solid_paths.as_ref().is_some_and(|p| p.settled_on)
+    }
+    /// Switches drawing whole sections through less work, for A/B checks.
+    pub fn set_settled_terrain(&mut self, on: bool) -> Result<()> {
+        match &mut self.solid_paths {
+            Some(paths) => paths.settled_on = on,
+            None if on => return Err("the cheaper terrain shaders are off on this device".into()),
+            None => {}
+        }
+        Ok(())
+    }
     /// Whether sections are drawn as one index list per frame (`flat`).
     pub fn flat_draws(&self) -> bool {
         self.flat_on
@@ -8192,7 +8205,9 @@ impl Renderer {
             .as_ref()
             .filter(|_| split_solid && self.native.is_none() && self.pack_post.is_none())
             .filter(|_| cull.is_none())
-            .map_or_else(Default::default, |paths| paths.for_frame(&self.origins));
+            .map_or_else(Default::default, |paths| {
+                paths.for_frame(&self.origins, self.texture_filtering)
+            });
         let translucent_pipeline = material.map_or(&self.translucent, |(m, _)| &m.translucent);
         let pack_flat = material.and_then(|(m, _)| m.flat.as_ref());
         // A material stage's translucent pass reads a copy of the depth the solid terrain
@@ -8357,7 +8372,10 @@ impl Renderer {
                     {
                         Some(p) => &[(&p.0, 0..flat.phase1_calls)],
                         None if split_solid => &[
-                            (&flat.solid_opaque, 0..opaque),
+                            (
+                                solid_passes.opaque(true).unwrap_or(&flat.solid_opaque),
+                                0..opaque,
+                            ),
                             (
                                 solid_passes.cutout(true).unwrap_or(&flat.solid_cutout),
                                 cutout..flat.phase1_calls,
@@ -8415,7 +8433,10 @@ impl Renderer {
                     let (opaque, cutout) = (opaque_end as u32, cutout_start as u32);
                     let passes: &[(&wgpu::RenderPipeline, std::ops::Range<u32>)] = match material {
                         None if split_solid => &[
-                            (&self.solid_opaque, 0..opaque),
+                            (
+                                solid_passes.opaque(false).unwrap_or(&self.solid_opaque),
+                                0..opaque,
+                            ),
                             (
                                 solid_passes.cutout(false).unwrap_or(&self.solid_cutout),
                                 cutout..phase1_draws,

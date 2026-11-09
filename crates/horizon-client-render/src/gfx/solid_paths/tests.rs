@@ -535,6 +535,14 @@ impl<'a> Pipelines<'a> {
     }
 }
 
+impl Pipelines<'_> {
+    fn settled(&self, scene: &Scene, flat: bool) -> Vec<u8> {
+        let [opaque, cutout] = self.paths.settled.as_ref().unwrap();
+        let passes = [opaque.get(flat).unwrap(), cutout.get(flat).unwrap()];
+        self.gpu.render(&passes, scene, flat)
+    }
+}
+
 /// Each image holds what the scene should: the comparisons would pass over empty ones too.
 fn assert_drawn(pixels: &[u8], scene: &Scene) {
     if scene.alpha > 127 {
@@ -564,12 +572,52 @@ fn static_cutout_draws_the_usual_pixels() {
 }
 
 #[test]
-fn only_frames_without_a_fade_take_the_static_cutout() {
+fn settled_terrain_draws_the_usual_pixels() {
+    let Some(gpu) = Gpu::new() else {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    };
+    let pipelines = Pipelines::new(&gpu);
+    for scene in scenes(WHOLE) {
+        let usual = gpu.render(&[&pipelines.solid], &scene, false);
+        assert_drawn(&usual, &scene);
+        assert!(usual == pipelines.settled(&scene, false), "{scene:?}");
+        if gpu.flat_bindings.is_some() {
+            assert!(usual == pipelines.settled(&scene, true), "{scene:?} (flat)");
+        }
+    }
+}
+
+#[test]
+fn a_frame_takes_what_its_instances_prove() {
+    let Some(gpu) = Gpu::new() else {
+        eprintln!("no GPU adapter: skipped");
+        return;
+    };
+    let pipelines = Pipelines::new(&gpu);
+    let paths = &pipelines.paths;
     let origin = [1.0, 2.0, 3.0];
-    let w = |instance: [f32; 4]| instance[3];
-    assert!(unfaded(w(section_instance(origin, 0, 1.0))));
-    assert!(unfaded(w(section_instance(origin, 0, 0.5))));
-    assert!(unfaded(w(lod::instance(origin, 0))));
-    assert!(!unfaded(w(section_instance(origin, 56, 1.0))));
-    assert!(!unfaded(w(lod::instance(origin, 56))));
+    let (whole, fading_in, fading) = (
+        section_instance(origin, 0, 1.0),
+        section_instance(origin, 0, 0.5),
+        section_instance(origin, 56, 1.0),
+    );
+    let (tile, fading_tile) = (lod::instance(origin, 0), lod::instance(origin, 56));
+    // What each pass takes in place of the usual pipeline.
+    let taken = |origins: &[[f32; 4]], filtering| {
+        let passes = paths.for_frame(origins, filtering);
+        (
+            passes.opaque(false).is_some(),
+            passes.cutout(false).is_some(),
+        )
+    };
+    assert_eq!(taken(&[whole, whole], 0), (true, true));
+    assert_eq!(taken(&[whole, whole], 2), (true, true));
+    // RGSS, a fade-in or a distant tile leave the cutout without its fade.
+    assert_eq!(taken(&[whole, whole], 1), (false, true));
+    assert_eq!(taken(&[whole, fading_in], 0), (false, true));
+    assert_eq!(taken(&[whole, tile], 0), (false, true));
+    // A fade keeps the usual passes, even in one instance of many.
+    assert_eq!(taken(&[whole, fading], 0), (false, false));
+    assert_eq!(taken(&[whole, fading_tile], 0), (false, false));
 }
