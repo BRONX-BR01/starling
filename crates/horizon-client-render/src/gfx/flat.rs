@@ -148,6 +148,20 @@ pub struct Flat {
 /// sides it shows the eye (`mesher::Sides`), so it counts sections.
 pub const MIN_SECTIONS: usize = 1600;
 
+/// The same on Adreno's Vulkan, for frames without a shader pack. Vasysik's Android fork measured
+/// an Adreno 710 at 2560x1600 and 16 chunks: 46.05 ms of GPU time (20.09 FPS) with per-section
+/// indirect draws, 22.30 ms (38.37 FPS) drawn flat.
+const ADRENO_MIN_SECTIONS: usize = 512;
+
+/// Where `for_vanilla` holds: sections in view from which a frame is drawn flat.
+pub fn vanilla_min_sections(info: &wgpu::AdapterInfo) -> usize {
+    if super::adreno::adreno_vulkan(info) {
+        ADRENO_MIN_SECTIONS
+    } else {
+        MIN_SECTIONS
+    }
+}
+
 /// Whether flat draws exist: vertex shaders can read storage buffers (an arena
 /// page is no larger than a storage binding). A shader pack's terrain draws flat
 /// wherever they do, since only there does it read each quad's face normal and
@@ -159,12 +173,14 @@ pub fn wanted(adapter: &wgpu::Adapter, device: &wgpu::Device) -> bool {
 
 /// Whether frames without a shader pack's terrain draw flat: where the backend
 /// emulates multi-draw (Metal, past `MIN_SECTIONS`), on Intel Gen11/Gen12's Vulkan
-/// driver, or with `HORIZON_FLAT_DRAWS=1`. Elsewhere per-section draws stay.
+/// driver, on Adreno's Vulkan, or with `HORIZON_FLAT_DRAWS=1`. Elsewhere per-section
+/// draws stay.
 pub fn for_vanilla(info: &wgpu::AdapterInfo) -> bool {
     std::env::var("HORIZON_FLAT_DRAWS").as_deref() == Ok("1")
         || info.backend == wgpu::Backend::Metal
         || is_broken_intel_vulkan(info)
         || is_powervr_vulkan(info)
+        || super::adreno::adreno_vulkan(info)
 }
 
 /// PowerVR Rogue's Vulkan driver (the GE8320's 1.13) draws terrain in pieces with per-section

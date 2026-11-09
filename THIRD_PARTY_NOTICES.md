@@ -244,6 +244,24 @@ The port uses Starling's existing logger, crash hook and GPU timers and exposes
 reports through the game's Diagnostics settings and an Android launcher shortcut,
 with a renderer-independent recovery window for interrupted startup.
 
+## Horizon Android renderer paths
+
+What only Adreno on Android's Vulkan takes here is adapted from
+[Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606/crates/horizon-client-render/src),
+under the MIT license (the same [LICENSE](LICENSE) as this repository).
+Copyright (c) 2026 Ludovic Marie and the Horizon contributors. That covers `gfx/adreno.rs`, the sky
+after solid terrain (`gfx/late_sky.rs` and the far-plane vertex entries in `terrain.wgsl`,
+`entity.wgsl` and `gfx/stars.wgsl`; its commit 60211b4e8a), flat draws from 512 sections
+(`gfx/flat.rs`; its commit 1a115395f8) and the cheaper terrain shaders (`gfx/solid_paths.rs`,
+`fs_cutout_static` and `SETTLED_TERRAIN` in `terrain.wgsl`; its commits 202c962884, 3c9856cc93 and
+9771fbce2b).
+
+The fork takes them on every Android Vulkan GPU it allows; here they follow `splits_solid`, which
+holds on Adreno. Starling's sunrise fan is geometry, so it has a far-plane entry of its own. The
+fork's two specialization constants are one here, which also leaves out the distant tiles' sampling,
+and its terrain shaders also cover flat frames. The indirect offset fix in 1a115395f8 doesn't apply:
+Starling's solid passes don't rebase the indirect buffer.
+
 ## Horizon Android documents provider
 
 The game folder's place in Android's Files app (`packaging/android/java/io/github/juanluci/starling/GameFolderProvider.java`

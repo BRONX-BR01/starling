@@ -381,6 +381,7 @@ impl Game<'_> {
                 .chain(super::repro::HELP)
                 .collect::<Vec<_>>() }))),
             "setblock" | "fill" | "particle" | "signedit" => self.render_command(&words),
+            "sky-order" => self.sky_order_command(&words),
             "section-draws" => {
                 let r = self.renderer.as_mut().ok_or("no renderer")?;
                 match words.get(1).copied() {
@@ -391,6 +392,7 @@ impl Game<'_> {
                 }
                 Ok(Some(json!({ "ok": true, "flat": r.flat_draws() })))
             }
+            "static-cutout" => self.static_cutout_command(&words),
             "section-cull" => {
                 let r = self.renderer.as_mut().ok_or("no renderer")?;
                 match words.get(1).copied() {
@@ -401,6 +403,7 @@ impl Game<'_> {
                 }
                 Ok(Some(json!({ "ok": true, "cull": r.section_cull() })))
             }
+            "settled-terrain" => self.settled_terrain_command(&words),
             "gpu-passes" => {
                 match words.get(1).copied() {
                     None => {}
