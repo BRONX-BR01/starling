@@ -3,7 +3,8 @@
 //! (suggestions, autocorrect, swipe, its clipboard) instead of sending NativeActivity's key events.
 //! Each edit comes back whole (text and selection) and is set on the field; the field's own changes
 //! (Tab, the history, a line sent, a hardware keyboard) go back to the editor. The fields it cannot
-//! read (a mod's, the recipe book's and the options' searches) keep NativeActivity's keyboard.
+//! read (a mod's, a server dialog's, the recipe book's and the options' searches) keep
+//! NativeActivity's keyboard.
 // The editor exists on Android only; the rest is the game's side of it.
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
