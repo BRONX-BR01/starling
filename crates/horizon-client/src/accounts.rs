@@ -216,6 +216,21 @@ pub fn player_name() -> Option<String> {
     profiles().player().map(|p| p.name().to_owned())
 }
 
+/// The playing Ely.by account's skin as Ely.by named it at the sign-in or the last renewal
+/// (`starling_account::ely`, kept with the account): its URL and whether its arms are slim. None
+/// for another profile, or an Ely.by account Ely.by named no skin for.
+pub fn ely_skin() -> Option<(String, bool)> {
+    if !in_game() {
+        return None;
+    }
+    match profiles().player()? {
+        starling_account::Player::Account(account) if account.provider == Provider::Ely => {
+            account.skin.map(|(url, model)| (url, model == "slim"))
+        }
+        _ => None,
+    }
+}
+
 fn begin(state: State) -> (u64, Arc<AtomicBool>) {
     let cancel = Arc::new(AtomicBool::new(false));
     let mut s = shared();
