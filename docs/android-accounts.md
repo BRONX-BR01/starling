@@ -39,7 +39,30 @@ platform keystore its sign-in secrets remain in memory for that run. Normal
 launcher-managed desktop sessions keep their existing launch flow.
 
 The provider/profile model and Ely.by protocol are adapted from Horizon Android;
-see `THIRD_PARTY_NOTICES.md`. Skin editing and upload are separate work.
+see `THIRD_PARTY_NOTICES.md`.
+
+## Skins per profile
+
+Options > Skin Customization chooses a skin for the profile that plays now: each
+Microsoft, Ely.by and offline profile keeps its own, in `horizon-skins.json`
+beside `options.txt`. A profile that has not chosen one yet wears the skin chosen
+before profiles had their own (`skin:` in `horizon-player.txt`). The skins are
+the 64x64 (or legacy 64x32) PNGs of the `skins/` folder; **Choose a File...**
+imports one on a phone. On an account profile, the first choice of the cycle is
+the account's own skin (Mojang's profile for Microsoft, ely.by for Ely.by),
+which the title screen's player also wears.
+
+- **Microsoft**: **Upload to Microsoft profile** sends the chosen skin and its
+  arms (classic or slim) to the account's Minecraft profile, the way Horizon
+  Android's wardrobe does (`POST /minecraft/profile/skins`), so servers show it
+  to every player. The PNG is written anew before it leaves the device (no text
+  or other chunks of the file go with it). The profile Mojang answers with is
+  kept in `accounts.json`.
+- **Ely.by**: Ely.by's public API takes no uploads; **Change skin on ely.by**
+  opens its skins page. The game shows the account's Ely.by skin by its name.
+- **Offline**: the skin stays in this game.
+
+Capes are not chosen here yet.
 
 On a fresh installation, **Set up Starling** offers Microsoft, Ely.by, offline
 profiles and importing prepared files. Ely.by and offline forms use the setup's

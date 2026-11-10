@@ -5,6 +5,7 @@
 //! game's official files are fetched from Mojang's servers here too. Without a
 //! keystore (a desktop build, `STARLING_ACCOUNTS=1`) the secrets stay in memory for the run.
 use starling_account::files::{Pins, Progress, Sources, Wanted};
+pub use starling_account::skins::ELY_SKINS;
 pub use starling_account::{Account, Provider, SignInStage};
 use starling_account::{Endpoints, MemoryStore, SecretStore, SignIn, SignInState};
 use std::path::PathBuf;
@@ -174,6 +175,8 @@ struct Shared {
     files_cancel: Option<Arc<AtomicBool>>,
     /// Whether the files' folder was looked at for an earlier download.
     files_seen: bool,
+    /// The last skin upload: the profile it went to, and how it went.
+    skin_upload: Option<(String, crate::own_skin::Upload)>,
 }
 
 fn shared() -> MutexGuard<'static, Shared> {
@@ -216,19 +219,104 @@ pub fn player_name() -> Option<String> {
     profiles().player().map(|p| p.name().to_owned())
 }
 
+/// The playing profile, read once and kept like `profiles`.
+fn player() -> Option<starling_account::Player> {
+    if !in_game() {
+        return None;
+    }
+    shared()
+        .profiles
+        .get_or_insert_with(|| starling_account::Accounts::load(&dir()))
+        .player()
+}
+
+/// The key of the playing profile (`Player::key`), under which its own skin is kept
+/// (`own_skin::SkinChoice::for_profile`). None without profiles (a desktop and its launcher).
+pub fn player_key() -> Option<String> {
+    player().map(|p| p.key())
+}
+
+/// The playing Microsoft account's skin on its profile, as last read (at sign-in, on renewal, after
+/// an upload): its URL and whether its arms are slim.
+pub fn player_skin() -> Option<(String, bool)> {
+    match player()? {
+        starling_account::Player::Account(account) if account.provider == Provider::Microsoft => {
+            account.skin.map(|(url, model)| (url, model == "slim"))
+        }
+        _ => None,
+    }
+}
+
 /// The playing Ely.by account's skin as Ely.by named it at the sign-in or the last renewal
 /// (`starling_account::ely`, kept with the account): its URL and whether its arms are slim. None
 /// for another profile, or an Ely.by account Ely.by named no skin for.
 pub fn ely_skin() -> Option<(String, bool)> {
-    if !in_game() {
-        return None;
-    }
-    match profiles().player()? {
+    match player()? {
         starling_account::Player::Account(account) if account.provider == Provider::Ely => {
             account.skin.map(|(url, model)| (url, model == "slim"))
         }
         _ => None,
     }
+}
+
+/// Where the playing profile's skin can go besides this game: a Microsoft account's profile (and
+/// how the last upload there went), Ely.by's website, or nowhere for an offline one.
+pub fn skin_cloud() -> crate::own_skin::Cloud {
+    use crate::own_skin::{Cloud, Upload};
+    let Some(starling_account::Player::Account(account)) = player() else {
+        return Cloud::Local;
+    };
+    match account.provider {
+        Provider::Ely => Cloud::Ely,
+        Provider::Microsoft => {
+            let key = account.key();
+            Cloud::Microsoft(match &shared().skin_upload {
+                Some((to, upload)) if *to == key => upload.clone(),
+                _ => Upload::None,
+            })
+        }
+    }
+}
+
+/// Send `png` (checked and written anew: `own_skin::upload_png`) as the skin of the Microsoft
+/// profile `key`, with slim or classic arms, off the window thread; [`skin_cloud`] tells how it
+/// goes. One upload at a time.
+pub fn upload_skin(key: String, png: Vec<u8>, slim: bool) {
+    use crate::own_skin::Upload;
+    {
+        let mut s = shared();
+        if matches!(s.skin_upload, Some((_, Upload::Sending))) {
+            return;
+        }
+        s.skin_upload = Some((key.clone(), Upload::Sending));
+    }
+    std::thread::spawn(move || {
+        let result = starling_account::skins::upload_skin(
+            &Endpoints::live(),
+            store().as_ref(),
+            &dir(),
+            &key,
+            &png,
+            slim,
+        );
+        let mut s = shared();
+        s.profiles = Some(starling_account::Accounts::load(&dir()));
+        let upload = match result {
+            Ok(account) => {
+                if let State::SignedIn(playing) = &mut s.state
+                    && playing.key() == account.key()
+                {
+                    *playing = account;
+                }
+                Upload::Sent
+            }
+            Err(e) => {
+                log::warn!("Starling: the skin was not uploaded: {e}");
+                Upload::Failed(e)
+            }
+        };
+        s.skin_upload = Some((key, upload));
+    });
 }
 
 fn begin(state: State) -> (u64, Arc<AtomicBool>) {

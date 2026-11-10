@@ -2,6 +2,9 @@
 //! the name kept for the next world or server, and the chosen PNG of `skins/` put in one of the
 //! atlas's skin slots, where the local player's model (first and third person, the inventory's)
 //! and the player list's head take it in place of the profile's skin (`update_remote_skins`).
+//! Each profile (Microsoft, Ely.by, offline) wears its own choice; a Microsoft account can upload
+//! it to its profile and an Ely.by account changes its own on ely.by, as in Horizon Android's
+//! wardrobe.
 use super::Game;
 use horizon_client::{
     hud::HudBatch,
@@ -58,6 +61,9 @@ pub(super) struct OwnSkin {
     elyby_on: Option<bool>,
     /// The name worlds open with, read again every few seconds.
     worlds_name: Option<(String, Instant)>,
+    /// The profile whose own choice is on (`accounts::player_key`): another one playing puts its
+    /// own on.
+    profile: Option<String>,
 }
 
 /// The title screen's player: the model wearing the own skin, and the name worlds open with.
@@ -147,8 +153,9 @@ impl Game<'_> {
     /// The local player's own skin in the atlas, and whether its model is slim; None for the
     /// profile's skin (the account's, else the default one).
     pub(super) fn own_skin_sprite(&mut self) -> Option<(String, bool)> {
+        self.follow_skin_profile();
         if !self.own_skin.loaded
-            && let Err(e) = self.put_on_skin(SkinChoice::load(&Self::player_dir()))
+            && let Err(e) = self.put_on_profile_skin()
         {
             log::warn!("Horizon: own skin: {e}");
         }
@@ -251,8 +258,9 @@ impl Game<'_> {
     }
 
     /// The skin the player wears where no server gives one (single player, the title screen):
-    /// the file Skin Customization chose, else, playing offline, the one the name worlds open
-    /// with has on Ely.by. None for the default skin.
+    /// the file Skin Customization chose for the playing profile, else a Microsoft account's own,
+    /// else, playing offline or as Ely.by, the one the name worlds open with has on Ely.by. None
+    /// for the default skin.
     pub(super) fn worn_skin(&mut self) -> Option<(String, bool)> {
         match self.own_worn() {
             Worn::Skin(skin, slim) => Some((skin, slim)),
@@ -262,15 +270,14 @@ impl Game<'_> {
 
     /// `worn_skin`, telling a skin still to come from the default one.
     fn own_worn(&mut self) -> Worn {
-        use horizon_client::skins::{Download, Kind};
         if let Some((skin, slim)) = self.own_skin_sprite() {
             return Worn::Skin(skin, slim);
         }
-        // A Microsoft account's skin comes from its profile (remote.rs, `own_profile`). An Ely.by
-        // account's is the one Ely.by named at its sign-in or last renewal, else looked up on
-        // Ely.by by its name like an offline one's.
+        // A Microsoft account's skin comes from its profile (remote.rs, `own_profile`; here the
+        // one the accounts keep). An Ely.by account's is the one Ely.by named at its sign-in or
+        // last renewal, else looked up on Ely.by by its name like an offline one's.
         let ely = match horizon_client::auth::current() {
-            Some(account) if !account.is_ely() => return Worn::Default,
+            Some(account) if !account.is_ely() => return self.account_worn(),
             Some(_) => true,
             None => false,
         };
@@ -290,6 +297,26 @@ impl Game<'_> {
             };
             textures
         };
+        self.worn_textures(&textures)
+    }
+
+    /// A Microsoft account's own skin as its profile last had it (`accounts::player_skin`, read
+    /// again after an upload), where no file of the skins folder is chosen.
+    fn account_worn(&mut self) -> Worn {
+        let Some((url, slim)) = horizon_client::accounts::player_skin() else {
+            return Worn::Default;
+        };
+        let textures = horizon_client::skins::Textures {
+            skin: Some(url),
+            slim,
+            ..Default::default()
+        };
+        self.worn_textures(&textures)
+    }
+
+    /// `textures`' skin, once downloaded and in its atlas slot.
+    fn worn_textures(&mut self, textures: &horizon_client::skins::Textures) -> Worn {
+        use horizon_client::skins::{Download, Kind};
         let Some(url) = textures.skin.clone() else {
             return Worn::Default;
         };
@@ -300,7 +327,7 @@ impl Game<'_> {
         }
         let location = {
             let mut downloads = self.skin_downloads.borrow_mut();
-            horizon_client::skins::lookup(&textures, false, |kind, url| downloads.state(kind, url))
+            horizon_client::skins::lookup(textures, false, |kind, url| downloads.state(kind, url))
         };
         // The title screen has nothing else to put a download in the atlas: without this the skin
         // only came once a world had stored it.
@@ -326,7 +353,7 @@ impl Game<'_> {
 
     /// Skin Customization's skin or model: kept and put on.
     pub(super) fn choose_own_skin(&mut self, choice: SkinChoice) {
-        if let Err(e) = choice.save(&Self::player_dir()) {
+        if let Err(e) = self.keep_skin_choice(&choice) {
             log::warn!("Horizon: could not keep the skin: {e}");
             self.ui
                 .options
@@ -354,13 +381,13 @@ impl Game<'_> {
             return;
         };
         if !self.own_skin.loaded {
-            let _ = self.put_on_skin(SkinChoice::load(&Self::player_dir()));
+            let _ = self.put_on_profile_skin();
         }
         let choice = SkinChoice {
             file: Some(file.to_owned()),
             slim: self.own_skin.choice.slim,
         };
-        if let Err(e) = choice.save(&Self::player_dir()) {
+        if let Err(e) = self.keep_skin_choice(&choice) {
             log::warn!("Horizon: could not keep the skin: {e}");
         }
         let worn = self.put_on_skin(choice);
@@ -369,6 +396,56 @@ impl Game<'_> {
             log::warn!("Horizon: own skin: {e}");
             self.ui.options.skin_warning(e);
         }
+    }
+
+    /// The playing profile's own choice (`SkinChoice::for_profile`), put on, the profile noted.
+    fn put_on_profile_skin(&mut self) -> Result<(), String> {
+        let key = horizon_client::accounts::player_key();
+        let choice = SkinChoice::for_profile(&Self::player_dir(), key.as_deref());
+        self.own_skin.profile = key;
+        self.put_on_skin(choice)
+    }
+
+    /// Another profile plays than the one whose choice is on: its own goes on at the next look.
+    fn follow_skin_profile(&mut self) {
+        if self.own_skin.loaded && self.own_skin.profile != horizon_client::accounts::player_key() {
+            self.own_skin.loaded = false;
+        }
+    }
+
+    /// Keep `choice` as the playing profile's own (beside the name, without profiles).
+    fn keep_skin_choice(&mut self, choice: &SkinChoice) -> std::io::Result<()> {
+        let key = horizon_client::accounts::player_key();
+        let kept = choice.save_for_profile(&Self::player_dir(), key.as_deref());
+        self.own_skin.profile = key;
+        kept
+    }
+
+    /// Skin Customization's account rows follow the playing profile and its upload.
+    pub(super) fn show_skin_cloud(&mut self) {
+        self.ui.options.skin_cloud = horizon_client::accounts::skin_cloud();
+    }
+
+    /// Skin Customization's upload: the chosen skin, written anew, to the playing Microsoft
+    /// account's profile (`accounts::upload_skin`), for every server to show.
+    pub(super) fn upload_own_skin(&mut self, choice: SkinChoice) {
+        let Some(key) = horizon_client::accounts::player_key() else {
+            return;
+        };
+        let Some(file) = choice.file else {
+            let why = horizon_client::lang::get("starling.skin.upload_choose");
+            self.ui.options.skin_warning(why);
+            return;
+        };
+        match own_skin::upload_png(&Self::skins_dir(), &file) {
+            Ok(png) => horizon_client::accounts::upload_skin(key, png, choice.slim),
+            Err(e) => self.ui.options.skin_warning(e),
+        }
+    }
+
+    /// Skin Customization's ely.by button: the page where an Ely.by account changes its skin.
+    pub(super) fn open_ely_skins(&mut self) {
+        self.open_link(horizon_client::accounts::ELY_SKINS);
     }
 
     /// Whether the title screen is on its main page, where its player stands.

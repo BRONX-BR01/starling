@@ -206,6 +206,8 @@ impl Game<'_> {
         // The game puts the skin on (game/own_skin.rs).
         ui.skin_page = true;
         ui.profile_name = horizon_client::accounts::player_name();
+        ui.profile_key = horizon_client::accounts::player_key();
+        ui.skin_cloud = horizon_client::accounts::skin_cloud();
         ui.offer_catalog();
         ui.open_at(!from_title && self.title.is_none(), page);
         ui.minecart_improvements = minecart_improvements;
@@ -256,6 +258,7 @@ impl Game<'_> {
     pub(super) fn draw_options(&mut self, batch: &mut HudBatch) {
         self.watch_pack_folder();
         self.poll_diagnostics();
+        self.show_skin_cloud();
         let mut ui = std::mem::take(&mut self.ui.options);
         ui.draw(&self.settings, batch, &self.gui.atlas, self.cursor);
         self.ui.options = ui;
@@ -531,6 +534,8 @@ impl Game<'_> {
                 SkinAction::OpenFolder => self.open_game_folder(&Self::skins_dir()),
                 SkinAction::PickFile => self.pick_skin_file(),
                 SkinAction::ElyBy(on) => self.keep_elyby(on),
+                SkinAction::Upload(choice) => self.upload_own_skin(choice),
+                SkinAction::ElySite => self.open_ely_skins(),
             }
         }
         Ok(())
