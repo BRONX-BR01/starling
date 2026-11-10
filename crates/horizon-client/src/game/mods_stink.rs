@@ -326,7 +326,7 @@ impl Game<'_> {
     fn stink_list_mods(&mut self) {
         let dev = &self.stink_mods.dev;
         self.settings.mods.installed = self
-            .mods
+            .stink_mods
             .mods
             .entries()
             .iter()
@@ -343,6 +343,8 @@ impl Game<'_> {
                         description: String::new(),
                         problem,
                         dev: false,
+                        has_settings: false,
+                        native: None,
                     };
                 };
                 // What it may do first: the row cuts long descriptions.
@@ -358,6 +360,8 @@ impl Game<'_> {
                     description: format!("{may} {}", m.description).trim().to_owned(),
                     problem,
                     dev: dev.contains(&e.path),
+                    has_settings: false,
+                    native: None,
                 }
             })
             .collect();
@@ -373,7 +377,11 @@ impl Game<'_> {
     }
     /// The server's tree with the running mods' commands added, after either changed.
     pub(super) fn sync_served_commands(&mut self) {
-        let server = self.remote.as_ref().and_then(|r| r.commands.as_ref());
+        let server = self
+            .remote
+            .as_ref()
+            .filter(|r| r.chat_tree_received)
+            .map(|r| &r.chat_tree);
         let mut names = self.stink_mods.mods.commands().peekable();
         self.stink_mods.served = match server {
             Some(tree) if names.peek().is_some() => Some(tree.with_mod_commands(names)),
@@ -384,7 +392,7 @@ impl Game<'_> {
     /// turned on did.
     pub(super) fn stink_sync_mods(&mut self) {
         let running: Vec<&str> = self
-            .mods
+            .stink_mods
             .mods
             .entries()
             .iter()
@@ -495,7 +503,10 @@ impl Game<'_> {
             id: stack.item.to_string(),
             count: stack.count,
             slot: slot as u32,
-            custom_name: extra.and_then(|e| e.custom_name.clone()),
+            custom_name: extra
+                .and_then(|e| e.custom_name.as_ref())
+                .map(horizon_client::snbt::to_snbt)
+                .map(|s| s.trim_matches('"').to_owned()),
             custom_data: extra
                 .and_then(|e| e.other("minecraft:custom_data"))
                 .map(horizon_client::snbt::to_snbt),
@@ -520,7 +531,7 @@ impl Game<'_> {
     pub(super) fn stink_tick_mods(&mut self) {
         if self.stink_mods.mods.is_running()
             && !self
-                .mods
+                .stink_mods
                 .atlas
                 .as_ref()
                 .is_some_and(|(c, _)| std::sync::Arc::ptr_eq(c, &self.pack.context))
@@ -532,7 +543,7 @@ impl Game<'_> {
         if self.stink_mods.mods.is_running() {
             // (the world's answers to their height queries since the last tick)
             let answers = self
-                .mods
+                .stink_mods
                 .surface
                 .lock()
                 .map(|mut a| std::mem::take(&mut *a))
@@ -541,7 +552,7 @@ impl Game<'_> {
                 self.stink_mods.mods.push_surface(&id, answer);
             }
             let answers = self
-                .mods
+                .stink_mods
                 .columns
                 .lock()
                 .map(|mut a| std::mem::take(&mut *a))
@@ -606,7 +617,7 @@ impl Game<'_> {
     pub(super) fn stink_mods_frame(&mut self, elapsed: Duration) {
         if !self.stink_mods.dev.is_empty()
             && self
-                .mods
+                .stink_mods
                 .checked
                 .is_none_or(|t| t.elapsed() >= RELOAD_CHECK)
         {
@@ -768,7 +779,14 @@ impl Game<'_> {
             let focused = self.screen == Screen::Chat;
             self.ui
                 .chat
-                .add(&self.gui.atlas, line, None, self.ticks, focused);
+                .add(
+                    &self.gui.atlas,
+                    line,
+                    None,
+                    horizon_client::chat::ChatSource::Client,
+                    self.ticks,
+                    focused,
+                );
         }
     }
     /// The mods' HUD panels, stacked with the extras in their corners.
@@ -966,7 +984,7 @@ impl Game<'_> {
     }
     pub(super) fn stink_draw_mod_screen(&self, batch: &mut HudBatch) {
         let Some(draws) = self
-            .mods
+            .stink_mods
             .screen
             .as_deref()
             .and_then(|id| self.stink_mods.mods.screen(id))

@@ -802,25 +802,7 @@ impl Game<'_> {
                 self.pending_screenshot = Some(reply.clone());
                 Ok(None)
             }
-            "record" => {
-                let renderer = self.renderer.as_mut().ok_or("no renderer yet")?;
-                if arg(1)? == "stop" {
-                    let frames = renderer.stop_recording()?;
-                    return Ok(Some(json!({ "ok": true, "frames": frames })));
-                }
-                let fps = match words.get(2) {
-                    Some(f) => f
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|f| *f >= 1.0 && *f <= 240.0)
-                        .ok_or("FPS must be 1..240")?,
-                    None => 60.0,
-                };
-                let size = renderer.start_recording(std::path::Path::new(arg(1)?), fps)?;
-                Ok(Some(
-                    json!({ "ok": true, "width": size[0], "height": size[1], "fps": fps }),
-                ))
-            }
+            "record" => Err("recording is not supported in this build".into()),
             "chat" => {
                 let text = line.trim_start().strip_prefix("chat").unwrap_or("").trim();
                 if self.remote.is_some() {
