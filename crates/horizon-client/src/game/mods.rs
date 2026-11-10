@@ -444,7 +444,7 @@ fn not_built(dir: &std::path::Path, built: &str, rows: &[Installed]) -> Vec<Inst
         let listed = rows.iter().chain(&out).any(|row| row.id == m.id);
         if !listed && !in_build(&m.id) {
             out.push(Installed {
-                title: format!("{} {}", m.id, m.version),
+                title: format!("{} {}", display_name(&m.id), m.version),
                 id: m.id,
                 description: String::new(),
                 problem: Some(mod_list::NOT_BUILT.to_owned()),
@@ -454,6 +454,17 @@ fn not_built(dir: &std::path::Path, built: &str, rows: &[Installed]) -> Vec<Inst
         }
     }
     out
+}
+
+/// A native mod's name from its id, which is all its bundle says of it (the name is in its code):
+/// `carry_block` is "Carry block", as the game built with it names `Wrench` "Wrench".
+fn display_name(id: &str) -> String {
+    let words = id.replace(['_', '-'], " ");
+    let mut chars = words.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }
 
 /// A WebAssembly code mod's row on the Mods page.
@@ -470,6 +481,23 @@ impl Game<'_> {
     }
     #[cfg(not(target_os = "android"))]
     pub(super) fn list_copied_native_mods(&mut self) {}
+
+    /// Installed mod `i` was turned on or off on the Mods page: a native one changes which build
+    /// the next start runs (`native_builds.rs`). Only a phone has builds.
+    #[cfg(target_os = "android")]
+    pub(super) fn mod_toggled(&mut self, i: usize) {
+        self.native_mod_toggled(i);
+    }
+    #[cfg(not(target_os = "android"))]
+    pub(super) fn mod_toggled(&mut self, _i: usize) {}
+
+    /// A button of the Mods page's game with native mods (`native_builds.rs`).
+    #[cfg(target_os = "android")]
+    pub(super) fn native_game_button(&mut self, act: mod_list::NativeGameAct) {
+        self.native_game_act(act);
+    }
+    #[cfg(not(target_os = "android"))]
+    pub(super) fn native_game_button(&mut self, _act: mod_list::NativeGameAct) {}
 
     /// A native mod the catalog just put in the folder: its row on the Mods page, with Compile.
     #[cfg(target_os = "android")]
@@ -651,7 +679,7 @@ mod tests {
         );
         let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["minimap", "veinminer", "zoom"]);
-        assert_eq!(rows[1].title, "veinminer 0.3.0");
+        assert_eq!(rows[1].title, "Veinminer 0.3.0");
         assert_eq!(rows[1].problem.as_deref(), Some(mod_list::NOT_BUILT));
         assert!(rows.iter().all(|r| r.native.is_none() && !r.dev));
         // A native build with zoom, and minimap's row already listed by its own hook.

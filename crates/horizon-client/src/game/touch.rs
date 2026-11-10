@@ -447,6 +447,20 @@ pub(super) fn draw_editor(
 }
 
 impl Game<'_> {
+    /// The pointer the options draw with. On the touch screen there is none once the finger
+    /// lifts, and the widget it tapped keeps no focus: neither its highlight nor its tooltip stays
+    /// where the finger was, over the buttons beside it.
+    pub(super) fn options_pointer(
+        &self,
+        ui: &mut horizon_client::options_ui::OptionsUi,
+    ) -> (f32, f32) {
+        if self.touch_shown() && !self.touch.pointer.down() {
+            ui.drop_pointer_focus();
+            return (-10_000.0, -10_000.0);
+        }
+        self.cursor
+    }
+
     /// The player plays with a touch screen: a touch was seen, and on Android no keyboard, mouse
     /// or controller took over since (game/input_mode.rs).
     pub(super) fn has_touch(&self) -> bool {

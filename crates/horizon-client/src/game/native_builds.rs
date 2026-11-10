@@ -5,15 +5,19 @@
 //! builds for this version, downloads one (its SHA-256 checked against the build's JSON), and
 //! chooses it for the next start: StarlingActivity loads it in place of the APK's library
 //! (NativeMods.java). It also stops using one, asks GitHub for another set (an issue the player
-//! submits), and says when the activity set a build aside.
+//! submits), and says when the activity set a build aside. The Mods page says, above the mods,
+//! which game runs and which the next start runs (`native_game`).
 use super::Game;
 use horizon_client::{
     hud::HudBatch,
+    lang::tr,
+    mod_list::{NativeGame, NativeGameAct},
     starling_releases::{self as releases, NativeBuild as Build},
     ui_theme::{Face, Ui, color},
 };
 use sha2::{Digest, Sha256};
 use std::cell::Cell;
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -46,6 +50,10 @@ const QUIET_TRIES: u32 = 15;
 
 /// The library's name in a build's folder, as NativeMods.java loads it.
 const LIBRARY: &str = "libhorizon_android.so";
+/// Beside it: the install of the APK it was made under, the only one that loads it
+/// (NativeMods.stamp, which StarlingActivity puts in [`APK_STAMP`]).
+const APK: &str = "apk";
+const APK_STAMP: &str = "STARLING_APK";
 /// Rows of builds the card shows.
 const SHOWN: usize = 4;
 /// Options > Mods' row that opens the card, after the native mods' own rows: a native mod's page
@@ -188,6 +196,106 @@ fn running() -> Option<String> {
     Some(path.parent()?.file_name()?.to_string_lossy().into_owned())
 }
 
+/// This install of the APK (NativeMods.stamp), none when the activity could not say.
+fn apk_stamp() -> Option<String> {
+    std::env::var(APK_STAMP).ok().filter(|s| !s.is_empty())
+}
+
+/// The build in `folder` marked as made under this install: only it loads it.
+fn stamp_build(folder: &std::path::Path) -> Result<(), String> {
+    match apk_stamp() {
+        Some(stamp) => std::fs::write(folder.join(APK), stamp).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+/// Whether the build `name` loads at the next start, as NativeMods.chosen decides: its library
+/// is there, made for `version` and under this very install of the APK.
+fn loads(name: &str, version: &str) -> bool {
+    let folder = dir().join(name);
+    let read = |file: &str| {
+        std::fs::read_to_string(folder.join(file))
+            .ok()
+            .map(|t| t.trim().to_owned())
+    };
+    folder.join(LIBRARY).is_file()
+        && read("for").as_deref() == Some(version)
+        && apk_stamp().is_some_and(|stamp| read(APK) == Some(stamp))
+}
+
+/// A build on the phone as the Mods page says it: its mods (build.json) and how long ago its
+/// library came.
+struct OnPhone {
+    mods: BTreeSet<String>,
+    age: Option<Duration>,
+}
+
+fn on_phone(name: &str) -> OnPhone {
+    let folder = dir().join(name);
+    let about = std::fs::read_to_string(folder.join("build.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .unwrap_or_default();
+    let mods = about["mods"]
+        .as_array()
+        .map(|mods| {
+            mods.iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    let age = std::fs::metadata(folder.join(LIBRARY))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|at| at.elapsed().ok());
+    OnPhone { mods, age }
+}
+
+impl OnPhone {
+    fn label(&self) -> String {
+        mods_label(&self.mods.iter().cloned().collect::<Vec<_>>())
+    }
+
+    /// "2 h ago".
+    fn ago(&self) -> String {
+        let seconds = self.age.map_or(0, |a| a.as_secs());
+        let (key, n) = match seconds {
+            s if s < 3600 => ("starling.mods.native.minutes_ago", (s / 60).max(1)),
+            s if s < 48 * 3600 => ("starling.mods.native.hours_ago", s / 3600),
+            s => ("starling.mods.native.days_ago", s / 86400),
+        };
+        tr(key, &[&n])
+    }
+}
+
+/// The native mods in the folder that are on: what Compile sends (`bundles_body`).
+fn folder_mods_on(off: &BTreeSet<String>) -> BTreeSet<String> {
+    let folder = Game::game_dir().join(horizon_client::mod_list::NATIVE_DIR);
+    std::fs::read_dir(&folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "hnmod"))
+        .filter_map(|p| horizon_mods::index::native::Bundle::read(&p).ok())
+        .map(|bundle| bundle.manifest.id)
+        .filter(|id| !off.contains(id))
+        .collect()
+}
+
+/// A build on the phone with just the mods `wanted`, that loads at the next start.
+fn build_with(wanted: &BTreeSet<String>, version: &str) -> Option<String> {
+    if wanted.is_empty() {
+        return None;
+    }
+    std::fs::read_dir(dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .find(|name| loads(name, version) && on_phone(name).mods == *wanted)
+}
+
 /// `v0.1.4__wrench__carryblock`'s mods as the card says them: "Wrench, Carryblock".
 fn mods_label(mods: &[String]) -> String {
     let word = |m: &String| {
@@ -305,6 +413,7 @@ fn download(build: &Build, version: &str, shared: &Mutex<Shared>) -> Result<Stri
     std::fs::rename(&part, folder.join(LIBRARY)).map_err(|e| e.to_string())?;
     std::fs::write(folder.join("for"), version).map_err(|e| e.to_string())?;
     std::fs::write(folder.join("build.json"), &text).map_err(|e| e.to_string())?;
+    stamp_build(&folder)?;
     std::fs::write(dir().join("current"), &build.name).map_err(|e| e.to_string())?;
     Ok(build.name.clone())
 }
@@ -319,10 +428,11 @@ pub(super) fn running_build_info() -> Option<String> {
     std::fs::read_to_string(dir().join(running()?).join("build.json")).ok()
 }
 
-/// The `horizon-native-mods` folder's mods, each a length and what the service needs of it: nothing
-/// else on the phone goes with them. In an order of their own, not their files' names, so the same
-/// mods always make the same request.
+/// The `horizon-native-mods` folder's mods that are on (Options > Mods), each a length and what the
+/// service needs of it: nothing else on the phone goes with them. In an order of their own, not
+/// their files' names, so the same mods always make the same request.
 fn bundles_body() -> Result<Vec<u8>, String> {
+    let off = horizon_client::mod_list::ModList::load(&Game::game_dir()).disabled;
     let folder = Game::game_dir().join(horizon_client::mod_list::NATIVE_DIR);
     let mut paths: Vec<PathBuf> = std::fs::read_dir(&folder)
         .map(|d| d.flatten().map(|e| e.path()).collect())
@@ -333,6 +443,9 @@ fn bundles_body() -> Result<Vec<u8>, String> {
         let Ok(bundle) = horizon_mods::index::native::Bundle::read(&path) else {
             continue;
         };
+        if off.contains(&bundle.manifest.id) {
+            continue;
+        }
         mods.push(
             bundle
                 .for_build()
@@ -578,6 +691,7 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
         std::fs::write(folder.join(CAME_FROM), releases::build_server_host(address))
             .map_err(|e| e.to_string())?;
     }
+    stamp_build(&folder)?;
     std::fs::write(dir().join("current"), &name).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(dir().join("starts"));
     // The compiled builds before it: 60 MB each.
@@ -591,7 +705,8 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
 }
 
 impl Game<'_> {
-    /// The Mods page's mods not in this game get a Compile button (`native_builds_button`).
+    /// The Mods page's native mods not in this game: on until turned off, they go into the next
+    /// Compile, which the page's top offers (`native_game`), made here once every row is listed.
     pub(super) fn offer_compile(&mut self) {
         for row in &mut self.settings.mods.installed {
             if row.problem.as_deref() == Some(horizon_client::mod_list::NOT_BUILT) {
@@ -600,34 +715,171 @@ impl Game<'_> {
                     row.native = None;
                     continue;
                 }
-                row.native = Some(horizon_client::mod_list::NativePage {
-                    keys: Vec::new(),
-                    buttons: vec!["Compile".into()],
-                });
+                row.native = Some(horizon_client::mod_list::NativePage::default());
             }
         }
+        self.settings.mods.native_game = self.native_game();
     }
 
-    /// Options > Mods' Native mods row, put back after `list_native_mods` made the native rows.
+    /// The Native mods row is gone: the Mods page's top says which game runs (`native_game`).
     pub(super) fn list_native_builds_row(&mut self) {
-        let installed = &mut self.settings.mods.installed;
-        installed.retain(|row| row.id != ID);
+        self.settings.mods.installed.retain(|row| row.id != ID);
+    }
+
+    /// What the Mods page says above the mods: which game runs, which the next start runs, whether
+    /// that build still loads, whether the native mods turned on are the ones in it, and the
+    /// buttons for each. None without native mods, a build or a chosen one.
+    fn native_game(&self) -> Option<NativeGame> {
         if !SERVICE_SUPPORTED {
+            return None;
+        }
+        let (version, _) = crate::android::app_version()?;
+        let mods = &self.settings.mods;
+        let now = running();
+        let next = chosen();
+        let native_rows = mods
+            .installed
+            .iter()
+            .any(|m| m.native.is_some() && !m.id.is_empty());
+        if now.is_none() && next.is_none() && !native_rows {
+            return None;
+        }
+        let wanted = folder_mods_on(&mods.disabled);
+        let compiling = self
+            .native_builds
+            .shared
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .compiling;
+        let mut game = NativeGame::default();
+        let running_build = now.as_deref().map(on_phone);
+        let said = match &running_build {
+            Some(b) => tr(
+                "starling.mods.native.now_build",
+                &[&version, &b.label(), &b.ago()],
+            ),
+            None => tr("starling.mods.native.now_apk", &[&version]),
+        };
+        game.lines.push((said, false));
+        // The next start's: the chosen build when it loads (NativeMods.chosen), else the APK's.
+        let next_loads = next.clone().filter(|name| loads(name, &version));
+        let next_build = next_loads.as_deref().map(on_phone);
+        if next_loads != now {
+            let said = match &next_build {
+                Some(b) => tr("starling.mods.native.next_build", &[&b.label(), &b.ago()]),
+                None => tr("starling.mods.native.next_apk", &[]),
+            };
+            game.lines.push((said, false));
+        }
+        let old = next.as_deref().filter(|_| next_loads.is_none());
+        if let Some(name) = old {
+            let said = tr(
+                "starling.mods.native.out_of_date",
+                &[&on_phone(name).label()],
+            );
+            game.lines.push((said, true));
+        }
+        let in_next = next_build.map(|b| b.mods).unwrap_or_default();
+        if compiling {
+            game.lines
+                .push((tr("starling.mods.native.compiling", &[]), false));
+            game.buttons.push((
+                tr("starling.mods.native.show_compile", &[]),
+                NativeGameAct::ShowCompile,
+            ));
+        } else if !wanted.is_empty() && (old.is_some() || wanted != in_next) {
+            if old.is_none() {
+                let key = if next_loads.is_some() {
+                    "starling.mods.native.differs"
+                } else {
+                    "starling.mods.native.not_in_game"
+                };
+                game.lines.push((tr(key, &[]), false));
+            }
+            // One Compile for every native mod chosen below; its card offers GitHub and the build
+            // server.
+            game.buttons.push((
+                tr("starling.mods.native.compile", &[]),
+                NativeGameAct::Compile,
+            ));
+        }
+        if next_loads != now {
+            game.buttons.push((
+                tr("starling.mods.native.restart", &[]),
+                NativeGameAct::Restart,
+            ));
+        }
+        if next.is_some() {
+            game.buttons.push((
+                tr("starling.mods.native.play_without", &[]),
+                NativeGameAct::PlayWithout,
+            ));
+        }
+        Some(game)
+    }
+
+    fn refresh_native_game(&mut self) {
+        self.settings.mods.native_game = self.native_game();
+    }
+
+    /// Mod `i` was turned on or off on the Mods page. A native one changes the next start: with
+    /// no native mod on, the APK's own game; with the set of a build already on the phone, that
+    /// build. Another set waits for a Compile, which the page offers.
+    pub(super) fn native_mod_toggled(&mut self, i: usize) {
+        let mods = &self.settings.mods;
+        if !SERVICE_SUPPORTED || !mods.installed.get(i).is_some_and(|m| m.native.is_some()) {
             return;
         }
-        installed.push(horizon_client::mod_list::Installed {
-            id: ID.into(),
-            title: "Native mods".into(),
-            description: "This game with native mods compiled in: choose a build, or play \
-                          without."
-                .into(),
-            problem: None,
-            dev: false,
-            native: Some(horizon_client::mod_list::NativePage {
-                keys: Vec::new(),
-                buttons: vec!["Choose a build...".into()],
-            }),
-        });
+        let any_on = mods
+            .installed
+            .iter()
+            .enumerate()
+            .any(|(j, m)| m.native.is_some() && !m.id.is_empty() && mods.is_on(j));
+        if !any_on {
+            let _ = std::fs::remove_file(dir().join("current"));
+            let _ = std::fs::remove_file(dir().join("starts"));
+        } else if let Some((version, _)) = crate::android::app_version()
+            && let Some(name) = build_with(&folder_mods_on(&mods.disabled), &version)
+            && chosen().as_deref() != Some(name.as_str())
+        {
+            let _ = std::fs::write(dir().join("current"), name);
+            let _ = std::fs::remove_file(dir().join("starts"));
+        }
+        self.refresh_native_game();
+    }
+
+    /// A button of the Mods page's game with native mods.
+    pub(super) fn native_game_act(&mut self, act: NativeGameAct) {
+        match act {
+            NativeGameAct::Compile | NativeGameAct::CompileOnGithub => {
+                let wanted: Vec<String> = folder_mods_on(&self.settings.mods.disabled)
+                    .into_iter()
+                    .collect();
+                let card = &mut self.native_builds;
+                let compiling = card
+                    .shared
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .compiling;
+                // The warning first: the button pressed is its first.
+                card.on_github = act == NativeGameAct::CompileOnGithub;
+                card.stage = Some(if compiling {
+                    Stage::Compiling
+                } else {
+                    Stage::Warn(mods_label(&wanted))
+                });
+            }
+            NativeGameAct::ShowCompile => self.native_builds.stage = Some(Stage::Compiling),
+            NativeGameAct::Restart => crate::android::restart_app(),
+            NativeGameAct::PlayWithout => {
+                let _ = std::fs::remove_file(dir().join("current"));
+                let _ = std::fs::remove_file(dir().join("starts"));
+            }
+            NativeGameAct::BuildServer => {
+                crate::android::ask_build_server(custom_server().as_deref().unwrap_or(""));
+            }
+        }
+        self.refresh_native_game();
     }
 
     /// A button of the native mod page `i` of Options > Mods: true when it was the Native mods
@@ -643,20 +895,10 @@ impl Game<'_> {
             self.open_native_builds();
             return true;
         }
+        // A row's Compile: the mods that are on, as the page's top Compile (one under way comes
+        // back).
         if row.problem.as_deref() == Some(horizon_client::mod_list::NOT_BUILT) {
-            let id = row.id.clone();
-            let card = &mut self.native_builds;
-            // One under way (its card hidden) comes back; its warning was read.
-            let compiling = card
-                .shared
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .compiling;
-            card.stage = Some(if compiling {
-                Stage::Compiling
-            } else {
-                Stage::Warn(id)
-            });
+            self.native_game_act(NativeGameAct::Compile);
             return true;
         }
         false
@@ -720,6 +962,7 @@ impl Game<'_> {
                 Err(e) => Stage::Failed(e.clone()),
             });
         }
+        let mut ended = false;
         if (matches!(card.stage, Some(Stage::Downloading(_))) || shared.compiling)
             && let Some(result) = shared.downloaded.take()
         {
@@ -729,6 +972,12 @@ impl Game<'_> {
                 Ok(name) => Stage::Chosen(name),
                 Err(e) => Stage::Failed(e),
             });
+            ended = true;
+        }
+        drop(shared);
+        // The Mods page says the new build.
+        if ended {
+            self.refresh_native_game();
         }
     }
 
@@ -844,9 +1093,20 @@ impl Game<'_> {
                 ("Native mods".to_owned(), e.clone())
             }
             Stage::Warn(id) => {
-                acts.push(("Compile".into(), Act::Compile));
-                if custom_host.is_none() {
-                    acts.push((USE_GITHUB.into(), Act::CompileOnGithub));
+                let github = custom_host
+                    .is_none()
+                    .then(|| (USE_GITHUB.to_owned(), Act::CompileOnGithub));
+                let compile = ("Compile".to_owned(), Act::Compile);
+                // Use GitHub pressed on the Mods page: it comes first.
+                match github {
+                    Some(github) if self.native_builds.on_github => {
+                        acts.push(github);
+                        acts.push(compile);
+                    }
+                    github => {
+                        acts.push(compile);
+                        acts.extend(github);
+                    }
                 }
                 acts.push(("Build server...".into(), Act::Server));
                 danger = custom_host.map(|host| {
@@ -1158,5 +1418,7 @@ impl Game<'_> {
                     });
             }
         }
+        // Play without, a compile begun: the Mods page says so.
+        self.refresh_native_game();
     }
 }

@@ -83,6 +83,8 @@ public class StarlingActivity extends NativeActivity {
 
     /** The build with native mods loaded in place of the APK's library (android_lib.rs). */
     private static final String GAME_LIBRARY = "STARLING_GAME_LIBRARY";
+    /** This install of the APK (NativeMods.stamp), for game/native_builds.rs. */
+    private static final String APK_STAMP = "STARLING_APK";
 
     /**
      * Loads the game library with this class loader, so the native methods resolve: a build with
@@ -91,6 +93,15 @@ public class StarlingActivity extends NativeActivity {
      * build named by GAME_LIBRARY, the very library loaded here.
      */
     private void loadGame() {
+        String stamp = NativeMods.stamp(this);
+        if (stamp != null) {
+            try {
+                // The game writes it beside the builds it downloads, and tells an old build by it.
+                Os.setenv(APK_STAMP, stamp, true);
+            } catch (ErrnoException e) {
+                // The game then marks no build as made for this install: none loads.
+            }
+        }
         File build = NativeMods.chosen(this, versionName());
         if (build != null) {
             try {

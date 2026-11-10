@@ -6,9 +6,12 @@ phone cannot build the game (Rust and the NDK are gigabytes, and the build takes
 service does it and the phone swaps in the result:
 
 1. **The mod.** The player opens an `.hnmod` with Starling (`import.rs`), which puts it in `horizon-native-mods/`.
-2. **Compile.** Its row on the Mods page has a Compile button (`game/native_builds.rs`). After a warning, the game sends
-   the folder's mods, without the assets and data only the game reads, to the service, and the player can fish or mine
-   while it waits (`game/setup/fishing.rs`, `game/build_mining.rs`).
+2. **Compile.** The top of the Mods page says which game runs (the APK's own, or a build with which mods, compiled
+   when), what the next start runs, and whether the native mods turned on are the ones in it; when they are not, it has
+   Compile and Use GitHub (slower) (`game/native_builds.rs`). After a warning, the game sends the folder's mods that
+   are on, without the assets and data only the game reads, to the service, and the player can fish or mine while it
+   waits (`game/setup/fishing.rs`, `game/build_mining.rs`). Turning every native mod off makes the next start play the
+   APK's own game; turning on the set of a build still on the phone chooses it again.
 3. **The download.** The game's library comes back, is checked against its SHA-256, and is chosen for the next start
    (`files/native/current`). A dropped download goes on from where it stopped.
 4. **The swap.** At the next start `StarlingActivity` loads the chosen library in place of the APK's own
@@ -16,7 +19,10 @@ service does it and the phone swaps in the result:
    point is `starling_on_create` (the manifest's `android.app.func_name`, `android_lib.rs`), which finds the chosen
    build already loaded (`STARLING_GAME_LIBRARY`) and starts the game there. Activity and game share one library.
 
-**Safety nets.** A build is only loaded by the version it was made for (after an update, Compile again). A build that
+**Safety nets.** A build is only loaded by the install of the APK it was made under: beside its library, `apk` holds
+the APK's `lastUpdateTime` then (`NativeMods.stamp`, which `StarlingActivity` also hands the game as `STARLING_APK`).
+Every test build of a version has the same versionName and versionCode, so any new APK, even of the same version,
+leaves the build out of date: the Mods page says so in red, and Compile makes it again. A build that
 closes twice before its first frame is set aside: the next start plays the APK's own game and the card says why. "Play
 without native mods" stops using one. Nothing is installed: the APK stays the release.
 

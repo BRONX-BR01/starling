@@ -1,6 +1,7 @@
 package io.github.juanluci.starling;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,14 +18,17 @@ import org.json.JSONObject;
 /**
  * The game with native mods (game/native_builds.rs): a build of this version's game library with
  * the player's native mods compiled in, downloaded to files/native/KEY/ and chosen by
- * files/native/current. StarlingActivity loads it in place of the APK's own library. A build made
- * for another version is never loaded (after an update it waits for its rebuild), and one that
- * stopped twice before its first frame is set aside, with a notice the game shows.
+ * files/native/current. StarlingActivity loads it in place of the APK's own library. A build is
+ * only loaded by the install of the APK it was made under (its `apk` file, `stamp`): after any
+ * install, even of the same version, it waits for its rebuild. One that stopped twice before its
+ * first frame is set aside, with a notice the game shows.
  */
 final class NativeMods {
     private NativeMods() {}
 
     static final String LIBRARY = "libhorizon_android.so";
+    /** Beside a build's library: the `stamp` of the install it was made under (native_builds.rs). */
+    private static final String APK = "apk";
     /** Starts that ended before the first frame, after which the build is set aside. */
     private static final int TRIES = 2;
     private static final Pattern BUILD_SERVER_ADDRESS = Pattern.compile(
@@ -49,6 +53,12 @@ final class NativeMods {
         if (!library.isFile() || version == null || !version.equals(read(new File(build, "for")))) {
             return null;
         }
+        // Every test build of a version has the same versionName and versionCode: a build made
+        // under another install has another commit's code, and the game says it is out of date.
+        String stamp = stamp(context);
+        if (stamp == null || !stamp.equals(read(new File(build, APK)))) {
+            return null;
+        }
         File starts = new File(dir, "starts");
         int count = 0;
         try {
@@ -63,6 +73,19 @@ final class NativeMods {
         }
         write(starts, Integer.toString(count + 1));
         return library;
+    }
+
+    /**
+     * This install of the APK: when Android installed or last updated it, which changes with every
+     * APK put on the phone. The game writes it beside each build it downloads (STARLING_APK).
+     */
+    static String stamp(Context context) {
+        try {
+            return Long.toString(context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0).lastUpdateTime);
+        } catch (PackageManager.NameNotFoundException e) {
+            return null;
+        }
     }
 
     /** The game showed its first frame: the build started. */
