@@ -251,6 +251,7 @@ impl Manifest {
             ));
         }
         let server = m.side == Side::Server;
+        let stink = m.is_stink();
         if server != (m.api == SERVER_API) {
             return Err(format!(
                 "{MANIFEST}: a server mod is side = \"server\" with api = \"{SERVER_API}\", and only it"
@@ -259,7 +260,7 @@ impl Manifest {
         if let Some(c) = m
             .capabilities
             .iter()
-            .find(|c| c.on_server() != server && **c != Capability::Storage)
+            .find(|c| !stink && c.on_server() != server && **c != Capability::Storage)
         {
             let side = if server { "client" } else { "server" };
             return Err(format!("{MANIFEST}: capability {c} is for {side} mods"));
@@ -267,7 +268,7 @@ impl Manifest {
         if let Some(c) = m
             .capabilities
             .iter()
-            .find(|c| c.is_experimental() && !m.experimental.contains(c))
+            .find(|c| !stink && c.is_experimental() && !m.experimental.contains(c))
         {
             return Err(format!(
                 "{MANIFEST}: capability {c} is experimental and may change in any release: \
@@ -300,6 +301,15 @@ impl Manifest {
             }
         }
         Ok(m)
+    }
+    /// A client mod built for the Stink API (capability `world` or `atlas`): it runs on
+    /// `runtime_stink`, and the server-side and experimental capability rules don't apply to it.
+    pub fn is_stink(&self) -> bool {
+        self.side != Side::Server
+            && self
+                .capabilities
+                .iter()
+                .any(|c| matches!(c, Capability::World | Capability::Atlas))
     }
     /// The namespaces the mod's content owns: its id, then `namespaces`.
     pub fn owned_namespaces(&self) -> impl Iterator<Item = &str> {
@@ -506,6 +516,16 @@ capabilities = ["game-read", "hud"]
             let granted = Manifest::parse(&with).unwrap();
             assert_eq!(granted.check_imports([import.as_str()]), Ok(()));
         }
+    }
+
+    #[test]
+    fn a_stink_client_mod_skips_the_server_and_experimental_rules() {
+        let text = "id = \"orbital\"\nname = \"O\"\nversion = \"1\"\napi = \"0.2\"\nside = \"client\"\ncapabilities = [\"registries\", \"game-read\", \"chat\", \"hud\", \"storage\", \"input\", \"ui\", \"render\", \"world\", \"atlas\"]\n";
+        let m = Manifest::parse(text).unwrap();
+        assert!(m.is_stink());
+        let plain = text.replace(", \"world\", \"atlas\"", "");
+        let err = Manifest::parse(&plain).unwrap_err();
+        assert!(err.contains("experimental"), "{err}");
     }
 
     #[test]

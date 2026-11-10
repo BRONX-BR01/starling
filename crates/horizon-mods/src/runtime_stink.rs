@@ -370,7 +370,7 @@ impl StinkMods {
             match Package::read(path) {
                 Err(e) => entry.status = Status::Failed(e),
                 Ok(package) => {
-                    let on = enabled(&package.manifest.id);
+                    let on = enabled(&package.manifest.id) && package.manifest.is_stink();
                     entry.manifest = Some(package.manifest.clone());
                     if on {
                         // Content is read before the world loads; a mod whose

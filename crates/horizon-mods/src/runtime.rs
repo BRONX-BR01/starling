@@ -503,7 +503,7 @@ impl Mods {
             match Package::read(path) {
                 Err(e) => entry.status = Status::Failed(e),
                 Ok(package) => {
-                    let on = enabled(&package.manifest.id);
+                    let on = enabled(&package.manifest.id) && !package.manifest.is_stink();
                     entry.manifest = Some(package.manifest.clone());
                     if on && !runs.starts(package.manifest.side) {
                         entry.status = Status::Elsewhere;
