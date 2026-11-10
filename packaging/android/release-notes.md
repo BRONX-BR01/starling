@@ -28,6 +28,7 @@ Horizon Android and Starling are now one app, in [starling-client/starling](http
 - **More builds a day:** 32 instead of 16.
 - **Clearer build errors:** when a native mod can't compile, the message says which one, right away, and it no longer uses up your builds for the day. **Try again** on a failed compile compiles again.
 - **Build server...** on the Compile screen lets you use your own build server.
+- **A clearer Mods page:** the top says which game is running, the APK's own or a build with your native mods, and what the next start runs. Tick the native mods you want and press **Compile** once; a mod ticked and not in the game yet says so beside it. A build made for an earlier install no longer loads by mistake.
 - **The Mods page finds native mods you copy in** while the game is open, when you open the page. A `.hnmod` Starling can't read gets a row that says why.
 - Compiled native mods: compile them again after this update.
 
@@ -101,6 +102,10 @@ Starling now sits on the newest Horizon, about 4,800 commits ahead of the previo
 ## Report a bug
 
 Open an [issue](https://github.com/JuanLuci/starling/issues/new/choose): the form asks for your phone, your Android version and `Starling/logs/latest.log` (with `previous.log` beside it once Starling has been opened again).
+
+## Not sure which APK to install?
+
+Take a screenshot of this page on your phone and send it to an AI assistant, like ChatGPT, asking it to look up your phone's model: it will tell you which APK fits your phone.
 
 ---
 
