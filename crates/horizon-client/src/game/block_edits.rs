@@ -11,7 +11,7 @@ use horizon_client::{
     containers::BlockEntity,
     fast_hash::FxHashMap,
 };
-use horizon_mods::{BlockEdit, Heightmap};
+use horizon_mods::runtime_stink::{BlockEdit, Heightmap};
 use horizon_world::{
     heightmap::HeightmapType, registry::BlockStateId, worldgen::terrain::TerrainBlockStates,
 };
@@ -146,7 +146,7 @@ impl Game<'_> {
         h: Heightmap,
         below: u32,
         above: u32,
-    ) -> horizon_mods::ColumnBlocks {
+    ) -> horizon_mods::runtime_stink::ColumnBlocks {
         let bases = self.surface_heights(columns, h);
         let per = (below + above) as usize;
         let mut blocks = Vec::with_capacity(columns.len() * per);
@@ -197,7 +197,7 @@ impl Game<'_> {
                 }
             }
         }
-        horizon_mods::ColumnBlocks {
+        horizon_mods::runtime_stink::ColumnBlocks {
             tag: 0,
             palette,
             bases,

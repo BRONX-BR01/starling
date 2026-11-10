@@ -448,7 +448,7 @@ impl Game<'_> {
             game_time: self.world.game_time.max(0) as u64,
             day_time: self.world.day_time.max(0) as u64,
         });
-        let held = player.as_ref().and(self.mod_held(self.selected));
+        let held = player.as_ref().and(self.stink_mod_held(self.selected));
         let view_hit = player.as_ref().and_then(|_| {
             let eye = self.eye_position()?;
             let dir = super::view_vector(self.yaw, self.pitch);
@@ -488,7 +488,7 @@ impl Game<'_> {
         }
     }
     /// The stack in inventory slot `slot` as mods see it.
-    fn mod_held(&self, slot: usize) -> Option<HeldItem> {
+    fn stink_mod_held(&self, slot: usize) -> Option<HeldItem> {
         let stack = self.stack_in(slot)?;
         let extra = stack.extra.as_deref();
         Some(HeldItem {
@@ -805,7 +805,7 @@ impl Game<'_> {
             return false;
         }
         let slot = self.held_slot();
-        let Some(item) = self.mod_held(slot) else {
+        let Some(item) = self.stink_mod_held(slot) else {
             return false;
         };
         let Some(id) = self.stink_mods.mods.claimant(&item.id).map(str::to_owned) else {
@@ -828,7 +828,7 @@ impl Game<'_> {
             .stack_in(slot)
             .is_some_and(|s| self.stink_mods.mods.claimant(&s.item) == Some(id.as_str()));
         if released || !still_claimed {
-            if let Some(item) = self.mod_held(slot) {
+            if let Some(item) = self.stink_mod_held(slot) {
                 self.stink_mods
                     .mods
                     .push_event(&id, InputEvent::UseStop(ItemUse { item, ticks }));

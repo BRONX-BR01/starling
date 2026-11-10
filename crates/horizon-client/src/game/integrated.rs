@@ -954,7 +954,7 @@ impl Game<'_> {
 
     /// On single player's server thread: a client mod's block edit (`world.edit-blocks`), in the owner's level.
     #[cfg(feature = "mods")]
-    pub(super) fn owner_edit_blocks(&mut self, id: &str, edit: &horizon_mods::BlockEdit) {
+    pub(super) fn owner_edit_blocks(&mut self, id: &str, edit: &horizon_mods::runtime_stink::BlockEdit) {
         self.in_owner_level(|g| g.edit_blocks_logged(id, edit));
     }
 
