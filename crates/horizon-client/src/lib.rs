@@ -28,7 +28,6 @@ pub mod auto_jump;
 pub mod banner;
 pub mod beehive;
 pub mod benchmark;
-pub mod block_edit;
 pub mod block_sprites;
 pub mod block_entity_item;
 pub mod block_pattern;
@@ -174,3 +173,6 @@ pub use horizon_client_render::{android_gamepad, android_runtime, file_lock, key
 #[cfg(test)]
 #[path = "android/device_preferences.rs"]
 mod android_device_preferences;
+
+// Bulk block edits live in the render crate, next to `World`.
+pub use horizon_client_render::block_edit;

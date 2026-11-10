@@ -17,6 +17,7 @@ pub mod border_render;
 pub mod breaking;
 pub mod brewing;
 pub mod camera;
+pub mod block_edit;
 pub mod chat;
 pub mod chunk;
 pub mod chunk_map;

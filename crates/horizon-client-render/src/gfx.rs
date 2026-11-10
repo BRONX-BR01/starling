@@ -1038,7 +1038,7 @@ fn requested_split() -> Option<u32> {
         .filter(|&n| (1..=SPRITE_SPLIT).contains(&n))
 }
 /// The split the CPU mip chains are cut by before the adapter is known.
-fn sprite_split() -> u32 {
+pub fn sprite_split() -> u32 {
     requested_split().unwrap_or(SPRITE_SPLIT)
 }
 /// The block sprite layers per texture array on an adapter that holds
