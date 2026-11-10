@@ -12,6 +12,7 @@ Horizon Android and Starling are now one app, in [starling-client/starling](http
 ### New
 
 - **Accounts:** the account button on the title screen keeps Microsoft, Ely.by and offline profiles, and switches between them. The one you pick is the one you play worlds and servers with, and it stays picked after a restart. Ely.by takes your password and, if you use it, a 2FA code. The setup on the first start offers Ely.by and named offline profiles too.
+- **Skins for each profile:** Skin Customization keeps a skin for each profile. A Microsoft account can send its skin to its Minecraft profile, so others see it on servers, and an Ely.by account wears its Ely.by skin, with a button to change it on ely.by.
 - **A catalog inside the game:** the **Catalog** button on the Mods, Resource Packs and Shader Packs pages finds, installs and removes them. Java shader packs like Complementary, BSL and Photon install with a tap and run as they are.
 - **Your game folder in the Files app:** Starling shows up in Android's Files app and file pickers, to browse, copy, rename and delete.
 - **More phones:** 32-bit ARM phones and x86 devices get their own APK, and older GPUs get a game built to run on them.
@@ -35,6 +36,7 @@ Horizon Android and Starling are now one app, in [starling-client/starling](http
 - **The on-screen keyboard opens and types in more places:** a server's dialogs, the recipe book's search, the searches in Options, the skin name, a custom button's text, the game rules in World Options and Create New World, and the LAN port.
 - **Chests and shulker boxes close again** after you close them.
 - **The title screen no longer shows the last world's mobs** over the panorama.
+- **Scrolling the options with a finger** no longer changes the setting under it.
 - **Open Folder opens the game's folders** in the Files app. If nothing can open them, a message says how to find them there.
 - **The setup tries again** when a server refuses a download because of its limit, instead of stopping.
 - **Opening a game in OpenGL no longer crashes** on Adreno phones.
