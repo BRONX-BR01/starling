@@ -2059,6 +2059,27 @@ impl GraphicsUi {
         self.scroll
             .wheel(amount, 18.0, cols.top, cols.bottom, content);
     }
+    /// Whether `(x, y)` is on a row of the list that a press changes at once (a value stepped by
+    /// `<` `>`, a tick box, a button): a finger moving from there scrolls instead. A slider's row
+    /// is not, as a sideways drag moves it.
+    pub fn row_button_at(&mut self, s: &Settings, (w, h): (f32, f32), (x, y): (f32, f32)) -> bool {
+        let (cols, lines, _) = self.layout(s, w, h);
+        if y < cols.top || y >= cols.bottom {
+            return false;
+        }
+        lines.iter().any(|line| {
+            line.setting.is_some_and(|setting| {
+                setting.item.slider(s).is_none()
+                    && ui::hovered(
+                        (x, y),
+                        cols.list_x,
+                        self.row_y(&cols, line),
+                        cols.list_w,
+                        style::ROW,
+                    )
+            })
+        })
+    }
     /// What Tab steps through, in order, with where each is on screen. The
     /// arrows (`near`) only reach the rows in view and the one next past either
     /// edge, which scrolls in: a row farther out sits under the tabs or the
@@ -2437,6 +2458,18 @@ mod tests {
         ui.click(&mut s, (x + w / 2.0, y + h / 2.0), size, FB, false, false);
         let (_, lines, _) = ui.layout(&s, size.0, size.1);
         assert_eq!(ui.current(&lines), Some(Page::Hdr));
+    }
+
+    #[test]
+    fn a_finger_scrolls_from_a_stepped_row_and_drags_a_slider() {
+        let s = Settings::default();
+        let mut ui = GraphicsUi::default();
+        let [x, y, w, h] = row(&mut ui, &s, Item::Vanilla(Opt::Clouds));
+        assert!(ui.row_button_at(&s, SIZE, (x + w - 10.0, y + h / 2.0)));
+        let [x, y, w, h] = row(&mut ui, &s, Item::Horizon(H::ChunkUpdates));
+        assert!(!ui.row_button_at(&s, SIZE, (x + w - 10.0, y + h / 2.0)));
+        // Off the list: nothing to scroll past.
+        assert!(!ui.row_button_at(&s, SIZE, (1.0, 1.0)));
     }
 
     #[test]

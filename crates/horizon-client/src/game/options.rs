@@ -368,7 +368,10 @@ impl Game<'_> {
             .options
             .shortcut(&self.gui.atlas, shortcut, &mut self.clipboard)
     }
-    pub(super) fn options_scroll(&mut self, amount: f32) -> Result<()> {
+    /// The wheel on the options. A finger's scroll (`finger`) only scrolls: a list moved by a
+    /// finger that landed on a cycle button must not cycle it at each step, as a mouse wheel over it
+    /// does (`CycleButton.mouseScrolled`).
+    pub(super) fn options_scroll(&mut self, amount: f32, finger: bool) -> Result<()> {
         let framebuffer = self.renderer.as_ref().map_or([1280, 720], |r| {
             [r.config.width as i32, r.config.height as i32]
         });
@@ -380,6 +383,12 @@ impl Game<'_> {
             return self.handle_option_events(events);
         }
         let size = self.gui_size();
+        if finger {
+            self.ui
+                .options
+                .scroll_at(&self.settings, size, self.cursor, amount);
+            return Ok(());
+        }
         let events =
             self.ui
                 .options

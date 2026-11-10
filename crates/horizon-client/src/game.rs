@@ -17818,7 +17818,7 @@ impl Game<'_> {
                         self.command_block_scroll(d);
                     }
                     if self.screen == Screen::Options && d != 0.0 {
-                        self.options_scroll(d)?;
+                        self.options_scroll(d, finger)?;
                     }
                     // AbstractContainerScreen.mouseScrolled: a bundle under the
                     // cursor takes the wheel before the screen's own scrolling.
@@ -21360,6 +21360,13 @@ impl Loading {
                     HudBatch::new(size).scale,
                     self.settings.mouse_wheel_sensitivity,
                 );
+                // A finger on an option's button scrolls whichever way it moves, as in game.
+                if touch.phase == winit::event::TouchPhase::Started
+                    && !self.touch_pointer.down()
+                    && self.menu_options_button_at(touch)
+                {
+                    self.touch_pointer.prefer_scroll();
+                }
                 self.touch_pointer.event(touch, slop, Instant::now())
             }
             _ => vec![event],

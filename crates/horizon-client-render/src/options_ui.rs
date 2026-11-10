@@ -5933,6 +5933,32 @@ impl OptionsUi {
             _ => self.scroll(s, size, amount),
         }
     }
+    /// Whether `cursor` is on a button that a finger moving from it should scroll past rather than
+    /// press (touch.rs, `prefer_scroll`): any active button or language row, and on Video Settings
+    /// any row but a slider's. Sliders keep their sideways drag, and the pages with drags of their
+    /// own (packs, the canvas, calibration, split screen) are left as they are.
+    pub fn list_button_at(&mut self, s: &Settings, size: (f32, f32), cursor: (f32, f32)) -> bool {
+        if self.resource_error.is_some() || self.painting() {
+            return false;
+        }
+        if Self::graphics_page(self.page()).is_some() {
+            return self.graphics.row_button_at(s, size, cursor);
+        }
+        if matches!(
+            self.page(),
+            Page::Packs | Page::SplitSetup | Page::SplitProfiles | Page::HdrCalibration
+        ) {
+            return false;
+        }
+        let (widgets, top, bottom, _) = self.layout(s, size.0, size.1);
+        widgets.iter().any(|wd| {
+            matches!(
+                wd.kind,
+                WKind::Button { active: true, .. } | WKind::LanguageRow { .. }
+            ) && ui::hovered(cursor, wd.x, wd.y, wd.w, wd.h)
+                && !(wd.list && (cursor.1 < top || cursor.1 >= bottom))
+        })
+    }
     /// `VideoSettingsScreen.mouseScrolled`: with Ctrl held the wheel steps the GUI scale
     /// (auto counts as one past the maximum) and the list goes back to the top.
     pub fn video_wheel_gui_scale(
@@ -9221,6 +9247,45 @@ mod tests {
         let events = ui.wheel(&mut s, size, cursor, [854, 480], 1.0);
         assert_eq!(s.master_volume, 0.5);
         assert!(!events.iter().any(|e| matches!(e, Event::Volume(0, _))));
+    }
+
+    #[test]
+    fn a_finger_scrolls_from_a_cycle_button_and_drags_a_slider() {
+        let s = Settings::default();
+        let mut ui = OptionsUi::default();
+        let size = (480.0, 600.0);
+        ui.show(Page::Extras);
+        let (widgets, _, _, _) = ui.layout(&s, size.0, size.1);
+        let sort = widgets
+            .iter()
+            .find(|w| {
+                matches!(
+                    w.kind,
+                    WKind::Button {
+                        act: Act::Extra(crate::extras::Item::Sort),
+                        ..
+                    }
+                )
+            })
+            .unwrap();
+        let on_sort = (sort.x + 5.0, sort.y + 5.0);
+        assert!(ui.list_button_at(&s, size, on_sort));
+        ui.show(Page::Sound);
+        let (widgets, _, _, _) = ui.layout(&s, size.0, size.1);
+        let master = widgets
+            .iter()
+            .find(|w| {
+                matches!(
+                    w.kind,
+                    WKind::Slider {
+                        opt: Opt::Volume(0),
+                        ..
+                    }
+                )
+            })
+            .unwrap();
+        let on_master = (master.x + 10.0, master.y + 10.0);
+        assert!(!ui.list_button_at(&s, size, on_master));
     }
 
     #[test]

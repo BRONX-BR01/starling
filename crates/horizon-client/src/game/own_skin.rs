@@ -381,7 +381,10 @@ impl Game<'_> {
     /// Where the title screen shows its player in a GUI `w` by `h`, once it is drawn there; None
     /// before, and on the title's other pages.
     fn title_layout(&self, w: f32, h: f32) -> Option<TitleLayout> {
-        (self.title_main() && self.own_skin.title_visible)
+        // The options and the credits opened over the title hide it without drawing it again, so
+        // `title_visible` keeps the last frame's: under them, its place takes no finger or click.
+        let hidden = matches!(self.screen, super::Screen::Options | super::Screen::Win);
+        (self.title_main() && self.own_skin.title_visible && !hidden)
             .then(|| title_layout_in(w, h))
             .flatten()
     }
