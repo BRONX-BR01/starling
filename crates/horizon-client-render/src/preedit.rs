@@ -128,12 +128,14 @@ struct State {
     preedit: Option<(PreeditEvent, Instant)>,
     caret: Option<Caret>,
     area: Option<[f32; 4]>,
+    field: Option<[f32; 4]>,
 }
 
 static STATE: Mutex<State> = Mutex::new(State {
     preedit: None,
     caret: None,
     area: None,
+    field: None,
 });
 
 fn state() -> std::sync::MutexGuard<'static, State> {
@@ -158,6 +160,17 @@ pub fn composing() -> bool {
 /// it is where the overlay goes ([`draw_overlay`]).
 pub fn report_caret(x: f32, y: f32, input_height: f32) {
     state().caret = Some(Caret { x, y, input_height });
+}
+
+/// The focused editor's bounds in GUI pixels. Custom screens using EditBox participate
+/// automatically; other widgets can report the same contract without naming their screen.
+pub fn report_field(rect: [f32; 4]) {
+    state().field = Some(rect);
+}
+
+/// Consume this frame's focused editor. No report means no editor, never stale focus.
+pub fn take_focused_field() -> Option<[f32; 4]> {
+    state().field.take()
 }
 
 /// `IMEPreeditOverlay.extractRenderState` for the caret reported this frame,

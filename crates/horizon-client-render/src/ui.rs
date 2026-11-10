@@ -1764,6 +1764,7 @@ impl EditBox {
             }
         }
         if self.focused {
+            crate::preedit::report_field([self.x, self.y, self.width, self.height]);
             crate::preedit::report_caret(cursor_x, ty, 10.0);
         }
     }

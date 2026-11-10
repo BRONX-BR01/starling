@@ -118,6 +118,21 @@ impl Mirror {
         Some(push)
     }
 
+    /// An explicit field tap must reopen even a floating keyboard, whose height stays zero.
+    fn sync_requested(&mut self, field: Option<Field>, requested: bool) -> Option<Push> {
+        match self.sync(field) {
+            Some(Push::Update(f, cursor, anchor, generation)) if requested => {
+                Some(Push::Show(f, cursor, anchor, generation))
+            }
+            None if requested => {
+                let f = self.shown.clone()?;
+                let (_, cursor, anchor) = held(&f, Some(&f));
+                Some(Push::Show(f, cursor, anchor, self.generation))
+            }
+            push => push,
+        }
+    }
+
     /// An edit the editor made on the update `generation` saw: whether it is for `field`, the
     /// field shown now (older ones were for the one before).
     fn takes(&self, generation: i32, field: Option<FieldId>) -> bool {
@@ -536,7 +551,7 @@ impl Game<'_> {
     /// decided: what the editor did applied in order, then the editor shown, told the field's
     /// own changes or put away; or NativeActivity's keyboard for a field it cannot read.
     #[cfg(target_os = "android")]
-    pub(super) fn android_keyboard(&mut self, keyboard: bool) {
+    pub(in crate::game) fn android_keyboard(&mut self, keyboard: bool) {
         for event in crate::android::take_mirror_events() {
             match event {
                 crate::android::MirrorEvent::Edit {
@@ -564,7 +579,11 @@ impl Game<'_> {
         let field = if keyboard { self.mirror_field() } else { None };
         // A field the editor cannot read (not one that just went, with the line sent).
         let unread = keyboard && field.is_none() && self.text_context().is_some();
-        let push = self.touch.mirror.sync(field);
+        let requested = std::mem::take(&mut self.touch.keyboard_request);
+        let push = self
+            .touch
+            .mirror
+            .sync_requested(field, requested && keyboard);
         match &push {
             Some(Push::Show(f, cursor, anchor, generation))
             | Some(Push::Update(f, cursor, anchor, generation)) => {
@@ -586,7 +605,7 @@ impl Game<'_> {
         // NativeActivity's keyboard for the rest; not in the frame the editor goes away, whose
         // hiding (on the UI thread) would come after.
         let native = unread && push != Some(Push::Hide);
-        if native != self.touch.mirror.native
+        if (native != self.touch.mirror.native || native && requested)
             && let Some(window) = &self.window
         {
             window.set_ime_allowed(native);
@@ -611,6 +630,25 @@ mod tests {
             max: 0,
             flags: SUGGEST,
         }
+    }
+
+    #[test]
+    fn tapping_an_unchanged_field_reopens_the_keyboard_without_losing_edits() {
+        let mut m = Mirror::default();
+        let f = field(0, "ab", Some((1, 1)));
+        assert!(matches!(m.sync(Some(f.clone())), Some(Push::Show(..))));
+        assert_eq!(m.sync_requested(Some(f.clone()), false), None);
+        assert_eq!(
+            m.sync_requested(Some(f), true),
+            Some(Push::Show(field(0, "ab", Some((1, 1))), 1, 1, 1))
+        );
+        assert!(m.takes(1, Some(("test", 0))));
+        assert_eq!(
+            m.sync_requested(Some(field(1, "second", Some((3, 3)))), true),
+            Some(Push::Show(field(1, "second", Some((3, 3))), 3, 3, 2)),
+        );
+        assert_eq!(m.sync_requested(None, true), Some(Push::Hide));
+        assert_eq!(m.sync_requested(None, true), None);
     }
 
     #[test]

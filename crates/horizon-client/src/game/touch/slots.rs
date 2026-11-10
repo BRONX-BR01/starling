@@ -175,6 +175,16 @@ impl Game<'_> {
         id: WindowId,
         t: &Touch,
     ) -> bool {
+        // A slot drag can hand its finger to the list pointer; that pointer
+        // retains ownership through the matching release.
+        if self.touch.pointer.owns(t.id) {
+            let layout = self.touch_layout();
+            let slop = horizon_client::touch::slop(layout.width, layout.height);
+            for event in self.touch.pointer.event(t, slop, Instant::now()) {
+                self.handle_window_event(event_loop, id, event, InputOrigin::User);
+            }
+            return true;
+        }
         if !self.slot_touch_screen() {
             self.touch.slots = SlotTouch::default();
             return false;

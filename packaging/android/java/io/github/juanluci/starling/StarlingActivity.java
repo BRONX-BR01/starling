@@ -485,6 +485,9 @@ public class StarlingActivity extends NativeActivity {
             public void run() {
                 if (mirror != null) {
                     mirror.hide();
+                    android.view.View game = getWindow().getDecorView();
+                    game.setFocusableInTouchMode(true);
+                    game.requestFocus();
                 }
             }
         });

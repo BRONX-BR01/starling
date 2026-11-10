@@ -17,7 +17,11 @@ impl Game<'_> {
     /// on-screen keyboard goes (touch_frame); any input but a controller takes the menus back
     /// from the pad's pointer.
     pub(super) fn input_used(&mut self, input: InputMode) {
-        let mode = self.input_mode.after(input, cfg!(target_os = "android"));
+        let mode = self
+            .settings
+            .touch
+            .input_selection
+            .resolve(self.input_mode.after(input, cfg!(target_os = "android")));
         if mode == self.input_mode {
             return;
         }

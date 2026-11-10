@@ -137,6 +137,7 @@ struct Cache {
     fonts: Fonts,
     entries: HashMap<Key, Cached>,
     shelf: (u32, u32, u32),
+    generation: u64,
     pending: Vec<crate::font::Patch>,
     /// The atlas the entries were uploaded to (a new atlas starts over).
     atlas: usize,
@@ -147,6 +148,7 @@ thread_local! {
 /// Reloaded atlases can occupy the same address with empty run-time slots.
 pub fn reset_atlas() {
     CACHE.with(|cache| *cache.borrow_mut() = None);
+    crate::android_control_theme::clear_cache();
 }
 fn with_cache<R>(atlas: &HudAtlas, f: impl FnOnce(&mut Cache) -> R) -> R {
     CACHE.with(|c| {
@@ -156,6 +158,7 @@ fn with_cache<R>(atlas: &HudAtlas, f: impl FnOnce(&mut Cache) -> R) -> R {
             fonts: Fonts::load(),
             entries: HashMap::new(),
             shelf: (0, 0, 0),
+            generation: 0,
             pending: Vec::new(),
             atlas: id,
         });
@@ -167,6 +170,14 @@ fn with_cache<R>(atlas: &HudAtlas, f: impl FnOnce(&mut Cache) -> R) -> R {
         }
         f(cache)
     })
+}
+/// One allocator owns the existing UI texture region, including the imported editor.
+/// Separate font/icon caches must never upload into the same pixel positions.
+pub(crate) fn reserve_ui_pixels(atlas: &HudAtlas, w: u32, h: u32) -> Option<(u32, u32, Rect)> {
+    with_cache(atlas, |c| c.place(atlas, w, h))
+}
+pub(crate) fn ui_generation(atlas: &HudAtlas) -> u64 {
+    with_cache(atlas, |c| c.generation)
 }
 impl Cache {
     fn region(atlas: &HudAtlas) -> Option<Rect> {
@@ -188,6 +199,7 @@ impl Cache {
         if y + h > region.h || w > region.w {
             self.entries.clear();
             self.shelf = (0, 0, 0);
+            self.generation = self.generation.wrapping_add(1);
             return None;
         }
         self.shelf = (x + w + 1, y, row.max(h));
@@ -666,6 +678,51 @@ fn wrapping_lines(ui: &Ui, face: Face, size: f32, text: &str, max_w: f32) -> Vec
 mod tests {
     use super::*;
 
+    #[test]
+    fn control_editor_and_starling_share_ui_pixels_without_overwriting_each_other() {
+        reset_atlas();
+        let atlas = HudAtlas::boot();
+        let mut first = HudBatch::new([1280, 720]);
+        let mut ui = Ui::new(&atlas, &mut first, (-1., -1.));
+        ui.text(Face::Regular, 16., 10., 10., color::TEXT, "Starling");
+        ui.finish();
+        let before = first.patches.clone();
+        let mut second = HudBatch::new([1280, 720]);
+        let mut controls =
+            crate::android_control_theme::Ui::mobile(&atlas, &mut second, (-1., -1.));
+        controls.icon(
+            crate::android_control_theme::Icon::Gamepad,
+            10.,
+            10.,
+            32.,
+            color::TEXT,
+        );
+        controls.text(
+            crate::android_control_theme::Face::Regular,
+            16.,
+            50.,
+            10.,
+            color::TEXT,
+            "Controls",
+        );
+        controls.finish();
+        assert!(!before.is_empty() && !second.patches.is_empty());
+        for a in &before {
+            for b in &second.patches {
+                assert!(
+                    a.x + a.width <= b.x
+                        || b.x + b.width <= a.x
+                        || a.y + a.height <= b.y
+                        || b.y + b.height <= a.y
+                );
+            }
+        }
+        let mut third = HudBatch::new([1280, 720]);
+        let mut ui = Ui::new(&atlas, &mut third, (-1., -1.));
+        ui.text(Face::Regular, 16., 10., 10., color::TEXT, "Starling");
+        ui.finish();
+        assert!(third.patches.is_empty());
+    }
     #[test]
     fn atlas_reload_regenerates_text_and_corners_at_the_same_address() {
         let atlas = HudAtlas::build(Path::new("/nonexistent/horizon-test-assets")).unwrap();

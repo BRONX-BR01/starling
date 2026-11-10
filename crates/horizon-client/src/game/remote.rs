@@ -868,6 +868,15 @@ fn number_format(f: &play::NumberFormat) -> horizon_client::scoreboard::NumberFo
 }
 
 impl Game<'_> {
+    #[cfg(target_os = "android")]
+    pub(super) fn touch_mining_progress(&self) -> f32 {
+        self.remote
+            .as_ref()
+            .and_then(|r| r.destroying.map(|d| d.2))
+            .or_else(|| self.mining.as_ref().map(|m| m.progress))
+            .unwrap_or(0.)
+    }
+
     /// A `Holder<SoundEvent>` off the wire: an inline event's location, or
     /// the name of a registered one.
     pub(super) fn remote_sound_name(
@@ -8980,6 +8989,22 @@ impl Game<'_> {
     /// the main hand's item, then the off hand's turn (its block, its item).
     /// The server does each packet's part with that packet's hand only.
     fn remote_use_hands(&mut self) {
+        #[cfg(target_os = "android")]
+        if self.mobile.touch_shield {
+            let hand = if self
+                .offhand
+                .as_ref()
+                .is_some_and(|s| self.blocks_attacks(s).is_some())
+            {
+                Hand::Off
+            } else {
+                Hand::Main
+            };
+            if self.remote_use_item(hand) {
+                self.heights.item_used(hand);
+            }
+            return;
+        }
         // A successful Item.use always drops the hand (LocalPlayer.itemUsed).
         if self.remote_use_item(Hand::Main) {
             self.heights.item_used(Hand::Main);
@@ -9286,7 +9311,7 @@ impl Game<'_> {
         }
     }
 
-    fn remote_start_attack(&mut self) -> bool {
+    pub(in crate::game) fn remote_start_attack(&mut self) -> bool {
         if self.clicks.miss_time > 0 {
             return false;
         }
@@ -10838,7 +10863,7 @@ fn remote_use_swings(held: &ItemStack, consumable: bool) -> bool {
 /// server decides; this is the client's guess of whether to go on. A carrot or warped fungus
 /// on a stick is not here: `FoodOnAStickItem.use` passes on a client, and only the server's
 /// answer to a boost that can run swings the hand.
-fn item_has_use(info: &horizon_client::items::ItemInfo) -> bool {
+pub(in crate::game) fn item_has_use(info: &horizon_client::items::ItemInfo) -> bool {
     let id = info.id.trim_start_matches("minecraft:");
     id.ends_with("_spear")
         || info.consumable.is_some()
@@ -10939,9 +10964,28 @@ struct RemoteUseWorld<'g, 'a>(&'g mut Game<'a>);
 
 impl horizon_client::interaction_input::TargetUseWorld for RemoteUseWorld<'_, '_> {
     fn use_entity(&mut self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.0.mobile.touch_shield {
+            return false;
+        }
         self.0.remote_use_entity(Hand::Main)
     }
     fn use_block(&mut self) -> bool {
+        #[cfg(target_os = "android")]
+        if self.0.mobile.touch_shield {
+            let transformer = self
+                .0
+                .stack_in(self.0.selected)
+                .and_then(|s| self.0.items().get(&s.item))
+                .is_some_and(|i| i.block_transformer.is_some());
+            if self.0.mobile.controls.settings.shield_button
+                || self.0.mobile.controls.shield_held()
+                || !transformer
+                || self.0.pick().is_none()
+            {
+                return false;
+            }
+        }
         self.0.remote_use_block(Hand::Main)
     }
     fn use_item(&mut self) {

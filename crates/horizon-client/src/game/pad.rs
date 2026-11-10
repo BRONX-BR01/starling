@@ -184,6 +184,10 @@ impl Pads {
     pub(super) fn player_replaced(&mut self) {
         self.health.forget();
     }
+    #[cfg(target_os = "android")]
+    pub(super) fn set_touch_state(&mut self, state: PadState) {
+        self.touch = state;
+    }
     /// The touch controls (game/touch.rs) play through their own pad.
     pub(super) fn touch_hold(&mut self, button: Button, down: bool) {
         self.touch.set(button, down);
@@ -229,6 +233,17 @@ impl Game<'_> {
             self.pad_output_off();
             PadState::default()
         };
+        #[cfg(target_os = "android")]
+        let hardware = {
+            self.mobile.keypad.configure(&self.settings.keypad);
+            let keypad = if !self.settings.keypad.enabled || self.pad_in_menu() || !self.focused {
+                self.mobile.keypad.clear();
+                Default::default()
+            } else {
+                self.mobile.keypad.poll()
+            };
+            hardware.merge(&keypad)
+        };
         let state = hardware.merge(&self.pad.injected);
         self.pad.virtual_input = self.pad.injected != PadState::default();
         for button in std::mem::take(&mut self.pad.taps) {
@@ -237,7 +252,7 @@ impl Game<'_> {
         if state.active(&self.settings.controller) {
             self.last_input = Instant::now();
             self.input_used(InputMode::Pad);
-            self.pad.in_use = true;
+            self.pad.in_use = self.input_mode == InputMode::Pad;
         }
         let state = state.merge(&self.pad.touch);
         for button in std::mem::take(&mut self.pad.touch_taps) {
@@ -273,6 +288,8 @@ impl Game<'_> {
             self.pad_edge(event_loop, button, down);
         }
         self.pad_menu_frame(event_loop);
+        #[cfg(target_os = "android")]
+        self.mobile_pad_end(state.triggers == [0.; 2] && self.pad.late_releases.is_empty());
     }
 
     fn pad_edge(&mut self, event_loop: &dyn EventLoopCtl, button: Button, down: bool) {
@@ -344,6 +361,15 @@ impl Game<'_> {
                 }
                 Ok(())
             }
+            #[cfg(target_os = "android")]
+            "key.sneak" if self.touch_shown() && self.mobile.controls.vertical_movement => {
+                self.toggles.0[SNEAK].is_down = down;
+                self.sync_toggle(SNEAK);
+                if down {
+                    self.key_pressed(KeyCode::ShiftLeft)?;
+                }
+                Ok(())
+            }
             "key.sneak"
                 if self.settings.controller.toggle_sneak && !self.settings.toggle_crouch =>
             {
@@ -376,6 +402,11 @@ impl Game<'_> {
 
     /// B and Start: what Escape does where the pad is.
     pub(super) fn pad_back(&mut self) -> Result<()> {
+        // A server dialog owns Back, even when it cannot be closed. Never
+        // open the pause screen underneath a login/confirmation form.
+        if self.dialog_open() {
+            return self.dialog_key(KeyCode::Escape, None, None);
+        }
         // The options open over the title screen too: they come first, as
         // for the keyboard's Escape.
         if self.screen == Screen::Options {
@@ -409,6 +440,14 @@ impl Game<'_> {
         } else {
             self.pad.touch.left
         };
+        #[cfg(target_os = "android")]
+        if self.touch_shown()
+            && (!self.mobile.controls.settings.analog_movement
+                || self.mobile.controls.settings.mode
+                    == horizon_client::android_controls::Mode::Dpad)
+        {
+            return gamepad::java_move_vector(stick, settings.move_deadzone);
+        }
         gamepad::move_vector(stick, settings.move_deadzone)
     }
 
@@ -428,6 +467,8 @@ impl Game<'_> {
         if yaw == 0.0 && pitch == 0.0 {
             return;
         }
+        self.tutorial
+            .mouse(f64::from(yaw / 0.15), f64::from(pitch / 0.15));
         self.turn_player(f64::from(yaw / 0.15), f64::from(pitch / 0.15));
     }
 

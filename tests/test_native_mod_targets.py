@@ -37,9 +37,15 @@ class Targets(unittest.TestCase):
     def test_hooked_functions_have_no_cfg_inside(self):
         for path, signature in (
             ("crates/horizon-client/src/game.rs", "fn handle_window_event("),
+            ("crates/horizon-client/src/game.rs", "fn handle_window_event_inner("),
+            ("crates/horizon-client/src/game.rs", "fn play_mouse("),
+            ("crates/horizon-client/src/game.rs", "fn mapped_key("),
+            ("crates/horizon-client/src/game.rs", "fn has_shift_down("),
+            ("crates/horizon-client/src/game.rs", "fn has_control_down("),
+
             ("crates/horizon-client-render/src/options_ui.rs", "fn layout("),
         ):
-            self.assertNotIn("#[cfg", body(path, signature), signature)
+            self.assertNotRegex(body(path, signature), r"#\s*\[\s*cfg|\bcfg\s*!", signature)
 
     def test_the_catalog_has_the_file_horizon_mixins_looks_for(self):
         # It doesn't follow the #[path] in starling-catalog: E_INVALID_PATH for every native mod.

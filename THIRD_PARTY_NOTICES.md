@@ -271,9 +271,29 @@ and its `crates/horizon-client/src/android/document_store.rs`, under the MIT lic
 [LICENSE](LICENSE) as this repository). Copyright (c) 2026 Ludovic Marie and the Horizon contributors.
 The port is plain Java over Starling's one game folder, in place of the fork's Rust store of
 profiles and fixed folders that its launcher screens share.
+
+## Horizon Android control system and editor
+
+The Android control engine, MCPE/GoyControl layouts and presets, visual editor,
+control hub, virtual pointer and auxiliary keyboard are adapted from
+[Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606),
+MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors (see [LICENSE](LICENSE)).
+Source: `crates/horizon-client-render/src/touch.rs`, `touch/{layout,editor,custom}.rs`,
+`crates/horizon-client/src/{touch_ui,ui_theme,osk,ui_text}.rs`, and Android input
+integration in `game/android_input.rs`, `game/pad.rs` and `game.rs`. The
+physical D-pad/keypad profile is from `horizon-client-render/src/keypad.rs`
+and its editable bindings in `options_ui.rs`.
+
+The port uses Starling's input, IME, inventory, controller and renderer interfaces.
+Its UI rasterization shares Starling's existing runtime atlas allocator; it does
+not add a second font texture. Starling's chat shortcuts and slot gestures are
+retained. No Minecraft textures or prepared resources are included by this port.
+
 ## Horizon Android account profiles and Ely.by
 
 Provider-aware profile selection and Ely.by authentication, refresh, 2FA and session routing are adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606), specifically `launcher/src/account.rs`, `launcher/src/account/ely.rs`, `crates/horizon-client/src/android/login.rs` (behavior reference) and `crates/horizon-client-render/src/auth.rs`. MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors; the repository LICENSE retains the license text. The integration preserves Starling's Microsoft public client and sealed secret store, adds provider-separated keys and offline profile metadata, and uses Starling's existing title widgets rather than the Android launcher's panel.
 ## Horizon Android wardrobe
 
 Per-account skin selection and the Microsoft profile skin upload are adapted from [Vasysik/horizon-android at fa548eb7abe91c194d3780e4580b9746323cd606](https://github.com/Vasysik/horizon-android/tree/fa548eb7abe91c194d3780e4580b9746323cd606), specifically `launcher/src/skins.rs`, `launcher/src/skins/library.rs`, `launcher/src/skins/cloud.rs` and `crates/horizon-client/src/android/wardrobe.rs` (behavior reference). MIT, copyright (c) 2026 Ludovic Marie and the Horizon contributors; the repository LICENSE retains the license text. Starling keeps its `skins/` folder and Skin Customization page in place of the wardrobe's image store and launcher panel, keys each choice by the profile, uploads through its own sealed session, and sends Ely.by accounts to ely.by as Horizon Android does.
+
+The mobile attack gauge side and offhand spacing in `crates/horizon-client-render/src/hud_layout.rs` are adapted from the same Horizon Android commit fa548eb7abe91c194d3780e4580b9746323cd606 under MIT.

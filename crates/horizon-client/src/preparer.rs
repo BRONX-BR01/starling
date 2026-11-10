@@ -180,6 +180,12 @@ fn run(resources: &Path) -> Result<(), String> {
     install::activate(&made, resources)?;
     // Bedrock's touch buttons, from Mojang too, so the first game already has them.
     crate::bedrock_touch::fetch_logged(resources);
+    // Preparation replaces the resource directory. Fetch the original control
+    // overlay afterwards so the first game, not just a restart, receives it.
+    crate::android_control_assets::fetch(resources, |done, total| {
+        *shared() = Stage::Preparing(format!("Control textures: {done}/{total}"));
+    })
+    .map_err(|e| format!("Control textures: {e}"))?;
     // Everything the game reads is in the resources now: the runtime and the work files go.
     for done in [&jre, &kit.join(".local"), &temp] {
         let _ = std::fs::remove_dir_all(done);

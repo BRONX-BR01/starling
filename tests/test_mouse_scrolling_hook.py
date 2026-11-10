@@ -18,6 +18,7 @@ class MouseScrollingHookTests(unittest.TestCase):
         dispatch = source[start:source.index("                    if self.screen == Screen::Chat", start)]
         fixture = r"""
 use std::collections::HashSet;
+const MOBILE_PLATFORM: bool = false;
 #[allow(dead_code)]
 #[path = "MOUSE_PATH"] mod mouse;
 mod horizon_client { pub mod mouse { pub use crate::mouse::*; } }

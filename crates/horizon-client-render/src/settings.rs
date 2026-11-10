@@ -136,6 +136,8 @@ impl CustomButton {
 
 #[derive(Clone, Debug)]
 pub struct Settings {
+    pub touch: crate::android_controls::Settings,
+    pub keypad: crate::keypad::Settings,
     /// Degrees, 30..=110 (options.txt stores (fov - 70) / 40).
     pub fov: f32,
     /// Chunks, 2..=32.
@@ -256,6 +258,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            touch: crate::android_controls::Settings::load(),
+            keypad: Default::default(),
             fov: 70.0,
             render_distance: 12,
             simulation_distance: 12,
@@ -396,10 +400,12 @@ impl Settings {
             .parent()
             .map(|dir| crate::mod_list::ModList::load(&crate::logging::shared_dir(dir)))
             .unwrap_or_default();
+        let keypad = crate::keypad::Settings::load(&path.with_file_name("horizon-keypad.json"));
         let settings = match fs::read(path) {
             Ok(bytes) => Self {
                 horizon,
                 controller,
+                keypad,
                 extras,
                 mods,
                 ..Self::parse(&String::from_utf8_lossy(&bytes))
@@ -407,6 +413,7 @@ impl Settings {
             Err(_) => Self {
                 horizon,
                 controller,
+                keypad,
                 extras,
                 mods,
                 ..Self::default()
@@ -470,6 +477,8 @@ impl Settings {
             volumes[i] = f.double(&format!("soundCategory_{source}")) as f32;
         }
         Self {
+            touch: crate::android_controls::Settings::load(),
+            keypad: Default::default(),
             fov: f.int("fov") as f32,
             render_distance: f.int("renderDistance"),
             simulation_distance: f.int("simulationDistance"),
@@ -689,6 +698,7 @@ impl Settings {
         Ok(Self {
             horizon: self.horizon.clone(),
             controller: self.controller.clone(),
+            keypad: self.keypad.clone(),
             extras: self.extras.clone(),
             mods: self.mods.clone(),
             video_modes: self.video_modes.clone(),
@@ -705,6 +715,7 @@ impl Settings {
         if let Some(dir) = path.parent() {
             self.horizon.save(dir);
             self.controller.save(dir);
+            let _ = self.keypad.save(&dir.join("horizon-keypad.json"));
             self.extras.save(dir);
             self.mods.save(&crate::logging::shared_dir(dir));
         }
@@ -764,6 +775,40 @@ impl Settings {
 /// One option instance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Opt {
+    TouchMode,
+    TouchAnalog,
+    TouchCircleSize,
+    TouchAttackSide,
+    TouchHorizontalMargin,
+    TouchVerticalMargin,
+    TouchSensitivity,
+    TouchSensitivityHorizontal,
+    TouchSensitivityVertical,
+    TouchMouseButton,
+    TouchKeyboardButton,
+    TouchOffhand,
+    TouchShield,
+    TouchButtonScale,
+    TouchInteract,
+    TouchLeftHand,
+    TouchSprintButton,
+    TouchSprintToggle,
+    TouchInventoryControls,
+    TouchMouseSensitivity,
+    TouchCrosshairGestures,
+    TouchControlHub,
+    TouchUiVibration,
+    TouchGameVibration,
+    TouchAttackButtonLook,
+    TouchDynamicJoystick,
+    TouchDynamicAreaX,
+    TouchDynamicAreaY,
+    AndroidGyroscope,
+    AndroidGyroSensitivity,
+    TouchSwapJumpSneak,
+    TouchAutoSprint,
+    AndroidInputSelection,
+
     Fov,
     RenderDistance,
     SimulationDistance,

@@ -195,6 +195,8 @@ impl Game<'_> {
         self.open_options_at(from_title, Page::Main);
     }
     pub(super) fn open_options_at(&mut self, from_title: bool, page: Page) {
+        #[cfg(target_os = "android")]
+        self.mobile_options_open();
         // Gameplay keys must not stay held behind the options screen, where
         // bindings can also change before the physical key is released.
         self.keys.clear();
@@ -416,12 +418,16 @@ impl Game<'_> {
                 Event::DiagnosticsGpu => self.toggle_diagnostic_gpu(),
                 Event::ButtonClick => self.audio.play_button_click(),
                 Event::Changed => {
+                    #[cfg(target_os = "android")]
+                    self.mobile_options_apply();
                     self.settings.save(&Self::options_path());
                     self.apply_settings();
                     self.sync_agent_control();
                     self.ui.options.agent_status = self.agent_status_lines();
                 }
                 Event::SliderDrag => {
+                    #[cfg(target_os = "android")]
+                    self.mobile_options_apply();
                     self.apply_settings();
                 }
                 // Options.createSoundSliderOptionInstance: the preview plays

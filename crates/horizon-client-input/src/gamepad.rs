@@ -667,6 +667,22 @@ pub fn move_vector(stick: [f32; 2], deadzone: f32) -> Option<[f32; 2]> {
     (v != [0.0, 0.0]).then_some([-v[0], v[1]])
 }
 
+/// Java servers receive boolean directional input, so Android uses the same
+/// KeyboardInput vector for prediction and for the input packet.
+/// The stick deadzone is applied before this conversion.
+pub fn java_move_vector(stick: [f32; 2], deadzone: f32) -> Option<[f32; 2]> {
+    move_vector(stick, deadzone).map(|[left, forward]| {
+        // Eight 45-degree sectors: small sideways finger jitter stays forward.
+        let threshold = left.abs().max(forward.abs()) * (std::f32::consts::SQRT_2 - 1.0);
+        crate::input::keyboard_direction(
+            forward > threshold,
+            forward < -threshold,
+            left > threshold,
+            left < -threshold,
+        )
+    })
+}
+
 /// Degrees per second at full tilt and the default sensitivity.
 pub const YAW_SPEED: f32 = 200.0;
 pub const PITCH_SPEED: f32 = 140.0;
@@ -1649,5 +1665,17 @@ mod tests {
         assert_eq!(GlyphStyle::of_vendor(Some(0x054c)), GlyphStyle::PlayStation);
         assert_eq!(GlyphStyle::of_vendor(Some(0x28de)), GlyphStyle::Xbox);
         assert_eq!(GlyphStyle::of_vendor(None), GlyphStyle::Xbox);
+    }
+}
+
+#[cfg(test)]
+mod android_movement_port_tests {
+    #[test]
+    fn default_touch_movement_uses_java_sectors_instead_of_analog_angles() {
+        assert_eq!(super::java_move_vector([0.02, 1.], 0.1), Some([0., 1.]));
+        assert_eq!(super::java_move_vector([1., 0.02], 0.1), Some([-1., 0.]));
+        assert_eq!(super::java_move_vector([0., 0.], 0.1), None);
+        let d = std::f32::consts::FRAC_1_SQRT_2;
+        assert_eq!(super::java_move_vector([1., 1.], 0.1), Some([-d, d]));
     }
 }
