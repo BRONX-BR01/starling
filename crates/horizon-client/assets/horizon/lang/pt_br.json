@@ -14,6 +14,7 @@
   "starling.stick_prompt.remember": "Lembrar para este servidor",
   "starling.stick_prompt.dont_ask": "Não perguntar de novo",
   "starling.credits.founders": "Starling, antes Horizon Android, por JuanLuci e Vasysik",
+  "starling.credits.horizon": "Feito sobre o Horizon, de Ludovic Marie e colaboradores do Horizon, Licença MIT",
   "starling.diagnostics.title": "Diagnóstico",
   "starling.diagnostics.notice": "Os relatórios ficam neste dispositivo. Revise antes de compartilhar.",
   "starling.diagnostics.export": "Exportar ZIP de diagnóstico",

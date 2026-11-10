@@ -225,6 +225,7 @@
   "Results for \"%s\"": "Результаты для «%s»",
   "No settings match.": "Нет подходящих настроек.",
   "starling.credits.founders": "Starling, ранее Horizon Android, от JuanLuci и Vasysik",
+  "starling.credits.horizon": "На основе Horizon от Ludovic Marie и участников Horizon, лицензия MIT",
   "starling.diagnostics.title": "Диагностика",
   "starling.diagnostics.notice": "Отчёты локальные. Проверьте перед отправкой.",
   "starling.diagnostics.export": "Экспортировать диагностический ZIP",

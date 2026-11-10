@@ -4076,19 +4076,25 @@ impl OptionsUi {
                 let y = (33.0 + 30.0f32).min(h - 33.0 - 76.0);
                 let x = cx - 105.0;
                 if ON_A_PHONE {
-                    out.push(Widget {
-                        x: 0.0,
-                        y: y - 14.0,
-                        w,
-                        h: 9.0,
-                        kind: WKind::Text {
-                            text: tr("starling.credits.founders"),
-                            color: u32::MAX,
-                            centered: true,
-                        },
-                        list: false,
-                        row: 0,
-                    });
+                    // Starling's founders, then the game it is built on (THIRD_PARTY_NOTICES.md).
+                    for (i, key) in ["starling.credits.founders", "starling.credits.horizon"]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        out.push(Widget {
+                            x: 0.0,
+                            y: y - 26.0 + 12.0 * i as f32,
+                            w,
+                            h: 9.0,
+                            kind: WKind::Text {
+                                text: tr(key),
+                                color: u32::MAX,
+                                centered: true,
+                            },
+                            list: false,
+                            row: 0,
+                        });
+                    }
                 }
                 out.push(button(
                     x,

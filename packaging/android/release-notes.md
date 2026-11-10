@@ -1,25 +1,43 @@
 **Starling 0.8.0: the first release of Starling and Horizon Android together.**
 
-Horizon Android and Starling are now one app, in [starling-client/starling](https://github.com/starling-client/starling). Thanks to [Vasysik](https://github.com/Vasysik), who founded Horizon Android, for the support for older phones, the terrain work on Adreno and the game folder in the Files app in this release.
+Horizon Android and Starling are now one app, in [starling-client/starling](https://github.com/starling-client/starling). Starling, formerly Horizon Android, is co-founded by [JuanLuci](https://github.com/JuanLuci), founder of Starling, and [Vasysik](https://github.com/Vasysik), founder of Horizon Android. Thanks to Vasysik for the support for older phones, Diagnostics, account profiles with Ely.by, the terrain work on Adreno and the game folder in the Files app in this release.
 
 ## Install
 
 - **Already have Starling:** tap **Update** inside the game.
 - **New here, or coming from Horizon Android:** download the APK for your phone below and open it. Almost every phone takes **`starling-0.8.0-arm64-v8a.apk`**. Older 32-bit phones take `armeabi-v7a`, and x86 tablets and emulators take `x86_64` or `x86`.
 
-## What's new
+## What's new in 0.8.0
 
+### New
+
+- **Accounts:** the account button on the title screen keeps Microsoft, Ely.by and offline profiles, and switches between them. The one you pick is the one you play worlds and servers with, and it stays picked after a restart. Ely.by takes your password and, if you use it, a 2FA code. The setup on the first start offers Ely.by and named offline profiles too.
 - **A catalog inside the game:** the **Catalog** button on the Mods, Resource Packs and Shader Packs pages finds, installs and removes them. Java shader packs like Complementary, BSL and Photon install with a tap and run as they are.
 - **Your game folder in the Files app:** Starling shows up in Android's Files app and file pickers, to browse, copy, rename and delete.
-- **More shader packs work:** packs written for the core profile, like Pixel Perfect, no longer leave a black screen, and packs with only world programs, like Round World, load.
 - **More phones:** 32-bit ARM phones and x86 devices get their own APK, and older GPUs get a game built to run on them.
-- **Fixed the crash on opening a game in OpenGL** on Adreno phones.
 - **Faster terrain on Adreno**, and a lighter upscale on Mali and PowerVR when the resolution is below 100%.
-- **Many more native mods compile**, like Treefall, Eating Animation, Mod Menu, Carry Block and Dynamic FPS.
-- **Clearer build errors:** when a native mod can't compile, the message says which one, right away, and it no longer uses up your builds for the day.
-- **Build server...** on the Compile screen lets you use your own build server.
 - **Diagnostics:** **Options > Diagnostics** shows what happened when something goes wrong, and Starling offers a way back if it can't start.
+- **Credits:** **Options > Credits & Attribution** names Starling's founders and the game it is built on.
+
+### Mods and shader packs
+
+- **More shader packs work:** packs written for the core profile, like Pixel Perfect, no longer leave a black screen, and packs with only world programs, like Round World, load.
+- **Many more native mods compile**, like Treefall, Eating Animation, Carry Block, Biome Compass and Dynamic FPS.
+- **Use GitHub (slower)** on the Compile card compiles your native mods on GitHub's machines, for when the build server has reached its limit for the day.
+- **More builds a day:** 32 instead of 16.
+- **Clearer build errors:** when a native mod can't compile, the message says which one, right away, and it no longer uses up your builds for the day. **Try again** on a failed compile compiles again.
+- **Build server...** on the Compile screen lets you use your own build server.
+- **The Mods page finds native mods you copy in** while the game is open, when you open the page. A `.hnmod` Starling can't read gets a row that says why.
 - Compiled native mods: compile them again after this update.
+
+### Fixed
+
+- **The on-screen keyboard opens and types in more places:** a server's dialogs, the recipe book's search, the searches in Options, the skin name, a custom button's text, the game rules in World Options and Create New World, and the LAN port.
+- **Chests and shulker boxes close again** after you close them.
+- **The title screen no longer shows the last world's mobs** over the panorama.
+- **Open Folder opens the game's folders** in the Files app. If nothing can open them, a message says how to find them there.
+- **The setup tries again** when a server refuses a download because of its limit, instead of stopping.
+- **Opening a game in OpenGL no longer crashes** on Adreno phones.
 
 ## New in 0.2.3
 
@@ -84,4 +102,4 @@ Open an [issue](https://github.com/JuanLuci/starling/issues/new/choose): the for
 
 ---
 
-Starling is unofficial: not an official Minecraft product, and not approved by or associated with Mojang or Microsoft. The game is [Horizon](https://github.com/ludovic111/horizon), by Ludovic Marie; Starling, the Android port, is by [@JuanLuci](https://github.com/JuanLuci). MIT licensed.
+Starling is unofficial: not an official Minecraft product, and not approved by or associated with Mojang or Microsoft. The game is [Horizon](https://github.com/ludovic111/horizon), by Ludovic Marie; Starling, the Android port, formerly Horizon Android, is by its co-founders [@JuanLuci](https://github.com/JuanLuci) and [@Vasysik](https://github.com/Vasysik). MIT licensed.

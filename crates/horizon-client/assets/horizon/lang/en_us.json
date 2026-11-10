@@ -496,6 +496,7 @@
   "horizon.extras.cosmetics_others": "Other players' cosmetics",
   "horizon.extras.cosmetics_others.tooltip": "Shows the cosmetics other Horizon players wear. Off, the game never asks what they wear.",
   "starling.credits.founders": "Starling, formerly Horizon Android, by JuanLuci and Vasysik",
+  "starling.credits.horizon": "Built on Horizon by Ludovic Marie and the Horizon contributors, MIT License",
   "starling.diagnostics.title": "Diagnostics",
   "starling.diagnostics.notice": "Reports stay on this device. Review before sharing.",
   "starling.diagnostics.export": "Export diagnostic ZIP",
