@@ -227,6 +227,9 @@ mod native_post;
 pub mod native_render;
 mod native_shadow;
 mod native_sky;
+mod mod_post;
+mod hold;
+mod warp;
 mod occlusion;
 mod oit;
 mod oit_features;
@@ -380,8 +383,16 @@ struct Globals {
     sunrise_fan: [[f32; 4]; 2 * sunrise_fan::TRIANGLES],
     /// x: `Options.textureFiltering` (0 none, 1 RGSS, 2 anisotropic); y: the sprite arrays' width.
     filtering: [f32; 4],
+    /// A mod's world warp (gfx/warp.rs): its sixteen floats; the camera (f32) and the partial tick; what the f32 left
+    /// out and 1 while on.
+    warp: [[f32; 4]; 6],
+    /// A mod's tint of the hand and held item (`render.set-hand-tint`), in the hand's globals only: what entity.wgsl
+    /// multiplies their colour by, w 1 while on (zeroed, as elsewhere: nothing changes).
+    hand_tint: [f32; 4],
 }
 pub type SectionKey = (i32, i32, i32);
+/// A section's facts and place, run when it takes its place (`Renderer::placement`).
+type Placement = Box<dyn FnOnce(&mut Renderer, SectionKey, Option<SectionGpu>, bool) + Send + Sync>;
 /// The water mirror's targets: the world as a camera mirrored about the water plane sees
 /// it, at half the world's resolution (the material stage's `reflection`).
 struct MirrorTarget {
@@ -438,6 +449,12 @@ impl SectionGpu {
                 .unwrap_or(0),
         }
     }
+}
+/// A section's new mesh behind a hold (gfx/hold.rs): uploaded, and what else takes its place with it.
+struct HeldSection {
+    gpu: Option<SectionGpu>,
+    meshed: bool,
+    place: Placement,
 }
 /// Line segments the hit outline can hold.
 const MAX_OUTLINE_EDGES: u64 = 256;
@@ -563,6 +580,8 @@ pub struct Frame<'a> {
     /// `CameraRenderState.hudFov`: the hand's own field of view
     /// (`GameRenderer.render3dHud`).
     pub hand_fov_degrees: f32,
+    /// A mod's tint of the hand and held item (`render.set-hand-tint`): what their colour is multiplied by.
+    pub hand_tint: Option<[f32; 3]>,
     /// Full-screen camera effects drawn over the world and hand, under the HUD.
     pub screen: &'a [crate::screen_effects::ScreenQuad],
     /// What a shader pack's uniforms need from the game.
@@ -598,6 +617,29 @@ pub struct Frame<'a> {
     pub chunk_fade: f32,
     /// `GameRenderer.requestedPostEffects`: the chains that run over the world.
     pub post_effects: crate::post_chain::Request<'a>,
+    /// A mod's post-processing pass (capability `render`, gfx/mod_post.rs).
+    pub mod_post: Option<ModPost<'a>>,
+    /// A mod's world warp (capability `render`, gfx/warp.rs).
+    pub world_warp: Option<WorldWarp<'a>>,
+}
+pub use hold::HELD_UPLOAD_BYTES;
+pub use warp::WorldWarp;
+/// A mod's post pass this frame: its WGSL (without `mod_post::PRELUDE`), a version that changes with it, and
+/// the parameters it reads as `frame.mod_params`.
+#[derive(Clone, Copy)]
+pub struct ModPost<'a> {
+    pub source: &'a str,
+    pub version: u64,
+    pub params: [f32; 16],
+    /// The words it reads as `mod_data` (`render.set-data`), and a version that changes with them.
+    pub data: Option<(&'a [u32], u64)>,
+    /// The mod has capability `atlas`: the pass is given the block sprite arrays (gfx/mod_post.rs).
+    pub atlas: bool,
+    /// The mod asked for a history (`render.set-history`): the pass is given its previous picture (binding 17).
+    pub history: bool,
+    /// The time of day (0 sunrise, 0.25 noon) and the partial tick, for `frame.time`.
+    pub day_fraction: f32,
+    pub partial_tick: f32,
 }
 /// One frame of the world border wall (`WorldBorderRenderer.render`).
 #[derive(Clone, Debug)]
@@ -923,6 +965,16 @@ pub struct Renderer {
     pack_atlas: Option<pack_atlas::PackAtlas>,
     /// The pack's terrain program reads flat draws' vertices (`pack_terrain_inputs`).
     pack_terrain_flat: bool,
+    /// A mod's post pass (capability `render`).
+    mod_post: mod_post::ModPost,
+    /// A mod's hold on the world (`hold_world`, gfx/hold.rs), and the new sections waiting behind it.
+    hold: hold::Gate,
+    held: crate::fast_hash::FxHashMap<SectionKey, HeldSection>,
+    /// The circles the hold is kept to (x, z, radius): empty, all of the world.
+    hold_within: Vec<(f64, f64, f64)>,
+    warp_kit: warp::Kit,
+    warp: Option<warp::Pipelines>,
+    warp_refused: Option<u64>,
     pub hud: HudRenderer,
     /// Vanilla's menu background blur, made on first use.
     menu_blur: Option<crate::menu_blur::MenuBlur>,
@@ -1939,6 +1991,11 @@ impl Renderer {
             startup_step(format_args!("creating the pipelines"));
         }
         let gpu_timer = timing::GpuTimer::new(&device, &queue);
+        // (said plainly in the log: what fails after it, a staging belt's buffer or a poll, names the loss only as a
+        // validation error)
+        device.set_device_lost_callback(|reason, message| {
+            log::error!("Horizon renderer: the GPU device was lost ({reason:?}): {message}");
+        });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Horizon terrain"),
             source: wgpu::ShaderSource::Wgsl(terrain_shader(
@@ -3640,6 +3697,10 @@ impl Renderer {
             });
         let depth = Self::depth(&device, &config);
         let world_post = world_post::Post::new(&device, config.format.remove_srgb_suffix());
+        let warp_format = config.format.remove_srgb_suffix();
+        let mut mod_post = mod_post::ModPost::new(&device, config.format.remove_srgb_suffix());
+        // (a mod with capability `atlas` samples the terrain's own sprite arrays)
+        mod_post.set_atlas(&sprite_views, &sprite_sampler);
         let uploads = upload::Uploads::new(&device);
         let section_uploads = upload::Uploads::with_chunk(&device, SECTION_UPLOAD_CHUNK);
         let stars = stars::Stars::new(
@@ -3862,6 +3923,18 @@ impl Renderer {
             pack_weather: None,
             pack_atlas: None,
             pack_terrain_flat: false,
+            mod_post,
+            hold: Default::default(),
+            held: Default::default(),
+            hold_within: Vec::new(),
+            warp_kit: warp::Kit {
+                layout: layout.clone(),
+                entity_layout: entity_layout.clone(),
+                format: warp_format,
+                sprite_constants: [sprite_constants[0].1, sprite_constants[1].1],
+            },
+            warp: None,
+            warp_refused: None,
             hud,
             menu_blur: None,
             post_effects: None,
@@ -3877,6 +3950,7 @@ impl Renderer {
             uploaded_bytes: 0,
             started: Instant::now(),
             screenshot: None,
+            recording: None,
             screenshot_result: None,
             screenshot_quality: 1,
             screenshot_halvings: 0,
@@ -4710,47 +4784,125 @@ impl Renderer {
         self.occlusion.update(camera, (distance / 16.0) as i32 + 2);
     }
     pub fn upload(&mut self, key: SectionKey, mesh: &SectionMesh) {
-        self.occlusion.set(key, mesh.visibility);
-        let changed = if mesh.block_entities.is_empty() {
-            self.block_entities.remove(&key).is_some()
-        } else {
-            let old = self.block_entities.insert(key, mesh.block_entities.clone());
-            old.as_deref() != Some(&mesh.block_entities[..])
-        };
-        if changed {
-            self.block_entity_revision = next_block_entity_revision();
+        let meshed = mesh.solid.is_empty() && mesh.translucent.is_empty();
+        if self.hold.held() && hold::covers(&self.hold_within, key) {
+            self.drop_held(key);
+            let gpu = self.upload_mesh(mesh);
+            if gpu.is_some() || meshed {
+                let over = self.hold.add(Self::section_bytes(gpu.as_ref()));
+                let place = Self::placement(mesh);
+                self.held.insert(key, HeldSection { gpu, meshed, place });
+                if over {
+                    log::warn!("Horizon: a held world's new sections came to {} MiB: let go", self.hold.bytes() >> 20);
+                    self.hold.spend();
+                    self.swap_held();
+                }
+                return;
+            }
+            // (the arena is full: the old meshes given back, and this one uploaded as ever)
+            self.hold.spend();
+            self.swap_held();
         }
-        let lights_changed = if mesh.lights.is_empty() {
-            self.light_blocks.remove(&key).is_some()
-        } else {
-            let old = self.light_blocks.insert(key, mesh.lights.clone());
-            old.as_deref() != Some(&mesh.lights[..])
-        };
-        if lights_changed {
-            self.light_revision += 1;
+        let section = self.upload_mesh(mesh);
+        Self::placement(mesh)(self, key, section, meshed);
+    }
+    /// What goes with a section's mesh, the mesh apart: its facts and where it is drawn. It is a
+    /// `Placement` so that a mesh a mod holds back keeps them until it is let go.
+    fn placement(mesh: &SectionMesh) -> Placement {
+        let visibility = mesh.visibility;
+        let block_entities = mesh.block_entities.clone();
+        let lights = mesh.lights.clone();
+        let bounds = mesh.bounds.clone();
+        Box::new(
+            move |r: &mut Renderer, key: SectionKey, gpu: Option<SectionGpu>, meshed: bool| {
+                r.occlusion.set(key, visibility);
+                let changed = if block_entities.is_empty() {
+                    r.block_entities.remove(&key).is_some()
+                } else {
+                    let old = r.block_entities.insert(key, block_entities.to_vec());
+                    old.as_deref() != Some(&block_entities[..])
+                };
+                if changed {
+                    r.block_entity_revision = next_block_entity_revision();
+                }
+                let lights_changed = if lights.is_empty() {
+                    r.light_blocks.remove(&key).is_some()
+                } else {
+                    let old = r.light_blocks.insert(key, lights.clone());
+                    old.as_deref() != Some(&lights[..])
+                };
+                if lights_changed {
+                    r.light_revision += 1;
+                }
+                if !r.lod_retiring.is_empty() {
+                    r.lod_retiring.remove(&key);
+                }
+                let fading = match r.sections.find(key) {
+                    Some(old) => old.fading,
+                    None => (!r.lods.is_empty()).then(std::time::Instant::now),
+                };
+                if fading.is_none() {
+                    r.section_uploaded
+                        .entry(key)
+                        .or_insert_with(std::time::Instant::now);
+                }
+                r.release_section(key);
+                let section = gpu.map(|section| SectionGpu { fading, ..section });
+                r.set_detail(key, section.is_some() || meshed);
+                if let Some(section) = section {
+                    r.sections.insert_with_bounds(key, section, bounds);
+                }
+            },
+        )
+    }
+    /// The bytes a section's mesh takes in the arena.
+    fn section_bytes(gpu: Option<&SectionGpu>) -> u64 {
+        gpu.map_or(0, |s| u64::from(s.solid + s.translucent) * 4 * std::mem::size_of::<TerrainVertex>() as u64)
+    }
+    /// A mod's hold on the world (gfx/hold.rs), asked each frame: while on, sections that change wait behind the ones drawn.
+    pub fn hold_world(&mut self, on: bool, within: Vec<(f64, f64, f64)>) {
+        if self.hold.ask(on, std::time::Instant::now()) {
+            self.swap_held();
         }
-        if !self.lod_retiring.is_empty() {
-            self.lod_retiring.remove(&key);
+        if !self.hold.held() {
+            self.hold_within.clear();
+        } else if within != self.hold_within {
+            self.hold_within = within;
+            self.swap_held_outside();
         }
-        let fading = match self.sections.find(key) {
-            Some(old) => old.fading,
-            None => (!self.lods.is_empty()).then(std::time::Instant::now),
-        };
-        if fading.is_none() {
-            self.section_uploaded
-                .entry(key)
-                .or_insert_with(std::time::Instant::now);
+    }
+    /// Whether sections wait behind a mod's hold.
+    pub fn world_held(&self) -> bool {
+        self.hold.held()
+    }
+    /// Everything waiting behind a hold takes its place, on this frame.
+    fn swap_held(&mut self) {
+        let waiting = std::mem::take(&mut self.held);
+        let (count, started) = (waiting.len(), std::time::Instant::now());
+        let bytes: u64 = waiting.values().map(|w| Self::section_bytes(w.gpu.as_ref())).sum();
+        for (key, w) in waiting {
+            (w.place)(self, key, w.gpu, w.meshed);
         }
-        self.release_section(key);
-        let section = self
-            .upload_mesh(mesh)
-            .map(|section| SectionGpu { fading, ..section });
-        self.set_detail(
-            key,
-            section.is_some() || (mesh.solid.is_empty() && mesh.translucent.is_empty()),
-        );
-        if let Some(section) = section {
-            self.sections.insert_with_bounds(key, section, mesh.bounds);
+        self.hold.take(u64::MAX);
+        log::info!("Horizon: a held world's {count} new sections ({} MiB) swapped in, in {:.1} ms", bytes >> 20, started.elapsed().as_secs_f64() * 1e3);
+    }
+    /// What waits outside the circles the hold is kept to takes its place, on this frame.
+    fn swap_held_outside(&mut self) {
+        let keys: Vec<SectionKey> = self.held.keys().copied().filter(|&k| !hold::covers(&self.hold_within, k)).collect();
+        let (mut count, started) = (0, std::time::Instant::now());
+        for key in keys {
+            let Some(w) = self.held.remove(&key) else { continue };
+            self.hold.take(Self::section_bytes(w.gpu.as_ref()));
+            (w.place)(self, key, w.gpu, w.meshed);
+            count += 1;
+        }
+        log::debug!("Horizon: {count} of a held world's new sections let go early, in {:.1} ms", started.elapsed().as_secs_f64() * 1e3);
+    }
+    /// A section's mesh waiting behind a hold given up.
+    fn drop_held(&mut self, key: SectionKey) {
+        if let Some(gpu) = self.held.remove(&key).and_then(|w| w.gpu) {
+            self.hold.take(Self::section_bytes(Some(&gpu)));
+            self.release_mesh(gpu);
         }
     }
     fn upload_mesh(&mut self, mesh: &SectionMesh) -> Option<SectionGpu> {
@@ -5013,6 +5165,9 @@ impl Renderer {
         self.section_uploaded.clear();
         self.block_entity_revision = next_block_entity_revision();
         self.sections.clear();
+        // (a hold is on land that is gone; the arena's clearing below takes what waited)
+        self.held.clear();
+        self.hold.spend();
         self.lods.clear();
         self.lod_cutout.clear();
         self.lod_retiring.clear();
@@ -5120,6 +5275,7 @@ impl Renderer {
             let retiring = !self.lod_cutout.is_empty() && self.lod_cutout.contains(&(x, z));
             for sy in 0..self.layout.sections() as i32 {
                 let key = (x, sy, z);
+                self.drop_held(key);
                 block_entities |= self.block_entities.remove(&key).is_some();
                 if self.light_blocks.remove(&key).is_some() {
                     self.light_revision += 1;
@@ -5686,6 +5842,7 @@ impl Renderer {
             &self.sprite_unused,
             Some(self.mipmaps + 1),
         );
+        self.mod_post.set_atlas(&views, &self.sprite_sampler);
         self.group = terrain_group(
             &self.device,
             "Horizon terrain resources",
@@ -6212,6 +6369,13 @@ impl Renderer {
                 },
             )
         };
+        // A mod's world warp: its pipelines in place of the terrain's and the entities', nothing culled by where it was
+        // (the warp moves what is drawn: what is out of view, hidden or facing away may not be).
+        let warp_on = frame
+            .world_warp
+            .as_ref()
+            .is_some_and(|w| !frame.title && self.prepare_warp(w));
+        let warp_uniform = frame.world_warp.as_ref().filter(|_| warp_on).map(|w| warp::uniform(w, frame.camera));
         let globals = Globals {
             view_proj: jittered.to_cols_array_2d(),
             fog_color,
@@ -6286,6 +6450,8 @@ impl Renderer {
                 0.0,
                 0.0,
             ],
+            warp: warp_uniform.unwrap_or_default(),
+            hand_tint: [0.0; 4],
         };
         self.uploads
             .buffer(&mut encoder, &self.globals, 0, bytemuck::bytes_of(&globals));
@@ -6299,6 +6465,7 @@ impl Renderer {
         ));
         let hand_globals = Globals {
             view_proj: (hand_projection * frame.bob * view).to_cols_array_2d(),
+            hand_tint: frame.hand_tint.map_or([0.0; 4], |[r, g, b]| [r, g, b, 1.0]),
             ..globals
         };
         self.uploads.buffer(
@@ -6323,7 +6490,7 @@ impl Renderer {
         // Frustum culling and camera-relative origins.
         let cull_proj = views.cull().view_proj(pose);
         let view = Frustum {
-            planes: frustum(cull_proj),
+            planes: if warp_on { [Vec4::new(0.0, 0.0, 0.0, 1.0); 6] } else { frustum(cull_proj) },
         };
         let camera = frame.camera;
         let camera_section = camera_section(camera, self.layout.min_y());
@@ -6341,11 +6508,11 @@ impl Renderer {
         // Solid quads facing away from the eye are left out: the bob moves
         // the eye off `camera`, so it is found from the projection. With the mirror, those
         // facing its eye are kept too: it sits straight below, at this camera-relative y.
-        let eye = projection_center(cull_proj).filter(|_| self.sides_on);
+        let eye = projection_center(cull_proj).filter(|_| self.sides_on && !warp_on);
         let mirror_low = mirror_plane
             .zip(eye)
             .map(|(plane, eye)| 2.0 * (plane - frame.camera.y as f32) - eye.y);
-        let culling = !frame.title && frame.cave_culling;
+        let culling = !frame.title && frame.cave_culling && !warp_on;
         // Sections wholly inside distance fog are not drawn (`fog_culled_radius`).
         let own_fog = !fog_is_only_cover(FogCullCover::from_frame(
             frame,
@@ -6489,8 +6656,11 @@ impl Renderer {
             // of every draw in this command buffer.
             self.animate(&mut encoder, frame.ticks, !frame.title);
         }
+        // The sections a warp draws again (`copies` times, each with its number in origin.w: vs_terrain).
+        let copied: Vec<usize> = frame.world_warp.as_ref().filter(|_| warp_on).map_or(Vec::new(), |w| warp::near(w, camera, &visible));
+        let copies = frame.world_warp.as_ref().filter(|_| !copied.is_empty()).map_or(0, |w| w.copies);
         self.drawn_sections = visible.len() + visible_lods.len();
-        let instances = self.drawn_sections + shadow_visible.len();
+        let instances = self.drawn_sections + shadow_visible.len() + copied.len() * copies as usize;
         if instances as u64 > self.instance_capacity {
             self.instance_capacity = (instances as u64).next_power_of_two();
             self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -6528,7 +6698,13 @@ impl Renderer {
                     shadow_visible
                         .iter()
                         .map(|v| section_instance(v.origin, 0, visibility(v.key))),
-                ),
+                )
+                .chain((1..=copies).flat_map(|copy| {
+                    copied.iter().map(move |&i| i).map(move |i| (copy, i))
+                }).map(|(copy, i)| {
+                    let o = visible[i].origin;
+                    [o[0], o[1], o[2], copy as f32]
+                })),
         );
         if !self.origins.is_empty() {
             self.uploads.buffer(
@@ -6559,6 +6735,7 @@ impl Renderer {
             .filter(|c| {
                 self.cull_on
                     && !frame.title
+                    && !warp_on
                     && !pack_terrain
                     && self.multi_draw
                     // Occlusion is found from the camera, not the mirror's eye.
@@ -6706,6 +6883,24 @@ impl Renderer {
         }
         self.solid_runs
             .regroup(&mut self.draws, &mut self.draw_pages, tiles);
+        // A warp's copies, after everything else (their instances after the tiles').
+        let copy_start = self.draws.len();
+        self.solid_runs.clear();
+        for copy in 0..copies as usize {
+            for (n, &i) in copied.iter().enumerate() {
+                let (v, s) = (&visible[i], self.sections.get(visible[i].slot));
+                let instance = (visible.len() + visible_lods.len() + copy * copied.len() + n) as u32;
+                let start = self.draws.len();
+                facing_runs(&s.sides, None, v.origin, |first, quads| {
+                    let base = s.start as u32 + first * 4;
+                    self.draws.push([quads * 6, 1, 0, base, instance]);
+                    self.draw_pages.push((s.page, None));
+                });
+                self.solid_runs.push(v.distance, s.page, start, self.draws.len() - start, [0; 3]);
+            }
+        }
+        self.solid_runs
+            .regroup(&mut self.draws, &mut self.draw_pages, copy_start);
         let phase1_draws = self.draws.len() as u32;
         self.draws.extend_from_slice(&self.phase2_draws);
         self.draw_pages.extend_from_slice(&self.phase2_pages);
@@ -7292,6 +7487,10 @@ impl Renderer {
                 (&view_target, self.config.format.remove_srgb_suffix()),
             );
         }
+        // A mod's post pass, compiled when its source changes; skipped while it does not compile.
+        let mod_post = frame.mod_post.filter(|mp| {
+            !frame.title && self.mod_post.prepare(&self.device, mp.version, mp.source, mp.atlas, mp.history)
+        });
         // The world's targets: the screen, or the scaled target of `post`.
         let pack_post = !frame.title && self.pack_post.as_ref().is_some_and(|p| p.1.is_some());
         // One of Horizon's own packs reads the same world target.
@@ -7353,7 +7552,7 @@ impl Renderer {
         let scaled = self.world_post.prepare(
             &self.device,
             [self.config.width, self.config.height],
-            pack_reads_world,
+            pack_reads_world || mod_post.is_some(),
         );
         let (world_view, world_depth) = match &scaled {
             Some((color, depth)) => (color, depth),
@@ -7707,6 +7906,7 @@ impl Renderer {
                 pass.set_bind_group(horizon_shader_api::stages::GROUP, group, &[]);
             }
         };
+        let warped = self.warp.as_ref().filter(|_| warp_on);
         {
             let attachments = [Some(wgpu::RenderPassColorAttachment {
                 view: world_view,
@@ -7728,7 +7928,7 @@ impl Renderer {
                     view: world_depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: if cull.is_some() || keep_depth {
+                        store: if cull.is_some() || keep_depth || mod_post.is_some() {
                             wgpu::StoreOp::Store
                         } else {
                             wgpu::StoreOp::Discard
@@ -7824,7 +8024,7 @@ impl Renderer {
                                 &mut encoder,
                                 world_view,
                                 world_depth,
-                                keep_depth,
+                                keep_depth || mod_post.is_some(),
                             );
                             pass.set_bind_group(0, &self.group, &[]);
                             pack_frame(&mut pass);
@@ -7837,7 +8037,7 @@ impl Renderer {
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                 }
                 None => {
-                    pass.set_pipeline(solid_pipeline);
+                    pass.set_pipeline(warped.map_or(solid_pipeline, |w| &w.solid));
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.set_vertex_buffer(1, self.instances.slice(..));
                     match cull {
@@ -7854,7 +8054,7 @@ impl Renderer {
                                 &mut encoder,
                                 world_view,
                                 world_depth,
-                                keep_depth,
+                                keep_depth || mod_post.is_some(),
                             );
                             pass.set_bind_group(0, &self.group, &[]);
                             pack_frame(&mut pass);
@@ -7941,7 +8141,7 @@ impl Renderer {
                 }
             }
             if entity_quads > 0 {
-                pass.set_pipeline(&self.entity_pipeline);
+                pass.set_pipeline(warped.map_or(&self.entity_pipeline, |w| &w.entity));
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
                 pass.draw_indexed(0..entity_quads * 6, 0, 0..1);
@@ -8275,7 +8475,7 @@ impl Renderer {
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                 }
                 None => {
-                    pass.set_pipeline(translucent_pipeline);
+                    pass.set_pipeline(warped.map_or(translucent_pipeline, |w| &w.translucent));
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.set_vertex_buffer(1, self.instances.slice(..));
                     self.draw_sections(
@@ -8379,11 +8579,73 @@ impl Renderer {
                 (world_view, self.config.format.remove_srgb_suffix()),
             );
         }
+        let mod_picture = match (&scaled, mod_post) {
+            (Some((color, depth)), Some(mp)) => {
+                let size = self.world_post.size().unwrap_or([1, 1]);
+                Some({
+                // The bob pose (walking, hurt tilt, camera shake) turns the view and shifts the eye. The pass gets
+                // its turn in `view` and its shift in `camera_position`, so a ray from the camera through a pixel
+                // meets what the world drew there: with the shift in the projection, rays traced from the
+                // camera would sway with every step.
+                let turn = Mat4::from_mat3(glam::Mat3::from_mat4(frame.bob));
+                let view = turn * crate::camera::view_matrix(frame.yaw, frame.pitch);
+                let projection = world_projection(frame.fov_degrees, aspect, frame.depth_far);
+                let eye = view
+                    .inverse()
+                    .transform_point3(-frame.bob.w_axis.truncate());
+                let sky = frame.sky.sky_color;
+                let mut uniform = mod_post::FrameUniform {
+                    view: view.to_cols_array_2d(),
+                    projection: projection.to_cols_array_2d(),
+                    inverse_view: view.inverse().to_cols_array_2d(),
+                    inverse_projection: projection.inverse().to_cols_array_2d(),
+                    camera_position: [
+                        (frame.camera.x + f64::from(eye.x)) as f32,
+                        (frame.camera.y + f64::from(eye.y)) as f32,
+                        (frame.camera.z + f64::from(eye.z)) as f32,
+                        0.0,
+                    ],
+                    camera_rest: {
+                        let at = [frame.camera.x + f64::from(eye.x), frame.camera.y + f64::from(eye.y), frame.camera.z + f64::from(eye.z)];
+                        [(at[0] - f64::from(at[0] as f32)) as f32, (at[1] - f64::from(at[1] as f32)) as f32, (at[2] - f64::from(at[2] as f32)) as f32, 0.0]
+                    },
+                    time: [0.0, 0.0, mp.day_fraction, mp.partial_tick],
+                    sun: [sun.x, sun.y, sun.z, sun_angle],
+                    sky_color: [sky[0], sky[1], sky[2], 1.0],
+                    fog_color,
+                    view_params: [
+                        0.05,
+                        frame.depth_far,
+                        frame.distance,
+                        frame.fov_degrees.to_radians(),
+                    ],
+                    ..Default::default()
+                };
+                for (to, from) in uniform.mod_params.iter_mut().zip(mp.params.chunks(4)) {
+                    to.copy_from_slice(from);
+                }
+                self.mod_post.set_data(&self.device, &self.queue, mp.data);
+                self.mod_post
+                    .run(
+                        &self.device,
+                        &self.queue,
+                        &mut encoder,
+                        color,
+                        depth,
+                        size,
+                        uniform,
+                    )
+                    .clone()
+                })
+            }
+            _ => None,
+        };
         if let Some((color, depth)) = &scaled
             && pack_post
             && let Some((dimension, Some(mut post))) = self.pack_post.take()
         {
             let size = self.world_post.size().unwrap_or([1, 1]);
+            let post_input = mod_picture.as_ref().unwrap_or(color);
             let weather = match &self.hud.atlas_texture {
                 Some(atlas) if pack_draws_weather => self
                     .pack_weather
@@ -8481,7 +8743,7 @@ impl Renderer {
                 &self.device,
                 &self.queue,
                 &mut encoder,
-                color,
+                post_input,
                 depth,
                 &view_target,
                 frame,
@@ -8499,19 +8761,26 @@ impl Renderer {
             && let Some(post) = &mut native.post
         {
             let size = self.world_post.size().unwrap_or([1, 1]);
+            let post_input = mod_picture.as_ref().unwrap_or(color);
             let history_reset = native.frame.take_history_reset();
             post.run(
                 &self.device,
                 &mut encoder,
-                (color, depth),
+                (post_input, depth),
                 &view_target,
                 size,
                 history_reset,
                 native.timing.as_mut(),
             );
         } else if scaled.is_some() {
-            self.world_post
-                .finish(&self.queue, &mut encoder, &view_target);
+            if let Some(picture) = &mod_picture {
+                let group = self.world_post.bind(&self.device, picture);
+                self.world_post
+                    .finish_with(&mut encoder, &view_target, &group);
+            } else {
+                self.world_post
+                    .finish(&self.queue, &mut encoder, &view_target);
+            }
         }
         if !frame.title {
             let (depth, depth_size) = match &scaled {
@@ -8725,6 +8994,21 @@ impl Renderer {
                 .take()
                 .and_then(|request| self.take_readback(request, &mut encoder, &target_texture))
         });
+        if self
+            .recording
+            .as_ref()
+            .is_some_and(|r| r.size() != [self.config.width, self.config.height])
+            && let Some(r) = self.recording.take()
+        {
+            // The window changed size: the video can't, so it ends here.
+            match r.finish(&self.device) {
+                Ok(n) => log::info!("recording stopped: the window was resized ({n} frames)"),
+                Err(e) => log::warn!("recording stopped: {e}"),
+            }
+        }
+        if let Some(r) = &mut self.recording {
+            r.capture(&self.device, &mut encoder, &target_texture);
+        }
         self.uploads.finish(&encoder);
         if has_section_copies {
             self.section_copy_bytes = 0;

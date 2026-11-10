@@ -36,6 +36,7 @@ const HELP: &[&str] = &[
     "fill X1 Y1 Z1 X2 Y2 Z2 BLOCK   set a box of loaded blocks",
     "resume                         leave the pause menu",
     "screenshot PATH                write the next frame as PNG",
+    "record PATH [FPS] | record stop  record the finished frames to a video (ffmpeg), at FPS (default 60)",
     "chat TEXT                      send a chat line or /command as if typed",
     "type TEXT                      type into the open chat box (key enter tap sends)",
     "chat-log [N]                   the newest N chat messages (default 10)",
@@ -193,6 +194,7 @@ impl Game<'_> {
             Screen::CommandBlock => self.command_block_type(text),
             Screen::BlockEditor => self.block_editor_type(text),
             Screen::DebugOptions => self.debug_options_type(text),
+            Screen::StinkMod => self.mod_screen_type(text),
             Screen::Options => self.ui.options.type_text(&self.gui.atlas, text),
             // The port, or the game rules' search and number boxes.
             Screen::WorldOptions => self.world_options_text(Some(text)),
@@ -521,6 +523,15 @@ impl Game<'_> {
                 {
                     return ok();
                 }
+                // So do the mods' keybinds (capability `input`).
+                self.mods_key(physical, action != "up", action == "repeat");
+                if action == "tap" {
+                    self.mods_key(physical, false, false);
+                }
+                // A mod's screen hears the key by name (`type` gives it text).
+                if action != "up" {
+                    self.stink_mod_screen_key(physical, None);
+                }
                 // Text screens consume raw presses; releases follow key binds.
                 let typing = matches!(
                     self.screen,
@@ -790,6 +801,25 @@ impl Game<'_> {
                 });
                 self.pending_screenshot = Some(reply.clone());
                 Ok(None)
+            }
+            "record" => {
+                let renderer = self.renderer.as_mut().ok_or("no renderer yet")?;
+                if arg(1)? == "stop" {
+                    let frames = renderer.stop_recording()?;
+                    return Ok(Some(json!({ "ok": true, "frames": frames })));
+                }
+                let fps = match words.get(2) {
+                    Some(f) => f
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|f| *f >= 1.0 && *f <= 240.0)
+                        .ok_or("FPS must be 1..240")?,
+                    None => 60.0,
+                };
+                let size = renderer.start_recording(std::path::Path::new(arg(1)?), fps)?;
+                Ok(Some(
+                    json!({ "ok": true, "width": size[0], "height": size[1], "fps": fps }),
+                ))
             }
             "chat" => {
                 let text = line.trim_start().strip_prefix("chat").unwrap_or("").trim();
@@ -1083,6 +1113,7 @@ impl Game<'_> {
         match self.screen {
             Screen::Playing => "playing",
             Screen::GameModeSwitcher => "gamemode-switcher",
+            Screen::StinkMod => "stink_mod",
             Screen::Paused => "paused",
             Screen::Options => "options",
             Screen::Inventory => "inventory",

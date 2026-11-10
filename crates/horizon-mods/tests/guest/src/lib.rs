@@ -1,9 +1,15 @@
 //! A mod for the runtime's tests: `/spin` loops forever, `/panic` panics,
 //! `/grow` asks for a gigabyte, `/hello` chats, `/save` and `/load` exercise
 //! capability `storage` on a fixed key, `/save_key <key> <text>` exercises
-//! it on an arbitrary key (for the quota and key-count limits); `tick` and
-//! `frame` do nothing, to measure the cost of a call.
-use horizon_mod_sdk::{Mod, Registration, chat, storage};
+//! it on an arbitrary key (for the quota and key-count limits), `/fly
+//! <speed>|none` sets the flying speed, `/screen` opens an empty screen and
+//! `/typed` chats what was typed on it, `/surface <tag>` asks for the heights
+//! of columns (1, 2) and (-3, 40), `/heights` chats the answers come back,
+//! `/data <n>` gives a post pass the words 0..n, `/columns <tag> <n> <below>
+//! <above>` asks for the blocks of n columns, `/blocks` chats the answers, `/sprites <name>...` chats
+//! what `atlas.block-sprites` says of each block (and `atlas.resources-version`); `tick` and `frame` do
+//! nothing, to measure the cost of a call.
+use horizon_mod_sdk::{Mod, Registration, atlas, chat, input, render, storage, ui, world};
 
 struct Guest {
     ticks: u64,
@@ -11,11 +17,14 @@ struct Guest {
 
 impl Mod for Guest {
     fn init() -> Result<(Self, Registration), String> {
-        let hooks = ["spin", "panic", "grow", "hello", "save", "load", "save_key"]
-            .into_iter()
-            .fold(Registration::new(), Registration::command)
-            .on_tick()
-            .on_frame();
+        let hooks = [
+            "spin", "panic", "grow", "hello", "save", "load", "save_key", "fly", "screen", "typed",
+            "surface", "heights", "data", "history", "warp", "hold", "tint", "clear", "columns", "blocks", "sprites",
+        ]
+        .into_iter()
+        .fold(Registration::new(), Registration::command)
+        .on_tick()
+        .on_frame();
         Ok((Guest { ticks: 0 }, hooks))
     }
     fn tick(&mut self, _tick: u64) {
@@ -51,6 +60,141 @@ impl Mod for Guest {
                     .ok_or("Usage: /save_key <key> <text>")?;
                 storage::set(key, text.as_bytes())?;
                 Ok(Some("saved".into()))
+            }
+            "fly" => {
+                world::set_flying_speed(args.parse().ok());
+                Ok(None)
+            }
+            "screen" => {
+                ui::show(&[]);
+                Ok(None)
+            }
+            "typed" => {
+                let typed: Vec<String> = input::poll_typed()
+                    .into_iter()
+                    .map(|t| match t {
+                        input::Typed::Text(s) => format!("text {s}"),
+                        input::Typed::Key(k) => format!("key {k}"),
+                    })
+                    .collect();
+                chat::show(&typed.join(", "));
+                Ok(None)
+            }
+            "surface" => {
+                let tag = args.parse().map_err(|_| "Usage: /surface <tag>")?;
+                world::surface_height(tag, &[(1, 2), (-3, 40)], world::Heightmap::MotionBlockingNoLeaves);
+                Ok(None)
+            }
+            "heights" => {
+                let answers: Vec<String> = world::poll_surface_heights()
+                    .into_iter()
+                    .map(|a| {
+                        let hs: Vec<String> = a
+                            .heights
+                            .iter()
+                            .map(|h| h.map_or("none".into(), |y| y.to_string()))
+                            .collect();
+                        format!("{}: {}", a.tag, hs.join(" "))
+                    })
+                    .collect();
+                chat::show(&answers.join(", "));
+                Ok(None)
+            }
+            "columns" => {
+                let n: Vec<u32> = args.split(' ').filter_map(|w| w.parse().ok()).collect();
+                let [tag, count, below, above] = n[..] else {
+                    return Err("Usage: /columns <tag> <n> <below> <above>".into());
+                };
+                let cols: Vec<(i32, i32)> = (0..count as i32).map(|i| (i, -i)).collect();
+                world::read_columns(tag, &cols, world::Heightmap::MotionBlockingNoLeaves, below, above);
+                Ok(None)
+            }
+            "blocks" => {
+                let answers: Vec<String> = world::poll_columns()
+                    .into_iter()
+                    .map(|a| {
+                        let bases: Vec<String> =
+                            a.bases.iter().map(|h| h.map_or("none".into(), |y| y.to_string())).collect();
+                        let blocks: Vec<&str> = a.blocks.iter().map(|&b| a.palette[b as usize].as_str()).collect();
+                        let tints: Vec<String> = a.tints.iter().map(|t| format!("{t:06x}")).collect();
+                        format!("{}: {} | {} | {}", a.tag, bases.join(" "), blocks.join(" "), tints.join(" "))
+                    })
+                    .collect();
+                chat::show(&answers.join(", "));
+                Ok(None)
+            }
+            "sprites" => {
+                let names: Vec<String> = args.split(' ').map(str::to_owned).collect();
+                let all = atlas::block_sprites(&names);
+                if all.len() > 8 {
+                    let found = all.iter().filter(|b| b.is_some()).count();
+                    chat::show(&format!("{found} of {}", all.len()));
+                    return Ok(None);
+                }
+                let answers: Vec<String> = all
+                    .into_iter()
+                    .map(|b| match b {
+                        None => "none".into(),
+                        Some(b) => {
+                            let sides: Vec<String> = b
+                                .sides
+                                .iter()
+                                .map(|faces| {
+                                    let faces: Vec<String> = faces
+                                        .iter()
+                                        .map(|f| {
+                                            let tint = match f.tint {
+                                                atlas::Tint::None => "-".to_string(),
+                                                atlas::Tint::Grass => "grass".into(),
+                                                atlas::Tint::Foliage => "foliage".into(),
+                                                atlas::Tint::DryFoliage => "dry".into(),
+                                                atlas::Tint::Water => "water".into(),
+                                                atlas::Tint::Fixed(c) => format!("{c:06x}"),
+                                            };
+                                            format!("{}.{}:{tint}", f.sprite.array, f.sprite.layer)
+                                        })
+                                        .collect();
+                                    faces.join("+")
+                                })
+                                .collect();
+                            format!("{}{}", sides.join(" "), if b.cube { " cube" } else { "" })
+                        }
+                    })
+                    .collect();
+                chat::show(&format!("{} | {}", atlas::resources_version(), answers.join(", ")));
+                Ok(None)
+            }
+            "warp" => {
+                render::set_params(&[0.0; 16]);
+                render::set_warp(args);
+                render::warp_on(!args.is_empty(), 1.0, 2.0, 3.0, 99, 50.0);
+                Ok(None)
+            }
+            "tint" => {
+                let c: Vec<f32> = args.split_whitespace().map(|w| w.parse().unwrap_or(f32::NAN)).collect();
+                render::set_hand_tint(c[0], c[1], c[2]);
+                Ok(None)
+            }
+            "hold" => {
+                render::hold_world(args == "on");
+                Ok(None)
+            }
+            "history" => {
+                render::set_post("@fragment fn fs_main(in: StageIn) -> @location(0) vec4<f32> { return vec4<f32>(1.0); }");
+                render::set_params(&[0.0; 16]);
+                render::set_history(args == "on");
+                Ok(None)
+            }
+            "clear" => {
+                render::clear_post();
+                Ok(None)
+            }
+            "data" => {
+                let n: u32 = args.parse().map_err(|_| "Usage: /data <n>")?;
+                render::set_post("@fragment fn fs_main(in: StageIn) -> @location(0) vec4<f32> { return vec4<f32>(1.0); }");
+                render::set_params(&[0.0; 16]);
+                render::set_data(&(0..n).collect::<Vec<u32>>());
+                Ok(None)
             }
             _ => {
                 chat::show(&format!("hello {args} after {} ticks", self.ticks));

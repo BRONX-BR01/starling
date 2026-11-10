@@ -28,6 +28,10 @@ struct Globals {
     emissive_count: vec4<u32>,
     sunrise_fan: array<vec4<f32>, 32>,
     filtering: vec4<f32>,
+    // A mod's world warp (terrain.wgsl)
+    warp: array<vec4<f32>, 6>,
+    // A mod's tint of the hand and held item (render.set-hand-tint), w 1 while on: the hand's globals only.
+    hand_tint: vec4<f32>,
 }
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(0) @binding(1) var atlas: texture_2d<f32>;
@@ -103,9 +107,25 @@ fn native_colored_light(pos: vec3<f32>) -> vec3<f32> {
     }
     return min(rgb, vec3(1.0));
 }
-fn entity_vertex(position: vec3<f32>, uv: vec2<f32>,
+// (an entity has no section: the terrain's, for a warp that reads it)
+var<private> warp_section: vec3<f32>;
+// [world warp]
+// (as in terrain.wgsl)
+struct Warped {
+    pos: vec3<f32>,
+    tint: vec3<f32>,
+}
+fn world_warp(pos: vec3<f32>, copy: u32) -> Warped { return Warped(pos, vec3<f32>(1.0)); }
+// [end world warp]
+fn entity_vertex(at: vec3<f32>, uv: vec2<f32>,
     overlay: u32, color: vec4<f32>, light: vec4<u32>, normal: vec4<f32>) -> Out {
     var out: Out;
+    // (the sky's things stay where they are)
+    var position = at;
+    if overlay < 2u || overlay > 4u {
+        warp_section = at;
+        position = world_warp(at, 0u).pos;
+    }
     out.clip = globals.view_proj * vec4(position, 1.0);
     out.proj = vec4(out.clip.xy * 0.5 + out.clip.w * 0.5, out.clip.zw);
     out.uv = uv;
@@ -294,7 +314,9 @@ fn entity_color(in: Out, front: bool) -> vec4<f32> {
     }
     let f = max(linear_fog(in.spherical, globals.fog.x, globals.fog.y),
                 linear_fog(in.cylindrical, globals.fog.z, globals.fog.w));
-    return vec4(mix(color.rgb, globals.fog_color.rgb, f * globals.fog_color.a), color.a);
+    // render.set-hand-tint: the hand's globals only (w 0 elsewhere: no change).
+    let tint = mix(vec3(1.0), globals.hand_tint.rgb, globals.hand_tint.w);
+    return vec4(mix(color.rgb, globals.fog_color.rgb, f * globals.fog_color.a) * tint, color.a);
 }
 
 // rendertype_outline.fsh: the vertex colour (the team colour; outline vertices carry no

@@ -113,6 +113,9 @@ pub struct Guest {
     pub sprinting: bool,
     pub fall_flying: bool,
     pub flying: bool,
+    /// `Abilities.flyingSpeed`: vanilla's 0.05, unless a client mod of the
+    /// single-player owner set another (capability `world`).
+    pub flying_speed: f32,
     pub sleeping: bool,
     /// `LivingEntity.DATA_LIVING_ENTITY_FLAGS`: 1 while using an item, 2 if
     /// it is in the off hand.
@@ -350,6 +353,7 @@ impl Guest {
             sprinting: false,
             fall_flying: false,
             flying: false,
+            flying_speed: 0.05,
             sleeping: false,
             living_flags: 0,
             stuck: (0, 0),

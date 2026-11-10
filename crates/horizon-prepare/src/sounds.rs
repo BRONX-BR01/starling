@@ -51,8 +51,10 @@ fn launcher_assets(
     let checksum = crate::hex(&<sha1::Sha1 as sha1::Digest>::digest(&bytes));
     if checksum != sha1 && !lock.asset_index_accepted(&checksum) {
         log(&format!(
-            "{} is an asset index Horizon does not know yet (sha1 {checksum}); Mojang may have \
-             republished it. Using it: every file is still checked against its own SHA-1.",
+            "{} is an asset index Horizon does not know yet (sha1 {checksum}); Mojang has \
+             probably republished it, and this Horizon's research-lock.json \
+             (minecraft.accepted_asset_index_sha1) is out of date. Using it: every file is still \
+             checked against its own SHA-1.",
             index.display()
         ));
     }

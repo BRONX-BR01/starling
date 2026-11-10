@@ -34,6 +34,11 @@ struct Globals {
     // x: Options.textureFiltering (0 none, 1 RGSS, 2 anisotropic), y: the sprite arrays' width
     // in texels (vanilla's TextureSize).
     filtering: vec4<f32>,
+    // A mod's world warp (render.set-warp, gfx/warp.rs): the sixteen floats of render.set-params, then xyz the camera
+    // in the world (f32) and w the partial tick, then xyz what the f32 leaves out of it and w 1 while it is on.
+    warp: array<vec4<f32>, 6>,
+    // A mod's tint of the hand and held item (render.set-hand-tint), w 1 while on: the hand's globals only.
+    hand_tint: vec4<f32>,
 }
 @group(0) @binding(0) var<uniform> globals: Globals;
 @group(0) @binding(1) var sprites: texture_2d_array<f32>;
@@ -153,6 +158,18 @@ fn sprite(tiled: vec2<f32>, layer: u32) -> vec4<f32> {
     return sample_nearest(uv, layer, pixel, du, dv, texel_screen);
 }
 
+// The corner of the section or far tile this vertex belongs to, from the camera (a world warp's to read: a vertex on the edge
+// between two sections says by itself which it lies on no better than its position does).
+var<private> warp_section: vec3<f32>;
+// [world warp]
+// What a mod's world warp gives a vertex: where to draw it (camera-relative) and what to multiply its colour by
+// (red under 0: leave these faces out, to the pixel, as far as an edge of the face goes).
+struct Warped {
+    pos: vec3<f32>,
+    tint: vec3<f32>,
+}
+fn world_warp(pos: vec3<f32>, copy: u32) -> Warped { return Warped(pos, vec3<f32>(1.0)); }
+// [end world warp]
 struct TerrainOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -171,6 +188,8 @@ struct TerrainOut {
     // The camera-relative height, for the water mirror's cut at the plane.
     @location(9) height: f32,
     @location(10) @interpolate(flat) emissive_layer: u32,
+    // [warp varyings]
+    // [end warp varyings]
 }
 // Whether a fading tile or section leaves this pixel out (gfx/lod.rs's
 // `fade_code`, `fade_out_code`). It fades in, or out, chunk by chunk: each
@@ -261,8 +280,12 @@ fn sample_lightmap(sky: f32, block: f32) -> vec4<f32> {
 // integer below 2^24, so it decodes exactly), 1/32 per block for distant
 // terrain tiles (TerrainVertex::tiled). A fading tile negates it past its
 // dither code (gfx/lod.rs's `instance`): the step is the fraction either way.
+// A mod's world warp (gfx/warp.rs) draws sections again with origin.w the copy's number (1, 2, ...) in place of
+// the step and its fade-in: a section's step is a power of two well under 1, so from 1 up is a copy.
+fn instance_copy(w: f32) -> u32 { return u32(max(w, 0.0)); }
+fn section_w(w: f32) -> f32 { return select(w, 1.0 / 32768.0, instance_copy(w) > 0u); }
 fn terrain_uv(packed: vec2<u32>, w: f32) -> vec2<f32> {
-    return vec2<f32>(packed) * instance_step(w);
+    return vec2<f32>(packed) * instance_step(section_w(w));
 }
 // A whole section's step (a power of two) carries its fade-in in the mantissa's 23 bits, as
 // `1 - visibility` (gfx.rs's `section_instance`): masked off, the step; the rest is
@@ -350,8 +373,13 @@ fn left_out() -> TerrainOut {
         origin.w);
 }
 fn terrain_vertex(position: vec3<f32>, uv: vec2<f32>, layer: u32, color: vec4<f32>,
-    light: vec2<u32>, origin: vec3<f32>, w: f32) -> TerrainOut {
-    let pos = position + origin;
+    light: vec2<u32>, origin: vec3<f32>, raw_w: f32) -> TerrainOut {
+    // A mod's world warp draws sections again (gfx/warp.rs): there raw_w is the copy's number, not a step with its fade-in.
+    let copy = instance_copy(raw_w);
+    let w = section_w(raw_w);
+    warp_section = origin;
+    let warped = world_warp(position + origin, copy);
+    let pos = warped.pos;
     var out: TerrainOut;
     out.clip = fade_depth(globals.view_proj * vec4(pos, 1.0), w);
     out.local = position;
@@ -369,6 +397,7 @@ fn terrain_vertex(position: vec3<f32>, uv: vec2<f32>, layer: u32, color: vec4<f3
     if globals.colored_count.x > 0u {
         out.color = vec4(min(out.color.rgb + color.rgb * native_colored_light(pos), vec3(1.0)), out.color.a);
     }
+    out.color = vec4(out.color.rgb * warped.tint, out.color.a);
     out.emission = 15u - (u32(round(color.a * 255.0)) & 15u);
     out.height = pos.y;
     out.spherical = length(pos);
@@ -380,6 +409,8 @@ fn terrain_vertex(position: vec3<f32>, uv: vec2<f32>, layer: u32, color: vec4<f3
         out.visibility = mix(1.0, instance_visibility(w),
             clamp((length(pos) - CHUNK_FULLY_VISIBLE_RANGE) / CHUNK_FULLY_VISIBLE_RANGE, 0.0, 1.0));
     }
+    // [warp vertex]
+    // [end warp vertex]
     return out;
 }
 fn linear_fog(d: f32, start: f32, end: f32) -> f32 {

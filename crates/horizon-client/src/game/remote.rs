@@ -1065,6 +1065,7 @@ impl Game<'_> {
             return self.begin_closing_save(false);
         }
         self.finish_perf();
+        self.mods_left_world();
         if reason.is_none() {
             // Leaving on purpose: nothing for auto-reconnect to retry.
             self.extras_left();
@@ -1368,6 +1369,7 @@ impl Game<'_> {
         }
         if self.mods.running() {
             self.mods_chat(&text);
+            self.stink_mods_chat(&text);
         }
         if let Some(r) = self.remote.as_mut() {
             r.chat.push((text, Instant::now()));
@@ -5447,6 +5449,7 @@ impl Game<'_> {
         self.tick_remote_level()?;
         // Client mods tick on any server, single player's own included.
         self.tick_mods();
+        self.stink_tick_mods();
         self.native_net.to_server = 0;
         self.native_tick();
         self.tick_chat_session();
@@ -5663,15 +5666,16 @@ impl Game<'_> {
         } else if !dead && !riding {
             player.client_side = true;
             player.velocity = player.velocity.add_vector(pushed);
-            MotionWorld {
+            // (or carried by a mod's carry, `world.carry-player`, as `Game::tick` has it)
+            let mut motion = MotionWorld {
                 entities: &entity_collisions,
                 player,
                 scene: &mut self.world,
                 assets: &self.pack.assets,
                 collision_binding: self.collision,
                 resources: self.motion,
-            }
-            .controlled_simulation_tick_with_sprint_window(keys, sprint_window)?;
+            };
+            self.stink_mods.player_tick(&mut motion, keys, sprint_window)?;
         } else {
             // LivingEntity.baseTick counts hurtTime down for a dead or riding
             // player too (controlled_simulation_tick does it otherwise): left
@@ -5688,7 +5692,14 @@ impl Game<'_> {
                 }
                 .passenger_pose_tick()?;
             }
+            // (sleeping, dead or riding: no carry holds them)
+            self.stink_mods.carry = None;
+            self.stink_mods.carry_refused = false;
+            self.stink_mods.carry_turn = 0.0;
         }
+        let Some(player) = self.player.as_mut() else {
+            return Ok(());
+        };
         // LocalPlayer.onUpdateAbilities: flight turned on or off (a double
         // jump, a spectator, landing) is sent to the server.
         let flying = player.flying;
@@ -6905,6 +6916,10 @@ impl Game<'_> {
         if self.hands_busy() {
             return;
         }
+        // An item a mod claims (capability `input`): its use is the mod's, and the server never hears of it.
+        if self.mod_use_start() {
+            return;
+        }
         // Resolve the crosshair once. A passing entity interaction keeps
         // that target and may only fall back to using the item itself.
         let entity = self.entity_targeted();
@@ -7839,6 +7854,10 @@ impl Game<'_> {
             .is_some_and(|s| self.items().get(&s.item).is_some_and(|i| i.bundle))
         {
             self.using = (in_hand && ticks + 1 < 200).then_some((slot, ticks + 1));
+            return;
+        }
+        // A mod's item: held until the button lets go, counted for the mod.
+        if self.mod_use_tick(slot, ticks, !self.right || !in_hand) {
             return;
         }
         // A drawn bow, a charging crossbow, a raised shield...: held until
@@ -9576,6 +9595,11 @@ impl horizon_client::interaction_input::InteractionWorld for RemoteInputWorld<'_
         self.0.using.is_some()
     }
     fn release_using(&mut self) {
+        if let Some((slot, ticks)) = self.0.using
+            && self.0.mod_use_tick(slot, ticks, true)
+        {
+            return;
+        }
         self.0.release_remote_use();
     }
     fn start_attack(&mut self) -> bool {

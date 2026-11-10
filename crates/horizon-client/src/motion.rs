@@ -263,6 +263,30 @@ pub enum MotionEvent {
     /// around a drowning player.
     Drown,
 }
+/// How many ticks running sneak must be held to break free of a mod's carry (half a second), and the most of its motion
+/// across they keep once let go (blocks a tick).
+pub const CARRY_BREAK_TICKS: u8 = 10;
+pub const CARRY_KEEP: f64 = 0.45;
+/// What a mod's carry (`world.carry-player`) keeps from tick to tick: whether one was asked the tick before, whether
+/// they broke free of it, for how many ticks running they have held sneak, and the throw a mod's push gave while it
+/// held them (`world.push-player`: what they are let go with).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CarryState {
+    pub asked: bool,
+    pub free: bool,
+    pub sneak: u8,
+    pub throw: Option<Vec3>,
+}
+impl CarryState {
+    /// Whether a carry holds the player (asked last tick, not broken free): a push then is its throw.
+    pub fn holding(&self) -> bool {
+        self.asked && !self.free
+    }
+    /// A mod's push while the carry holds them: kept to throw them with as it lets go (pushes add up).
+    pub fn push(&mut self, v: Vec3) {
+        self.throw = Some(self.throw.map_or(v, |t| t.add_vector(v)));
+    }
+}
 #[derive(Clone)]
 pub struct PlayerMotion {
     pub swimming: bool,
@@ -1157,6 +1181,82 @@ impl MotionWorld<'_, '_, '_> {
         self.check_movement_statistics(previous.vector_to(self.player.position))?;
         self.player
             .food_tick(&self.resources.health, self.scene.health_rules)
+    }
+    /// One tick of a mod's carry (`world.carry-player`): `carry` the move it asked for this tick (none: not carried),
+    /// `state` what the carry keeps from tick to tick. True when it held them: moved by the carry through the
+    /// collision move in place of their own motion (no gravity, no drag, their walking left out, their fall distance
+    /// kept at nothing, out of creative flight and any glide); false for the normal tick to run.
+    ///
+    /// Only a deliberate break-free lets go: sneak held `CARRY_BREAK_TICKS` running (half a second). A tap of
+    /// sneak, a jump, a double jump or an abilities packet saying they fly does nothing while carried. Once free they
+    /// stay free until a tick with no carry asked (the next asked picks them up afresh). Let go, broken free or the
+    /// carry no longer asked, they keep only a little of its motion (`carry_release`), and one who may fly and is
+    /// off the ground is put back into creative flight, so neither flung nor dropped; unless the mod threw them (a
+    /// push while carried, `CarryState::throw`): a carry no longer asked lets go with exactly that throw, out of
+    /// flight. A spectator is never carried.
+    pub fn carry_step(&mut self, keys: crate::sprint::Keys, carry: Option<Vec3>, state: &mut CarryState) -> Result<bool> {
+        let was_asked = std::mem::replace(&mut state.asked, carry.is_some());
+        let Some(delta) = carry else {
+            if was_asked && !state.free {
+                match state.throw {
+                    // (thrown: let go with exactly the mod's push, out of flight, to fly and fall as they will)
+                    Some(v) => {
+                        self.player.velocity = v;
+                        self.player.flying = false;
+                        self.player.ground.on_ground = false;
+                        self.player.fall_distance = 0.0;
+                    }
+                    None => self.carry_release(),
+                }
+            }
+            state.free = false;
+            state.sneak = 0;
+            state.throw = None;
+            return Ok(false);
+        };
+        if !was_asked {
+            state.free = false;
+            state.sneak = 0;
+            state.throw = None;
+        }
+        if state.free || self.player.spectator {
+            return Ok(false);
+        }
+        state.sneak = if keys.shift { state.sneak.saturating_add(1) } else { 0 };
+        if state.sneak >= CARRY_BREAK_TICKS {
+            state.free = true;
+            self.carry_release();
+            return Ok(false);
+        }
+        // (held: out of creative flight and any glide, whatever the keys or the server said; the jump key's last
+        // state kept so a double jump just after needs two fresh presses)
+        self.player.flying = false;
+        self.player.fall_flying = false;
+        self.player.jump_trigger_time = 0;
+        self.player.was_jumping = keys.jump;
+        self.player.shift_key_down = false;
+        self.player.health.advance_clock();
+        self.player.old_position = self.player.position;
+        self.player.fall_distance = 0.0;
+        self.player.velocity = delta;
+        self.move_self(delta)?;
+        self.player.fall_distance = 0.0;
+        // (no longer swimming, stood up: carried through the air)
+        self.player.swimming = false;
+        self.update_player_pose()?;
+        Ok(true)
+    }
+    /// Let go of a carry: a little of its motion kept (at most `CARRY_KEEP` blocks a tick across, a gentle drift up or
+    /// down), their fall distance nothing; back into creative flight when they may fly and are off the ground.
+    pub fn carry_release(&mut self) {
+        let v = self.player.velocity;
+        let across = (v.x * v.x + v.z * v.z).sqrt();
+        let k = if across * 0.35 > CARRY_KEEP { CARRY_KEEP / across } else { 0.35 };
+        self.player.velocity = Vec3::new(v.x * k, (v.y * 0.3).clamp(-0.3, 0.1), v.z * k);
+        self.player.fall_distance = 0.0;
+        if self.player.may_fly && !self.player.ground.on_ground {
+            self.player.flying = true;
+        }
     }
     pub fn controlled_simulation_tick(&mut self, keys: crate::sprint::Keys) -> Result<()> {
         self.controlled_simulation_tick_with_sprint_window(keys, 7)

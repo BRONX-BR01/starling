@@ -3,14 +3,15 @@
 //! that misbehaves on command. Needs `rustup target add wasm32-unknown-unknown`.
 use horizon_mods::{
     BlockPos, Clock, Corner, GameMode, HeldItem, Hit, Mods, Output, Package, Player, Runs,
-    ServerPlayer, Shape, Snapshot, Status,
-    manifest::componentize,
-    testing::{Script, TestGame},
+    ServerPlayer, Shape, Snapshot, Status, manifest::componentize, testing::{Script, TestGame},
+    ATLAS_NAMES, AtlasLookup, BlockFaces, COLUMN_BLOCKS, COLUMNS_BLOCKS_MAX, ColumnBlocks,
+    FLYING_SPEED_MAX, Heightmap, POST_DATA_WORDS, Sprite, SpriteFace, SurfaceHeights, Tint,
+    Typed,
 };
 use std::{
     path::{Path, PathBuf},
     process::Command,
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
     time::Instant,
 };
 
@@ -19,7 +20,7 @@ id = "test_guest"
 name = "Test Guest"
 version = "0.1.0"
 api = "0.1"
-capabilities = ["chat", "storage"]
+capabilities = ["chat", "storage", "input", "ui", "render", "world", "atlas"]
 "#;
 const UI_MANIFEST: &str = r#"
 id = "test_ui_guest"
@@ -257,6 +258,349 @@ experimental = ["ui", "render", "input", "recipes"]
     assert_eq!(level("coords_hud.hmod"), 0);
     // The UI guest draws far terrain (`render.set-far-terrain`).
     assert_eq!(level("horizon_mods_test_ui_guest.hmod"), LEVEL);
+}
+
+#[test]
+fn flying_speed_is_kept_clamped_and_reset() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    assert_eq!(mods.flying_speed(), None);
+    mods.command("fly 0.5");
+    assert_eq!(mods.flying_speed(), Some(0.5));
+    // Kept across calls until changed.
+    mods.tick(1);
+    assert_eq!(mods.flying_speed(), Some(0.5));
+    mods.command("fly 9999");
+    assert_eq!(mods.flying_speed(), Some(FLYING_SPEED_MAX));
+    mods.command("fly -3");
+    assert_eq!(mods.flying_speed(), Some(0.0));
+    mods.command("fly NaN");
+    assert_eq!(mods.flying_speed(), None);
+    mods.command("fly 1");
+    mods.command("fly none");
+    assert_eq!(mods.flying_speed(), None);
+    // A stopped mod wants none.
+    mods.command("fly 2");
+    mods.command("panic");
+    assert_eq!(mods.flying_speed(), None);
+}
+
+#[test]
+fn typing_reaches_only_an_open_screen() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    let id = "test_guest";
+    let typed = |mods: &mut Mods| {
+        mods.drain();
+        mods.command("typed");
+        mods.drain().into_iter().find_map(|o| match o {
+            Output::Chat { text, .. } => Some(text),
+            _ => None,
+        })
+    };
+    // No screen: nothing is kept.
+    mods.push_typed(id, Typed::Text("lost".into()));
+    assert_eq!(typed(&mut mods).as_deref(), Some(""));
+    mods.command("screen");
+    mods.push_typed(id, Typed::Text("12".into()));
+    mods.push_typed(id, Typed::Key("key.keyboard.enter".into()));
+    assert_eq!(
+        typed(&mut mods).as_deref(),
+        Some("text 12, key key.keyboard.enter")
+    );
+    // Taken once; what is left when the screen closes is dropped.
+    assert_eq!(typed(&mut mods).as_deref(), Some(""));
+    mods.push_typed(id, Typed::Text("3".into()));
+    mods.screen_closed(id);
+    assert_eq!(typed(&mut mods).as_deref(), Some(""));
+}
+
+#[test]
+fn surface_heights_are_asked_and_answered() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    let id = "test_guest";
+    let chat = |mods: &mut Mods| {
+        mods.drain().into_iter().find_map(|o| match o {
+            Output::Chat { text, .. } => Some(text),
+            _ => None,
+        })
+    };
+    // The query goes out in order with the mod's other world calls, its columns as given.
+    mods.drain();
+    mods.command("surface 7");
+    let asked: Vec<Output> = mods.drain();
+    assert_eq!(
+        asked,
+        [Output::Surface {
+            id: id.into(),
+            tag: 7,
+            columns: vec![(1, 2), (-3, 40)],
+            heightmap: Heightmap::MotionBlockingNoLeaves,
+        }]
+    );
+    // Nothing comes back until the game answers; then the answer, once, with its tag.
+    mods.command("heights");
+    assert_eq!(chat(&mut mods).as_deref(), Some(""));
+    mods.push_surface(
+        id,
+        SurfaceHeights {
+            tag: 7,
+            heights: vec![Some(64), None],
+        },
+    );
+    mods.push_surface(
+        id,
+        SurfaceHeights {
+            tag: 8,
+            heights: vec![Some(-60), Some(320)],
+        },
+    );
+    mods.command("heights");
+    assert_eq!(chat(&mut mods).as_deref(), Some("7: 64 none, 8: -60 320"));
+    mods.command("heights");
+    assert_eq!(chat(&mut mods).as_deref(), Some(""));
+    // A mod that has stopped is given none.
+    mods.command("panic");
+    mods.push_surface(
+        id,
+        SurfaceHeights {
+            tag: 9,
+            heights: vec![],
+        },
+    );
+}
+
+#[test]
+fn columns_are_asked_answered_and_capped() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    let id = "test_guest";
+    let chat = |mods: &mut Mods| {
+        mods.drain().into_iter().find_map(|o| match o {
+            Output::Chat { text, .. } => Some(text),
+            _ => None,
+        })
+    };
+    mods.drain();
+    // The query goes out as asked, in order with the mod's other world calls.
+    mods.command("columns 3 2 1 2");
+    assert_eq!(
+        mods.drain(),
+        [Output::Columns {
+            id: id.into(),
+            tag: 3,
+            columns: vec![(0, 0), (1, -1)],
+            heightmap: Heightmap::MotionBlockingNoLeaves,
+            below: 1,
+            above: 2,
+        }]
+    );
+    // Nothing comes back until the game answers; then the answer, once, its blocks indexing its names.
+    mods.command("blocks");
+    assert_eq!(chat(&mut mods).as_deref(), Some(""));
+    mods.push_columns(
+        id,
+        ColumnBlocks {
+            tag: 3,
+            palette: vec![
+                "minecraft:stone".into(),
+                "minecraft:air".into(),
+                "minecraft:snow".into(),
+            ],
+            bases: vec![Some(70), None],
+            blocks: vec![0, 2, 1, 1, 1, 1],
+            tints: vec![0x91BD59, 0x77AB2F, 0x3F76E4, 0, 0, 0],
+        },
+    );
+    mods.command("blocks");
+    assert_eq!(
+        chat(&mut mods).as_deref(),
+        Some(
+            "3: 70 none | minecraft:stone minecraft:snow minecraft:air minecraft:air minecraft:air minecraft:air | 91bd59 77ab2f 3f76e4 000000 000000 000000"
+        )
+    );
+    mods.command("blocks");
+    assert_eq!(chat(&mut mods).as_deref(), Some(""));
+    // Over the caps (blocks a column, blocks in all): left out.
+    mods.command(&format!("columns 4 1 {} 1", COLUMN_BLOCKS));
+    assert!(
+        mods.drain()
+            .iter()
+            .all(|o| !matches!(o, Output::Columns { .. }))
+    );
+    let n = COLUMNS_BLOCKS_MAX / 32 + 1;
+    mods.command(&format!("columns 5 {n} 16 16"));
+    assert!(
+        mods.drain()
+            .iter()
+            .all(|o| !matches!(o, Output::Columns { .. }))
+    );
+    // At the caps: asked.
+    mods.command(&format!("columns 6 {} 16 16", COLUMNS_BLOCKS_MAX / 32));
+    assert!(
+        mods.drain()
+            .iter()
+            .any(|o| matches!(o, Output::Columns { tag: 6, .. }))
+    );
+}
+
+#[test]
+fn post_data_is_kept_versioned_and_capped() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    mods.command("data 3");
+    let (words, v1) = mods.post().unwrap().data.unwrap();
+    assert_eq!(&words[..], &[0, 1, 2]);
+    // The same words again: the same version (nothing to upload).
+    mods.command("data 3");
+    assert_eq!(mods.post().unwrap().data.unwrap().1, v1);
+    mods.command("data 5");
+    let (words, v2) = mods.post().unwrap().data.unwrap();
+    assert_eq!(words.len(), 5);
+    assert_ne!(v1, v2);
+    // Over the cap: ignored, the last kept.
+    mods.command(&format!("data {}", POST_DATA_WORDS + 1));
+    assert_eq!(mods.post().unwrap().data.unwrap().1, v2);
+    mods.command(&format!("data {POST_DATA_WORDS}"));
+    assert_eq!(mods.post().unwrap().data.unwrap().0.len(), POST_DATA_WORDS);
+}
+
+#[test]
+fn a_world_warp_is_held_while_on_with_its_copies_capped() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    assert!(mods.warp().is_none());
+    mods.command("warp fn world_warp");
+    let w = mods.warp().expect("the warp");
+    assert_eq!((&*w.source, w.anchor, w.copies, w.radius), ("fn world_warp", [1.0, 2.0, 3.0], horizon_mods::MAX_WARP_COPIES, 50.0));
+    mods.command("warp");
+    assert!(mods.warp().is_none());
+}
+
+#[test]
+fn a_hold_on_the_world_ends_with_the_mod_and_its_pass() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    assert!(!mods.world_hold());
+    mods.command("hold on");
+    assert!(mods.world_hold());
+    mods.command("hold off");
+    assert!(!mods.world_hold());
+    mods.command("hold on");
+    mods.command("clear");
+    assert!(!mods.world_hold(), "clear-post ends it");
+    mods.command("hold on");
+    assert!(mods.world_hold());
+    mods.command("panic");
+    assert!(!mods.world_hold(), "a mod that stopped holds nothing");
+}
+
+#[test]
+fn a_hand_tint_is_kept_clamped_and_gone_with_the_mod() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    assert_eq!(mods.hand_tint(), None);
+    mods.command("tint 0.2 0.15 0.1");
+    assert_eq!(mods.hand_tint(), Some([0.2, 0.15, 0.1]));
+    mods.command("tint -1 99 x");
+    assert_eq!(mods.hand_tint(), Some([0.0, horizon_mods::MAX_HAND_TINT, 1.0]));
+    mods.command("tint 1 1 1");
+    assert_eq!(mods.hand_tint(), None, "1, 1, 1 is none");
+    mods.command("tint 0.5 0.5 0.5");
+    mods.clear_hand_tints();
+    assert_eq!(mods.hand_tint(), None, "leaving the world clears it");
+    mods.command("tint 0.5 0.5 0.5");
+    mods.command("panic");
+    assert_eq!(mods.hand_tint(), None, "a mod that stopped tints nothing");
+}
+
+#[test]
+fn a_history_is_asked_for_and_ended_with_the_pass() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    mods.command("history off");
+    assert!(!mods.post().unwrap().history);
+    mods.command("history on");
+    assert!(mods.post().unwrap().history);
+    mods.command("clear");
+    mods.command("history off");
+    assert!(!mods.post().unwrap().history);
+}
+
+/// The game's stand-in for the atlas: a grass block (its top tinted, its sides overlaid) and nothing else.
+struct GrassOnly(u64);
+impl AtlasLookup for GrassOnly {
+    fn block(&self, name: &str) -> Option<BlockFaces> {
+        if name != "minecraft:grass_block" {
+            return None;
+        }
+        let face = |layer, tint| SpriteFace {
+            sprite: Sprite {
+                array: 0,
+                layer,
+                animated: false,
+                cutout: layer == 3,
+            },
+            rect: (0.0, 0.0, 1.0, 1.0),
+            inset: 0.0,
+            uv: (0.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+            tint,
+            translucent: false,
+        };
+        let side = vec![face(2, Tint::None), face(3, Tint::Grass)];
+        Some(BlockFaces {
+            sides: vec![
+                vec![face(0, Tint::None)],
+                vec![face(1, Tint::Grass)],
+                side.clone(),
+                side.clone(),
+                side.clone(),
+                side,
+            ],
+            particle: None,
+            cube: true,
+        })
+    }
+    fn texture(&self, _name: &str) -> Option<Sprite> {
+        None
+    }
+    fn version(&self) -> u64 {
+        self.0
+    }
+}
+
+#[test]
+fn block_sprites_are_answered_from_the_games_atlas() {
+    let mut mods = load("horizon_mods_test_guest.hmod");
+    let chat = |mods: &mut Mods| {
+        mods.drain().into_iter().find_map(|o| match o {
+            Output::Chat { text, .. } => Some(text),
+            _ => None,
+        })
+    };
+    // none given yet: every answer none, version 0
+    mods.command("sprites minecraft:grass_block");
+    assert_eq!(chat(&mut mods).as_deref(), Some("0 | none"));
+    mods.set_atlas(Some(Arc::new(GrassOnly(3))));
+    mods.command("sprites minecraft:grass_block minecraft:nope");
+    assert_eq!(
+        chat(&mut mods).as_deref(),
+        Some(
+            "3 | 0.0:- 0.1:grass 0.2:-+0.3:grass 0.2:-+0.3:grass 0.2:-+0.3:grass 0.2:-+0.3:grass cube, none"
+        )
+    );
+    // past the names a call may ask about: none
+    let many = vec!["minecraft:grass_block"; ATLAS_NAMES + 1].join(" ");
+    mods.command(&format!("sprites {many}"));
+    assert_eq!(
+        chat(&mut mods),
+        Some(format!("{ATLAS_NAMES} of {}", ATLAS_NAMES + 1))
+    );
+    // a mod with capability atlas has the arrays in its pass
+    mods.command("data 1");
+    assert!(mods.post().unwrap().atlas);
+    // and a mod loaded with the atlas has it from init on
+    let loaded = Mods::load_with_atlas(
+        &[mods_dir().join("horizon_mods_test_guest.hmod")],
+        |_| true,
+        |c| c == "give",
+        Some(Arc::new(GrassOnly(9))),
+    );
+    let mut loaded = loaded;
+    loaded.command("sprites minecraft:nope");
+    assert_eq!(chat(&mut loaded).as_deref(), Some("9 | none"));
 }
 
 #[test]

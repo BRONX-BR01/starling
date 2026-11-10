@@ -758,6 +758,7 @@ impl Game<'_> {
         );
         if let Some(line) = heard {
             self.mods_chat(&line);
+            self.stink_mods_chat(&line);
         }
     }
     /// Keys while the chat screen is open.
@@ -919,6 +920,7 @@ impl Game<'_> {
             );
             if let Some(line) = heard {
                 self.mods_chat(&line);
+                self.stink_mods_chat(&line);
             }
             self.lan_host_chat(&message);
             self.mod_player_chat(super::server_mods::Who::Local, &message);

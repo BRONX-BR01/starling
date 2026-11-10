@@ -100,12 +100,15 @@ pub enum Capability {
     /// Blocks in the server's loaded chunks, and changes to them (server
     /// mods; client mods later, where the game runs the world).
     World,
+    /// The game's block textures: where each block's are in the sprite
+    /// arrays, and the arrays themselves in the post pass (API 10).
+    Atlas,
     /// The recipes and items the game knows, for recipe viewers
     /// (interface `recipes`).
     Recipes,
 }
 impl Capability {
-    pub const ALL: [Capability; 12] = [
+    pub const ALL: [Capability; 13] = [
         Capability::GameRead,
         Capability::Chat,
         Capability::Hud,
@@ -118,6 +121,7 @@ impl Capability {
         Capability::Players,
         Capability::World,
         Capability::Recipes,
+        Capability::Atlas,
     ];
     /// Whether a server mod may have it: the others act on a local player.
     pub fn on_server(self) -> bool {
@@ -141,6 +145,7 @@ impl Capability {
             Capability::Players => "players",
             Capability::World => "world",
             Capability::Recipes => "recipes",
+            Capability::Atlas => "atlas",
         }
     }
     /// May change in any release: a mod uses it only with
@@ -172,6 +177,7 @@ impl Capability {
             Capability::Recipes => {
                 "read the game's recipes and items and which recipes you know, place recipes in your crafting grid and, in creative mode, give you items"
             }
+            Capability::Atlas => "draw with your block textures in its effects",
         }
     }
     /// The capability a component import needs, `Ok(None)` for one every
@@ -213,6 +219,7 @@ impl fmt::Display for Capability {
             Capability::Players => "players",
             Capability::World => "world",
             Capability::Recipes => "recipes",
+            Capability::Atlas => "atlas",
         };
         f.write_str(name)
     }
@@ -481,6 +488,24 @@ capabilities = ["game-read", "hud"]
         let with_storage = EXAMPLE.replace("\"hud\"", "\"hud\", \"storage\"");
         let m = Manifest::parse(&with_storage).unwrap();
         assert_eq!(m.check_imports(["horizon:mods/storage@0.1.0"]), Ok(()));
+        for (interface, capability) in [
+            ("input", "input"),
+            ("ui", "ui"),
+            ("render", "render"),
+            ("world", "world"),
+            ("atlas", "atlas"),
+        ] {
+            let import = format!("horizon:mods/{interface}@0.1.0");
+            assert_eq!(
+                m.check_imports([import.as_str()]),
+                Err(format!(
+                    "uses capability {capability}, missing from horizon-mod.toml"
+                ))
+            );
+            let with = EXAMPLE.replace("\"hud\"", &format!("\"hud\", \"{capability}\""));
+            let granted = Manifest::parse(&with).unwrap();
+            assert_eq!(granted.check_imports([import.as_str()]), Ok(()));
+        }
     }
 
     #[test]

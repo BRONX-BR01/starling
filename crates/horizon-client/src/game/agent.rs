@@ -405,6 +405,7 @@ impl Game<'_> {
         match self.screen {
             Screen::Playing => "playing",
             Screen::GameModeSwitcher => "gamemode-switcher",
+            Screen::StinkMod => "stink_mod",
             Screen::Paused => "paused",
             Screen::Options => "options",
             Screen::Inventory if self.station.is_some() => "station",
@@ -1669,6 +1670,10 @@ impl Game<'_> {
                     .trim_start_matches('/');
                 if text.is_empty() {
                     return Err("command TEXT".into());
+                }
+                // A command a running mod owns runs in the game, as from the chat box.
+                if self.stink_mod_command(text) {
+                    return ok(json!({ "ok": true, "chat": self.ui.chat.recent_lines(5) }));
                 }
                 let command = format!("/{text}");
                 // Single player's console is its server thread's.

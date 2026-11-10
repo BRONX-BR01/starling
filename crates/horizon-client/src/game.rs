@@ -73,6 +73,7 @@ mod boat_passengers;
 mod boats;
 mod books;
 mod bossbars;
+mod block_edits;
 mod breezes;
 mod brush;
 mod bundles;
@@ -188,6 +189,7 @@ mod mod_input;
 mod mod_panel;
 mod mod_render;
 mod mods;
+mod mods_stink;
 mod mount_menu;
 mod mounts;
 mod moved_extras;
@@ -785,6 +787,9 @@ enum Screen {
     ConfirmLink,
     /// DialogScreen.WarningScreen: the note about custom screens.
     DialogWarning,
+    /// A mod's own screen (capability `ui`, game/mods.rs).
+    #[cfg_attr(not(feature = "mods"), allow(dead_code))]
+    StinkMod,
     /// WinScreen: the end poem and the credits (game/win.rs).
     Win,
     /// A `ui` mod's own screen, or its settings page from Options > Mods
@@ -819,6 +824,7 @@ impl Screen {
             Screen::Win => "win",
             Screen::DebugOptions => "debug_options",
             Screen::Mod => "mod",
+            Screen::StinkMod => "stink_mod",
         }
     }
 }
@@ -2115,6 +2121,20 @@ struct WorldIcon {
     last_attempt: Option<Instant>,
 }
 
+/// A mod's world warp this frame (`Game::mod_world_warp`): its source and version, its parameters, its anchor, copies
+/// and their radius.
+type ModWorldWarp = (std::sync::Arc<str>, u64, [f32; 16], [f64; 3], u32, f32);
+/// A mod's post pass this frame (`Game::mod_post_pass`): its source, the source's version, its parameters, its
+/// data with the data's version, and whether it has the block sprite arrays (capability `atlas`).
+type ModPostPass = (
+    std::sync::Arc<str>,
+    u64,
+    [f32; 16],
+    Option<(std::sync::Arc<[u32]>, u64)>,
+    bool,
+    bool,
+);
+
 struct Game<'a> {
     /// Shared with an integrated server; `collision` and `motion` borrow from it.
     #[cfg(target_os = "android")]
@@ -2317,6 +2337,8 @@ struct Game<'a> {
     fps_frames: u64,
     fps_at: Instant,
     ticks: u64,
+    /// Mods' camera shake (`render.shake`).
+    camera_shake: horizon_client::camera::CameraShake,
     health_hud: hud_layout::HealthHud,
     /// What ends the game with an error; kept as it is, so main can tell a debug crash.
     error: Option<Box<dyn std::error::Error>>,
@@ -2663,6 +2685,7 @@ struct Game<'a> {
     extras: extras::ExtrasState,
     /// Horizon mods (`game/mods.rs`), none running unless turned on.
     mods: mods::ModsState,
+    stink_mods: mods_stink::StinkModsState,
     /// Every item and recipe, for mods (`game/native_recipes.rs`), made once.
     recipe_tables: native_recipes::RecipeTables,
     /// The item panel beside container screens (`game/native_panel.rs`).
@@ -4556,9 +4579,20 @@ impl Game<'_> {
                     data,
                 } => {
                     // LevelEventHandler: destroy particles and the block's
-                    // break sound (none for air).
+                    // break sound (none for air). ServerLevel.levelEvent only
+                    // sends it to players within 64 blocks.
                     let state = BlockStateId(data as u32);
                     let p = [pos.x, pos.y, pos.z];
+                    if self.player.as_ref().is_some_and(|me| {
+                        let d = [
+                            f64::from(pos.x) + 0.5 - me.position.x,
+                            f64::from(pos.y) + 0.5 - me.position.y,
+                            f64::from(pos.z) + 0.5 - me.position.z,
+                        ];
+                        d[0] * d[0] + d[1] * d[1] + d[2] * d[2] >= 64.0 * 64.0
+                    }) {
+                        continue;
+                    }
                     self.destroy_particles(p, state);
                     if self.res.facts().is_air(state) {
                         continue;
@@ -5748,6 +5782,10 @@ impl Game<'_> {
     /// then `useItem`. Whether the click ends here (it acted or failed).
     fn use_hand(&mut self, block_hit: Option<&Hit>) -> Result<bool> {
         self.use_failed = false;
+        // An item a mod claims (capability `input`): its use is the mod's.
+        if self.mod_use_start() {
+            return Ok(true);
+        }
         // isSecondaryUseActive with something in either hand keeps blocks
         // from reacting.
         let sneaking = self.keys.contains(&KeyCode::ShiftLeft);
@@ -6371,7 +6409,11 @@ impl Game<'_> {
         };
         // Switching hotbar slots only ends a main-hand use.
         let hand_changed = slot != self.selected && slot != shield::OFFHAND_SLOT;
-        if !self.right || hand_changed || self.screen != Screen::Playing {
+        let released = !self.right || hand_changed || self.screen != Screen::Playing;
+        if self.mod_use_tick(slot, ticks, released) {
+            return;
+        }
+        if released {
             self.using = None;
             self.release_used_item(&stack, ticks, hand_changed);
             return;
@@ -6918,6 +6960,7 @@ impl Game<'_> {
         self.update_totem_ready();
         self.tick_command_extras();
         self.tick_mods();
+        self.stink_tick_mods();
         self.native_tick();
         self.tick_server_mods();
         let camera_eye = self.camera_eye_height();
@@ -6989,19 +7032,25 @@ impl Game<'_> {
             [player.position.x, player.position.y, player.position.z],
         );
         if !riding {
-            MotionWorld {
+            let mut motion = MotionWorld {
                 entities: &entity_collisions,
                 player,
                 scene: &mut self.world,
                 assets: &self.pack.assets,
                 collision_binding: self.collision,
                 resources: self.motion,
-            }
-            .controlled_simulation_tick_with_sprint_window(keys, sprint_window)?;
+            };
+            // (or carried by a mod's carry, `world.carry-player`)
+            self.stink_mods.player_tick(&mut motion, keys, sprint_window)?;
             // Player.jumpFromGround: the jump statistic.
             if grounded && keys.jump && !player.flying && player.velocity.y > 0.2 {
                 self.stats.custom("jump", 1);
             }
+        } else {
+            // (riding: no carry holds them)
+            self.stink_mods.carry = None;
+            self.stink_mods.carry_refused = false;
+            self.stink_mods.carry_turn = 0.0;
         }
         let events = std::mem::take(&mut player.events);
         let spin_hit = player.spin_hit.take();
@@ -8395,6 +8444,7 @@ impl Game<'_> {
                 );
             }
             Screen::GameModeSwitcher => self.draw_gamemode_switcher(&mut batch),
+            Screen::StinkMod => self.stink_draw_mod_screen(&mut batch),
             Screen::Dead => self.draw_death_screen(&mut batch),
             Screen::Stats => self.draw_stats(&mut batch),
             Screen::Advancements => self.draw_advancements(&mut batch),
@@ -12123,6 +12173,7 @@ impl Game<'_> {
         self.begin_closing_save(false)
     }
     fn finish_close_world(&mut self) -> Result<()> {
+        self.mods_left_world();
         self.ambience.clear(&mut self.audio);
         // updateLevelInEngines(null): every sound stops; the music manager
         // lets go of its track.
@@ -15311,6 +15362,9 @@ impl Game<'_> {
         } else {
             self.shader_pack_inputs(camera, alpha as f32)
         };
+        let mod_post = self.mod_post_pass();
+        let world_warp = self.mod_world_warp();
+        let hand_tint = self.mod_hand_tint();
         // Map textures and font glyphs changed while building this frame's
         // geometry (game/maps.rs, world text) upload with this batch; draining
         // map_patches any earlier leaves them a frame behind.
@@ -15319,6 +15373,29 @@ impl Game<'_> {
         let glowing = std::mem::take(self.glowing_vertices.get_mut());
         let shadow_only = std::mem::take(self.shadow_only_vertices.get_mut());
         let frame = Frame {
+            hand_tint,
+            world_warp: world_warp.as_ref().map(|w| horizon_client::gfx::WorldWarp {
+                source: &w.0,
+                version: w.1,
+                params: w.2,
+                anchor: w.3,
+                copies: w.4,
+                radius: w.5,
+                partial_tick: alpha as f32,
+            }),
+            mod_post: mod_post.as_ref().map(|(source, version, params, data, atlas, history)| {
+                horizon_client::gfx::ModPost {
+                    source,
+                    version: *version,
+                    params: *params,
+                    data: data.as_ref().map(|(d, v)| (&d[..], *v)),
+                    atlas: *atlas,
+                    history: *history,
+                    day_fraction: (self.world.day_time.rem_euclid(24_000) as f32 + alpha as f32)
+                        / 24_000.0,
+                    partial_tick: alpha as f32,
+                }
+            }),
             weather: &weather,
             weather_time: horizon_client::weather::Time::new(self.world.game_time, alpha as f32),
             nether_lighting: self.dim == Dim::Nether,
@@ -15674,6 +15751,7 @@ impl Game<'_> {
                     self.capture(true);
                 }
                 Screen::GameModeSwitcher => self.close_gamemode_switcher(false),
+                Screen::StinkMod => self.stink_close_mod_screen(),
                 Screen::Dead => {
                     if self.ui.death_confirm.is_some() {
                         self.death_confirm_answer(false)?;
@@ -15989,7 +16067,7 @@ impl Game<'_> {
         }
     }
     fn update_world(&mut self) {
-        if let Err(e) = self.poll_remote() {
+        if let Err(e) = horizon_client::spans::time("poll_remote", || self.poll_remote()) {
             log::warn!("Horizon: {e}");
         }
         self.prepare_lod();
@@ -16073,11 +16151,16 @@ impl Game<'_> {
             log::warn!("Horizon: failed to save unloaded chunks: {e}");
         }
         let (far_distance, far_reduced) = self.far_terrain_choice();
+        let world_hold = self.mod_world_hold();
+        let world_hold_within = self.mod_world_hold_within().to_vec();
         if let Some(renderer) = self.renderer.as_mut() {
+            renderer.hold_world(world_hold, world_hold_within);
             let g = &self.settings.horizon;
+            // (a held world's sections can't be seen going in: they take their time, and leave the frames alone)
+            let held = renderer.world_held();
             let mobile_uploads =
                 cfg!(target_os = "android") && self.options.execution_role.is_client();
-            let budgeted = g.chunk_updates > 0 || g.upload_budget_kib > 0 || mobile_uploads;
+            let budgeted = g.chunk_updates > 0 || g.upload_budget_kib > 0 || mobile_uploads || held;
             if !budgeted && self.pending_uploads.is_empty() && uploads.len() <= AUTO_UPLOADS_AT_ONCE
             {
                 horizon_client::spans::time("upload", || {
@@ -16116,9 +16199,17 @@ impl Game<'_> {
                 let frame_dt = Duration::from_secs_f32((self.frame_ticks / 20.0).max(0.0));
                 let interactive = self.screen != Screen::Playing
                     || self.last_input.elapsed() < Duration::from_millis(120);
+                let (budget_count, budget_bytes) = if held {
+                    (0, horizon_client::gfx::HELD_UPLOAD_BYTES)
+                } else {
+                    (
+                        g.chunk_updates as usize,
+                        u64::from(g.upload_budget_kib) * 1024,
+                    )
+                };
                 let mut budget = horizon_client::gfx::upload_budget::UploadBudget::with_frame_state(
-                    g.chunk_updates as usize,
-                    u64::from(g.upload_budget_kib) * 1024,
+                    budget_count,
+                    budget_bytes,
                     mobile_uploads,
                     renderer.last_wait,
                     frame_dt,
@@ -17649,6 +17740,7 @@ impl Game<'_> {
                             self.recipe_book_release();
                         }
                         Screen::Chat if pressed && button == MouseButton::Left => self.chat_click(),
+                        Screen::StinkMod if pressed => self.stink_mod_screen_click(button),
                         Screen::Creative if pressed => {
                             self.click_creative(button == MouseButton::Right);
                         }
@@ -17979,6 +18071,7 @@ impl Game<'_> {
                         return Ok(());
                     };
                     self.mod_key(key, event.state == ElementState::Pressed, event.repeat);
+                    self.mods_key(key, event.state == ElementState::Pressed, event.repeat);
                     self.native_key_event(key, event.state == ElementState::Pressed, event.repeat);
                     // Screen.keyPressed sees the physical key, repeats included.
                     if event.state == ElementState::Pressed
@@ -17986,6 +18079,9 @@ impl Game<'_> {
                         && (self.merchant_key(key) || self.recipe_book_key(key))
                     {
                         return Ok(());
+                    }
+                    if event.state == ElementState::Pressed {
+                        self.stink_mod_screen_key(key, event.text.as_deref());
                     }
                     // key.smoothCamera toggles the cinematic camera.
                     if self.screen == Screen::Playing
@@ -18123,10 +18219,12 @@ impl Game<'_> {
                     }
                     self.extras_frame(elapsed);
                     self.mods_frame(elapsed);
+                    self.stink_mods_frame(elapsed);
                     self.poll_moved_extras();
                     self.extras_retry()?;
                     self.apply_mouse_look();
                     self.pad_look(elapsed.as_secs_f32());
+                    self.carry_look(elapsed.as_secs_f32());
                     self.advance_flight();
                     self.tick_world_icon();
                     let ticked = Instant::now();
@@ -18573,6 +18671,7 @@ impl<'a> Game<'a> {
             fps_frames: 0,
             fps_at: now,
             ticks: 0,
+            camera_shake: Default::default(),
             error: None,
             message: None,
             save,
@@ -18795,6 +18894,7 @@ impl<'a> Game<'a> {
             frame_graph: Default::default(),
             extras: Default::default(),
             mods: Default::default(),
+            stink_mods: Default::default(),
             recipe_tables: Default::default(),
             panel: Default::default(),
             native_shaders: Default::default(),
@@ -20167,6 +20267,9 @@ pub(crate) fn loading_frame(hud: &HudBatch) -> Frame<'_> {
         post_effects: horizon_client::post_chain::Request::none(),
         menu_blur: None,
         menu_blur_cache: false,
+        mod_post: None,
+        world_warp: None,
+        hand_tint: None,
     }
 }
 
@@ -20221,6 +20324,7 @@ fn start_game<'a>(
         game.mods.dev = game.options.dev_mods.clone();
         game.start_moved_extras();
         game.start_mods();
+        game.stink_start_mods();
     }
     game.start_agent_control()?;
     if let Some(scenario) = game.options.benchmark.clone() {

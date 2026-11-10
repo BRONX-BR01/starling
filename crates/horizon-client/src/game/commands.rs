@@ -2459,6 +2459,11 @@ impl Game<'_> {
             ctx.has("keep"),
         );
         let mut count = 0;
+        // Whether the filter takes a state, worked out once per state: a fill visits up to 32768 blocks of a handful
+        // of states, and matching a tag is a name lookup.
+        let mut matched: std::collections::HashMap<BlockStateId, bool> =
+            std::collections::HashMap::new();
+        let plain = !(destroy || hollow || outline);
         for y in min[1]..=max[1] {
             for z in min[2]..=max[2] {
                 for x in min[0]..=max[0] {
@@ -2466,10 +2471,22 @@ impl Game<'_> {
                     if keep && current != air {
                         continue;
                     }
-                    if let Some(f) = &filter
-                        && !self.block_matches(f, current)
-                    {
+                    // Already the block it would become: nothing to place (place_state would do nothing either).
+                    if plain && current == state {
                         continue;
+                    }
+                    if let Some(f) = &filter {
+                        let ok = match matched.get(&current) {
+                            Some(&ok) => ok,
+                            None => {
+                                let ok = self.block_matches(f, current);
+                                matched.insert(current, ok);
+                                ok
+                            }
+                        };
+                        if !ok {
+                            continue;
+                        }
                     }
                     let edge = x == min[0]
                         || x == max[0]
@@ -3606,4 +3623,28 @@ mod look_at_tests {
         assert_eq!(non_player_entity_id(Target::Guest(3)), None);
         assert_eq!(non_player_entity_id(Target::Mob(u32::MAX - 4096)), None);
     }
+}
+
+/// BlockPredicateArgument test, against the registry and the block tags.
+pub(super) fn block_input_matches(
+    registry: &horizon_world::registry::BlockRegistry,
+    tags: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+    b: &BlockInput,
+    state: BlockStateId,
+) -> bool {
+    let Some(s) = registry.state(state) else {
+        return false;
+    };
+    let name_ok = if b.tag {
+        let tag = b.id.trim_start_matches("minecraft:");
+        tags.get(tag).or_else(|| tags.get(&b.id)).is_some_and(|set| {
+            set.contains(&s.name) || set.contains(s.name.trim_start_matches("minecraft:"))
+        })
+    } else {
+        s.name == b.id
+    };
+    name_ok
+        && b.properties
+            .iter()
+            .all(|(k, v)| s.properties.get(k) == Some(v))
 }

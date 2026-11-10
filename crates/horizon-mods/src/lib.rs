@@ -16,6 +16,8 @@ pub mod modpack;
 #[cfg(feature = "runtime")]
 mod runtime;
 #[cfg(feature = "runtime")]
+pub mod runtime_stink;
+#[cfg(feature = "runtime")]
 pub mod testing;
 
 pub use content::Content;

@@ -64,7 +64,12 @@ impl Game<'_> {
                     .filter(|v| !v.is_empty())
                     .ok_or("options-set KEY VALUE: missing the value")?;
                 let narrator = self.settings.narrator();
-                self.settings = self.settings.with_option(key, value)?;
+                let mut settings = self.settings.with_option(key, value)?;
+                // Nor are the mods turned on, or the mods' keybinds: dropping
+                // them here would save an empty horizon-mods.txt.
+                std::mem::swap(&mut settings.mods, &mut self.settings.mods);
+                settings.keys.adopt_mod_keys(&self.settings.keys);
+                self.settings = settings;
                 // As the options screen applies a change (OptionInstance.set
                 // runs the narrator's onValueUpdate for a new value only).
                 let mut events = vec![Event::Changed];
@@ -325,6 +330,7 @@ impl Game<'_> {
                     self.settings.save(&Self::options_path());
                     self.apply_settings();
                     self.sync_mods();
+                    self.stink_sync_mods();
                     self.sync_agent_control();
                     self.ui.options.agent_status = self.agent_status_lines();
                 }

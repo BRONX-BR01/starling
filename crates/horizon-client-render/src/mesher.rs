@@ -424,6 +424,16 @@ fn visibility_reusing(pad: &Padded, info: &[Info], stack: &mut Vec<usize>) -> u6
 mod particle_tests;
 #[cfg(test)]
 mod visibility_tests;
+/// A face's tint source as the game colours it (`BlockColors.createDefault`), for drawing a block elsewhere: the
+/// biome's grass, foliage, dry foliage or water colour where the block is, or a fixed colour (0xRRGGBB).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TintSource {
+    Grass,
+    Foliage,
+    DryFoliage,
+    Water,
+    Fixed(u32),
+}
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tint {
     None,
@@ -684,6 +694,26 @@ impl MeshTables {
             emission: i.emission,
             overlay: i.overlay,
             tint_sources: i.tint_count,
+        })
+    }
+    /// What tint source `index` (a face's `tintindex`) of `state` colours a face with, for drawing the block
+    /// elsewhere (`block_sprites`): `None` for an untinted face. Grass blocks and tall grass are `Grass`; redstone
+    /// and stems are their colour at the state's power and age.
+    pub fn tint_source(&self, state: BlockStateId, index: i32) -> Option<TintSource> {
+        let info = self.info.get(state.0 as usize)?;
+        if index < 0 || index >= i32::from(info.tint_count) {
+            return None;
+        }
+        Some(match info.tints[index as usize] {
+            Tint::None | Tint::SugarCane => return None,
+            Tint::Grass | Tint::GrassBlock | Tint::TallGrassUpper => TintSource::Grass,
+            Tint::Foliage => TintSource::Foliage,
+            Tint::DryFoliage => TintSource::DryFoliage,
+            Tint::Water => TintSource::Water,
+            Tint::LilyPad => TintSource::Fixed(0x71_C35C),
+            Tint::Constant(c) => TintSource::Fixed(c),
+            Tint::Redstone(p) => TintSource::Fixed(redstone_color(p)),
+            Tint::Stem(age) => TintSource::Fixed(stem_color(age)),
         })
     }
     /// `BlockTintSource.color(state)`: block-model colour without a level.

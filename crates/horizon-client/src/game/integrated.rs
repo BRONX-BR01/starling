@@ -175,6 +175,10 @@ impl Integrated {
     pub fn published(&self) -> Option<u16> {
         Some(self.flags.published.load(Ordering::Relaxed)).filter(|&p| p != 0)
     }
+    /// `MinecraftServer.execute`: run `f` on the server thread between two ticks, without waiting for it.
+    pub fn execute(&self, f: impl FnOnce(&mut Game<'_>) + Send + 'static) {
+        let _ = self.tasks.send(Box::new(f));
+    }
     /// `executeBlocking`: run `f` on the server thread between two ticks and
     /// wait for its answer; `None` once the server has stopped.
     pub fn call<T: Send + 'static>(
@@ -903,6 +907,77 @@ impl Game<'_> {
         }
         self.lan = Some(host);
         out
+    }
+
+    /// On single player's server thread: a client mod's commands, run as `owner_console_command` runs one (as the
+    /// world's owner, in the owner's level), silently and without feedback.
+    #[cfg(feature = "mods")]
+    pub(super) fn owner_commands_silently(&mut self, commands: &[String]) {
+        let started = Instant::now();
+        self.owner_commands_silently_inner(commands);
+        let ms = started.elapsed().as_secs_f32() * 1000.0;
+        if self.options.spikes.is_some_and(|threshold| ms > threshold) {
+            log::info!(
+                "Horizon: slow mod commands {ms:.1} ms ({} commands)",
+                commands.len()
+            );
+        }
+    }
+    #[cfg(feature = "mods")]
+    fn owner_commands_silently_inner(&mut self, commands: &[String]) {
+        let Some(owner) = self.serving.as_ref().map(|s| s.owner) else {
+            return;
+        };
+        let Some(mut host) = self.lan.take() else {
+            return;
+        };
+        if let Some(g) = host.hub.guests.iter().find(|g| g.uuid == owner && g.placed) {
+            let conn = g.conn;
+            let (back, theirs) = (self.dim, super::Dim::from_id(&g.dimension));
+            let entered = theirs == back || self.enter_level(Some(&mut host), theirs).is_ok();
+            if entered && let Some(swap) = self.enter_guest(&mut host, conn) {
+                self.lan = Some(host);
+                self.run_commands_silently(commands);
+                host = self.lan.take().expect("commands put the hub back");
+                self.leave_guest(&mut host, swap);
+                host.hub.sync_all_effects();
+                self.run_level_teleports(&mut host);
+            }
+            if theirs != back
+                && let Err(e) = self.enter_level(Some(&mut host), back)
+            {
+                log::error!("could not reopen {}: {e}", back.id());
+            }
+        }
+        self.lan = Some(host);
+    }
+
+    /// On single player's server thread: a client mod's block edit (`world.edit-blocks`), in the owner's level.
+    #[cfg(feature = "mods")]
+    pub(super) fn owner_edit_blocks(&mut self, id: &str, edit: &horizon_mods::BlockEdit) {
+        self.in_owner_level(|g| g.edit_blocks_logged(id, edit));
+    }
+
+    /// On single player's server thread: a client mod's flying speed for the world's owner (capability `world`), kept
+    /// on the server's player as vanilla keeps its abilities, so the abilities it sends later (a respawn, a game mode
+    /// change) carry it.
+    #[cfg(feature = "mods")]
+    pub(super) fn owner_flying_speed(&mut self, speed: f32) {
+        let Some(owner) = self.serving.as_ref().map(|s| s.owner) else {
+            return;
+        };
+        let Some(host) = self.lan.as_mut() else {
+            return;
+        };
+        if let Some(conn) = host
+            .hub
+            .guests
+            .iter()
+            .find(|g| g.uuid == owner && g.placed)
+            .map(|g| g.conn)
+        {
+            host.hub.set_flying_speed(conn, speed);
+        }
     }
 
     /// Run `f` with the owner's level in place (the server holds one per

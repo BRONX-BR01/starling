@@ -4340,7 +4340,7 @@ impl Game<'_> {
     pub(super) fn client_mod_command(&mut self, command: &str) -> bool {
         let mut ran = false;
         self.native_command(command, &mut ran);
-        ran || self.mod_command(command)
+        ran || self.mod_command(command) || self.stink_mod_command(command)
     }
     /// The zoom in effect while playing (a native mod's); the spyglass's own
     /// view wins.

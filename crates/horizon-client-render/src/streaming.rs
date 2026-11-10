@@ -935,6 +935,64 @@ impl Streaming {
             }
         }
     }
+    /// A resident column a server sent again whole (it changed it in bulk):
+    /// its new blocks taken, the sections that did not change kept as they
+    /// were, and its light and its neighbours' worked out again here, off
+    /// the game thread, as light is for the blocks a server changes one at a
+    /// time; the sections that changed remesh (with theirs) once lit. The
+    /// light `chunk` came with is not used: the sections that changed keep
+    /// their old light until then (so the sender need not read the light
+    /// the packet carries).
+    pub fn replace_remote(&mut self, world: &mut World, mut chunk: Chunk) {
+        let key = (chunk.x, chunk.z);
+        let Some(old) = world.chunks.get(&key).cloned() else {
+            return self.insert_remote(world, chunk);
+        };
+        if !self.lit.contains(&key) {
+            return self.insert_remote(world, chunk);
+        }
+        let (mut a, mut b) = (Box::new([0u32; 4096]), Box::new([0u32; 4096]));
+        // The cells whose blocks changed, by section: they remesh with the neighbours within a block of them (as
+        // vanilla's `setBlocksDirty`), not every section round each section changed (which, for the few blocks a
+        // section often changes in a bulk edit, is mostly sections that did not).
+        let mut cells = LightChanges::default();
+        let mut changed = false;
+        for s in 0..SECTIONS {
+            // (sections stored alike hold the same blocks: most of a column sent again, found without unpacking)
+            if old.sections[s]
+                .blocks
+                .same_storage(&chunk.sections[s].blocks)
+            {
+                chunk.sections[s] = old.sections[s].clone();
+                continue;
+            }
+            old.sections[s].unpack(&mut a);
+            chunk.sections[s].unpack(&mut b);
+            let classes = LightChanges::classes_differing(&a, &b);
+            if classes == 0 {
+                chunk.sections[s] = old.sections[s].clone();
+            } else {
+                changed = true;
+                cells.add((key.0, s as i32, key.1), classes);
+                Arc::make_mut(&mut chunk.sections[s]).light = old.sections[s].light.clone();
+            }
+        }
+        chunk.light_loaded = old.light_loaded;
+        chunk.lit = true;
+        world.chunks.insert(key, Arc::new(chunk));
+        world.revision = world.revision.wrapping_add(1);
+        if !changed {
+            return;
+        }
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                world.dirty_light.insert((key.0 + dx, key.1 + dz));
+            }
+        }
+        cells.dirty_sections(|section| {
+            world.dirty_sections.insert(section);
+        });
+    }
     /// A server's light update for a resident column: the sections whose
     /// light changed and their neighbours remesh
     /// (`setSectionDirtyWithNeighbors`).
@@ -1327,9 +1385,9 @@ impl Streaming {
                 Done::Generated(chunk) => self.receive_generated(chunk, world),
                 Done::Saved(protos) => self.receive_saved(protos),
                 Done::LightView(x, z, proto, view) => self.receive_light_view(x, z, proto, view),
-                Done::Lit(x, z, sections, seq) => {
+                Done::Lit(x, z, sections, seq) => crate::spans::time("apply_light", || {
                     if self.lighting.get(&(x, z)) != Some(&seq) {
-                        continue;
+                        return;
                     }
                     self.lighting.remove(&(x, z));
                     let snapshot = self.light_snapshots.remove(&(x, z)).unwrap_or(u64::MAX);
@@ -1365,7 +1423,7 @@ impl Streaming {
                         }
                         self.replay_light_edits(world, x, z, snapshot);
                     }
-                }
+                }),
                 Done::Meshed(x, sy, z, mesh, seq) => {
                     if self.meshing.get(&(x, sy, z)) != Some(&seq) {
                         stale.push(((x, sy, z), mesh));

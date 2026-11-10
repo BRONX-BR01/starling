@@ -277,6 +277,7 @@ impl Game<'_> {
         }
         if mod_panels {
             self.draw_mod_panels(batch, &mut corners);
+            self.stink_draw_mod_panels(batch, &mut corners);
         }
         self.native_hud(batch, &mut corners);
     }

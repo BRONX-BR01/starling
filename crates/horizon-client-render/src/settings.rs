@@ -371,6 +371,10 @@ impl Settings {
                 ..Self::default()
             },
         };
+        let mut settings = settings;
+        if let Some(dir) = path.parent() {
+            settings.keys.load_mod_keys(dir);
+        }
         settings.describe_for_crashes();
         // Options.load: the backend asked for at startup, what a restart is measured from.
         Self {
@@ -669,6 +673,7 @@ impl Settings {
             let _ = self.touch.save_to(&dir.join("horizon-touch.json"));
             self.extras.save(dir);
             self.mods.save(dir);
+            self.keys.save_mod_keys(dir);
         }
     }
     /// Volume of a sound source (master excluded).
