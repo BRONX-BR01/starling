@@ -3950,7 +3950,6 @@ impl Renderer {
             uploaded_bytes: 0,
             started: Instant::now(),
             screenshot: None,
-            recording: None,
             screenshot_result: None,
             screenshot_quality: 1,
             screenshot_halvings: 0,
@@ -8589,7 +8588,7 @@ impl Renderer {
                 // camera would sway with every step.
                 let turn = Mat4::from_mat3(glam::Mat3::from_mat4(frame.bob));
                 let view = turn * crate::camera::view_matrix(frame.yaw, frame.pitch);
-                let projection = world_projection(frame.fov_degrees, aspect, frame.depth_far);
+                let projection = world_projection(frame.fov_degrees, views.primary().aspect, frame.depth_far);
                 let eye = view
                     .inverse()
                     .transform_point3(-frame.bob.w_axis.truncate());
@@ -8994,21 +8993,6 @@ impl Renderer {
                 .take()
                 .and_then(|request| self.take_readback(request, &mut encoder, &target_texture))
         });
-        if self
-            .recording
-            .as_ref()
-            .is_some_and(|r| r.size() != [self.config.width, self.config.height])
-            && let Some(r) = self.recording.take()
-        {
-            // The window changed size: the video can't, so it ends here.
-            match r.finish(&self.device) {
-                Ok(n) => log::info!("recording stopped: the window was resized ({n} frames)"),
-                Err(e) => log::warn!("recording stopped: {e}"),
-            }
-        }
-        if let Some(r) = &mut self.recording {
-            r.capture(&self.device, &mut encoder, &target_texture);
-        }
         self.uploads.finish(&encoder);
         if has_section_copies {
             self.section_copy_bytes = 0;

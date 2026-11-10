@@ -957,7 +957,7 @@ impl Streaming {
         // section often changes in a bulk edit, is mostly sections that did not).
         let mut cells = LightChanges::default();
         let mut changed = false;
-        for s in 0..SECTIONS {
+        for s in 0..crate::chunk::SECTIONS {
             // (sections stored alike hold the same blocks: most of a column sent again, found without unpacking)
             if old.sections[s]
                 .blocks

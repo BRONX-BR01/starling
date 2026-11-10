@@ -5275,7 +5275,7 @@ impl OptionsUi {
                         }
                         Act::Key(name) => self.selected_key = Some(name),
                         Act::ResetKey(name) => {
-                            s.keys.set(name, KeyBinds::default_of(name));
+                            s.keys.set(name, keybinds::KeyBinds::default_of(name));
                             events.push(Event::Changed);
                         }
                         Act::ResetKeys => {
