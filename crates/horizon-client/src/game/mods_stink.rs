@@ -323,48 +323,26 @@ impl Game<'_> {
         self.stink_show_mod_output();
     }
     /// The Mods page's rows, from what loaded.
-    fn stink_list_mods(&mut self) {
+    /// The settings list's rows are the Android list's (every installed mod, once); the rows of
+    /// the mods that run on the Stink runtime get that runtime's state.
+    pub(super) fn stink_patch_installed(&mut self) {
         let dev = &self.stink_mods.dev;
-        self.settings.mods.installed = self
-            .stink_mods
-            .mods
-            .entries()
-            .iter()
-            .map(|e| {
-                let file = e.path.file_name().unwrap_or_default().to_string_lossy();
-                let problem = match &e.status {
+        for e in self.stink_mods.mods.entries().iter() {
+            let Some(m) = &e.manifest else { continue };
+            if !m.is_stink() {
+                continue;
+            }
+            if let Some(row) = self.settings.mods.installed.iter_mut().find(|r| r.id == m.id) {
+                row.problem = match &e.status {
                     Status::Failed(reason) => Some(format!("Stopped: {reason}")),
                     _ => None,
                 };
-                let Some(m) = &e.manifest else {
-                    return Installed {
-                        id: String::new(),
-                        title: file.into_owned(),
-                        description: String::new(),
-                        problem,
-                        dev: false,
-                        has_settings: false,
-                        native: None,
-                    };
-                };
-                // What it may do first: the row cuts long descriptions.
-                let may: Vec<&str> = m.capabilities.iter().map(|c| c.describe()).collect();
-                let may = if may.is_empty() {
-                    "Asks for nothing.".to_owned()
-                } else {
-                    format!("May {}.", may.join(", "))
-                };
-                Installed {
-                    id: m.id.clone(),
-                    title: format!("{} {}", m.name, m.version),
-                    description: format!("{may} {}", m.description).trim().to_owned(),
-                    problem,
-                    dev: dev.contains(&e.path),
-                    has_settings: false,
-                    native: None,
-                }
-            })
-            .collect();
+                row.dev = dev.contains(&e.path);
+            }
+        }
+    }
+    fn stink_list_mods(&mut self) {
+        self.list_mods();
     }
     /// The chat's tree after the running mods changed.
     fn stink_sync_mod_commands(&mut self) {

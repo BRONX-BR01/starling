@@ -512,7 +512,10 @@ capabilities = ["game-read", "hud"]
                     "uses capability {capability}, missing from horizon-mod.toml"
                 ))
             );
-            let with = EXAMPLE.replace("\"hud\"", &format!("\"hud\", \"{capability}\""));
+            let mut with = EXAMPLE.replace("\"hud\"", &format!("\"hud\", \"{capability}\""));
+            if matches!(capability, "input" | "ui" | "render") {
+                with.push_str(&format!("experimental = [\"{capability}\"]\n"));
+            }
             let granted = Manifest::parse(&with).unwrap();
             assert_eq!(granted.check_imports([import.as_str()]), Ok(()));
         }

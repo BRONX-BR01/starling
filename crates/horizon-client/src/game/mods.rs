@@ -430,7 +430,7 @@ impl Game<'_> {
         }
     }
     /// The Mods page's rows, from what loaded.
-    fn list_mods(&mut self) {
+    pub(super) fn list_mods(&mut self) {
         self.mods.server = self.mods.mods.runs_server();
         self.mods.world = self.mods.mods.wants_world();
         let dev = &self.mods.dev;
@@ -474,6 +474,7 @@ impl Game<'_> {
                 }
             })
             .collect();
+        self.stink_patch_installed();
         self.list_native_mods();
     }
     /// The chat's tree after the running mods changed.
