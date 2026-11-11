@@ -468,11 +468,39 @@ impl Game<'_> {
                 },
             ))
         });
+        let entities: Vec<horizon_mods::runtime_stink::EntityInfo> = player
+            .as_ref()
+            .map(|p| {
+                let mut near: Vec<_> = self
+                    .mobs
+                    .iter()
+                    .filter(|m| !m.removed)
+                    .map(|m| ((m.position.x - p.x).powi(2) + (m.position.z - p.z).powi(2), m))
+                    .collect();
+                near.sort_by(|a, b| a.0.total_cmp(&b.0));
+                near.into_iter()
+                    .take(128)
+                    .map(|(_, m)| horizon_mods::runtime_stink::EntityInfo {
+                        kind: m.kind.id.clone(),
+                        category: m.kind.category.clone(),
+                        x: m.position.x,
+                        y: m.position.y,
+                        z: m.position.z,
+                        yaw: m.yaw,
+                        health: m.health,
+                        name: m.custom_name.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let biome = self.player.as_ref().and_then(|g| self.biome_name_at(g.position));
         Snapshot {
             player,
             clock,
             held,
             view_hit,
+            entities,
+            biome,
             carried: !self.stink_mods.carry_refused,
             flying: self.player.as_ref().is_some_and(|p| p.flying || p.spectator),
         }

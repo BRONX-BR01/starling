@@ -1,5 +1,6 @@
 //! Loading and calling mods with wasmtime's component model.
 use crate::manifest::{Manifest, Package, Side};
+pub use bindings::horizon::mods::game::EntityInfo;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -48,16 +49,16 @@ const CHAT_PER_CALL: usize = 8;
 const HUD_LINES: usize = 16;
 const LINE_CHARS: usize = 256;
 /// Total bytes a mod's `storage` may hold on disk, across all its keys.
-const STORAGE_QUOTA: u64 = 4 << 20;
+const STORAGE_QUOTA: u64 = 64 << 20;
 /// Distinct keys a mod's `storage` may hold: `STORAGE_QUOTA` alone doesn't
 /// bound a flood of zero- or near-zero-byte files (each still a file name,
 /// a directory entry and an inode).
-const STORAGE_MAX_KEYS: usize = 64;
+const STORAGE_MAX_KEYS: usize = 2048;
 /// Bytes `storage::set` may write across one hook call: fuel bounds a
 /// mod's CPU time per call, not the time a synchronous disk write takes, so
 /// a cheap-in-fuel loop replacing one key with large payloads needs its own
 /// cap, separate from the on-disk quota it would otherwise stay under.
-const STORAGE_WRITE_BUDGET: u64 = 1 << 20;
+const STORAGE_WRITE_BUDGET: u64 = 4 << 20;
 /// Input events kept for a mod between `poll`s; older ones are dropped.
 const EVENTS_KEPT: usize = 256;
 /// Items one mod may claim, keys it may register.
@@ -111,6 +112,8 @@ pub trait AtlasLookup: Send + Sync {
 /// What mods may read of the game, copied once per tick by the game.
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
+    pub entities: Vec<game::EntityInfo>,
+    pub biome: Option<String>,
     pub player: Option<Player>,
     pub clock: Option<Clock>,
     /// The stack in the main hand (capability `input`).
@@ -1008,6 +1011,18 @@ impl game::Host for State {
     }
     fn get_clock(&mut self) -> Option<Clock> {
         self.snapshot.clock
+    }
+    fn get_entities(&mut self) -> Vec<game::EntityInfo> {
+        self.snapshot.entities.clone()
+    }
+    fn get_biome(&mut self) -> Option<String> {
+        self.snapshot.biome.clone()
+    }
+    fn wall_clock(&mut self) -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
     }
     fn player_flying(&mut self) -> bool {
         self.snapshot.flying

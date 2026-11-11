@@ -49,6 +49,24 @@ interface game {
     /// Whether the local player is flying (creative flight, or a spectator), as the game has them this tick; false
     /// on the title screen.
     player-flying: func() -> bool;
+
+    /// A mob near the player, as the map shows it.
+    record entity-info {
+        kind: string,
+        category: string,
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: f32,
+        health: f32,
+        name: option<string>,
+    }
+    /// The mobs the client knows around the player, nearest first, at most 128.
+    get-entities: func() -> list<entity-info>;
+    /// The biome id at the player, for example minecraft:plains.
+    get-biome: func() -> option<string>;
+    /// Unix time in seconds from the device clock.
+    wall-clock: func() -> u64;
 }
 
 /// Capability `chat`: messages only the local player sees.
