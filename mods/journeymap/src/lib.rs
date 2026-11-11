@@ -2,6 +2,7 @@
 mod app;
 mod color;
 mod grid;
+mod overlay;
 mod view;
 mod waypoint;
 

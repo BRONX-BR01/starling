@@ -429,6 +429,7 @@ pub struct JourneyMap;
 
 impl Guest for JourneyMap {
     fn init() -> Result<Registration, String> {
+        crate::overlay::enable();
         input::register_key(KEY, "JourneyMap: abrir mapa", "key.keyboard.m");
         let waypoints = match storage::get(STORE) {
             Some(bytes) => Waypoints::decode(&bytes).unwrap_or_else(|e| {
@@ -442,6 +443,7 @@ impl Guest for JourneyMap {
     }
 
     fn tick(tick: u64) {
+        crate::overlay::update(tick);
         with_state(|s| s.tick(tick));
     }
 
