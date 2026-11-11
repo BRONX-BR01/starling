@@ -1296,6 +1296,15 @@ pub trait Hooks: Send + Sync {
         let _ = host;
         let _ = event;
     }
+    /// The terrain's picture held (`native_world_hold`): call `event.hold.hold()` to keep every
+    /// section drawn as it is while the world changes under it, or
+    /// `event.hold.hold_within(x, z, radius)` for only the sections inside circles. Not asking
+    /// lets go, and every change shows on that frame. Asked once a frame while a world is shown,
+    /// before the frame's section uploads. Client only.
+    fn world_hold(&self, host: &dyn Host, event: &mut WorldHoldEvent<'_>) {
+        let _ = host;
+        let _ = event;
+    }
     /// Before an eligible targeted block's selection outline is built.
     /// Cancel skips only the default block highlight, after normal HUD and game-mode gates.
     ///
@@ -7076,6 +7085,21 @@ pub fn dispatch_shader_params(
     let mut event = ShaderParamsEvent { partial, params };
     for mod_hook in super::entered(mods, "shader_params") {
         mod_hook.shader_params(host, &mut event);
+    }
+}
+/// What [`Hooks::world_hold`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
+#[non_exhaustive]
+pub struct WorldHoldEvent<'a> {
+    pub hold: &'a mut crate::gfx::WorldHold,
+}
+pub fn dispatch_world_hold(
+    host: &dyn Host,
+    mods: &[Box<dyn Hooks>],
+    hold: &mut crate::gfx::WorldHold,
+) {
+    let mut event = WorldHoldEvent { hold };
+    for mod_hook in super::entered(mods, "world_hold") {
+        mod_hook.world_hold(host, &mut event);
     }
 }
 /// What [`Hooks::block_highlight`] is told. Fields may be added: the struct is `#[non_exhaustive]`.

@@ -226,6 +226,7 @@ mod native_biome_colors;
 pub mod native_block_entity_draw;
 #[cfg(target_os = "android")]
 mod native_builds;
+mod native_block_sprites;
 mod native_claimed_items;
 mod native_components;
 mod native_criteria;
@@ -16946,7 +16947,15 @@ impl Game<'_> {
         let has = |column: (i32, i32)| self.world.chunks.contains_key(&column);
         let now = Instant::now();
         let arriving = self.view_arrival.arriving(view, now, has) || self.remote_backlog() > 0;
+        // A mod's hold on the terrain's picture, before this frame's uploads (`native_world_hold`).
+        let world_hold = self
+            .renderer
+            .is_some()
+            .then(|| self.native_world_hold_now());
         if let Some(renderer) = self.renderer.as_mut() {
+            if let Some(hold) = &world_hold {
+                renderer.hold_world(hold);
+            }
             let g = &self.settings.horizon;
             let budgeted = g.chunk_updates > 0 || g.upload_budget_kib > 0;
             // The meshes, once copied, are freed by a worker (`Streaming::free`).

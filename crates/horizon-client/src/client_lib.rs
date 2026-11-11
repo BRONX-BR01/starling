@@ -10,7 +10,7 @@ pub mod arrows;
 pub mod block_contact;
 pub use horizon_client_render::{
     assets, atlas_sources, audio, auth, ban_notice, bidi, biome, block_edit, block_entities,
-    block_entity_anim, block_entity_render, bluemap, bluemap_detect, border_render, breaking,
+    block_entity_anim, block_entity_render, block_sprites, bluemap, bluemap_detect, border_render, breaking,
     brewing, camera, chat, chunk, chunk_map, cit, cit_armor, cit_assets, cit_glint, clouds,
     collisions, command_block, containers, crash, datapack, dynamic_light, effects, elyby,
     environment, extras, fast_hash, fog, font, gfx, graphics, graphics_style, graphics_ui,
