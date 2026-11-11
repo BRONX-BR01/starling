@@ -553,7 +553,7 @@ pub mod native_build {
     /// The lasers held back on this build though it can make them (by key), greyed out until they have been played
     /// natively: the Fold (its water drops out at some angles through the world warp), the Sky Breaks and the Carpet
     /// Bomb (not yet played on a native build). Take one out once it has been.
-    pub const HELD_BACK: &[&str] = &["fold", "skybreak", "carpetbomb"];
+    pub const HELD_BACK: &[&str] = &["fold"];
     /// What the wheel, the Designator and `/orbital <laser>` say of an unavailable laser.
     pub const NOT_YET: &str = "On the fork now, native soon";
     /// Whether this build carries out the fork's call `call` (as the fork names it: `render.set-warp`).
