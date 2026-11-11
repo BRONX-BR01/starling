@@ -1,0 +1,18 @@
+[package]
+name = "journeymap"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "JourneyMap in Rust: full-screen map and waypoints (Stink API)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = { version = "0.60.0", default-features = false, features = ["macros", "realloc"] }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true

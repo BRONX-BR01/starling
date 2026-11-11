@@ -1,0 +1,8 @@
+id = "journeymap"
+name = "JourneyMap"
+version = "0.1.0"
+description = "Mapa em tela cheia (tecla M ou /jm) e waypoints, em Rust."
+authors = ["Igor"]
+api = "0.1"
+side = "client"
+capabilities = ["world", "ui", "input", "game-read", "storage", "chat"]
