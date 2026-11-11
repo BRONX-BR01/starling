@@ -6,6 +6,54 @@
 //! Horizon's own HUD extras do, and keep a mod's settings where the
 //! WebAssembly mod of the same id kept them.
 //!
+//! API 381 adds a world warp (`native_world_warp`): WGSL every terrain and entity vertex goes through, with an optional per-pixel stage for terrain.
+//!
+//! API 380 adds a held world (`native_world_hold`): the terrain kept drawn as it stands while the world changes under it, and every change shown on one frame when let go.
+//!
+//! API 379 adds block textures for client mods: `native_block_sprites` and `native_texture_sprites` say where blocks' and textures' sprites are in the block sprite arrays, and `WorldDrawn::block_sprites` hands a mod the arrays.
+//!
+//! API 378 adds `WorldDrawn::motion`: which mob, player or dropped item each run of the frame's entity quads is.
+//!
+//! API 377 adds tooltip box colours (`native_tooltip_color`).
+//!
+//! API 376 adds the screen_opening screen lifecycle observation (`native_screen_opening`) at most once per frame.
+//!
+//! API 375 adds the screen_init_post screen lifecycle observation (`native_screen_init_post`) at most once per frame.
+//!
+//! API 374 adds the screen_closing screen lifecycle observation (`native_screen_closing`) at most once per frame.
+//!
+//! API 373 adds a name tag hook (native_render_name_tag).
+//!
+//! API 372 adds a cancellable item frame item render hook (`native_render_item_in_frame`).
+//!
+//! API 371 adds an additive first-person hand and item pose (`native_render_hand_pose`).
+//!
+//! API 370 adds validated category declarations for custom recipe types (`native_recipe_book_categories`, `native_recipe_book_category`); display and unlock integration follows separately.
+//!
+//! API 369 adds Local player movement input before application (`native_movement_input`).
+//!
+//! API 368 adds The ammunition a bow or crossbow shooter finds (`native_living_get_projectile`).
+//!
+//! API 367 adds a mod item holding items (`native_item_container`), and the item container helpers in
+//! `native_item_container.rs`: `native_item_container_slots`, `native_item_container_insert`, `native_item_container_extract`.
+//!
+//! API 366 adds a mod's own ingredient kind matching a concrete stack
+//! (`native_ingredient_test`, which the ingredient's test calls with the kind,
+//! its JSON, the stack and the verdict — the load-time list already named
+//! the item).
+//!
+//! API 365 adds the render hook point `native_hand_drawn(hand)`: the first-person hand is drawn (`HandDrawn`).
+//!
+//! API 364 adds Explosion velocity replacement (`native_explosion_knockback`).
+//!
+//! API 363 adds entity and level handles (`EntityRef`, `LevelRef`, `native_entity`, `native_level`) and an entity's position, block position, rotation, type, UUID and level.
+//!
+//! API 362 adds a per-tick player FOV modifier hook (`native_compute_fov_modifier`).
+//!
+//! API 361 adds reading the world camera and block collision boxes (`native_camera`, `native_block_collision`).
+//!
+//! API 360 adds A player is about to nock a bow (`native_arrow_nock`).
+//!
 //! API 359 adds a living entity jumping (`native_living_jump`).
 //!
 //! API 358 adds a living entity healing, with a changeable amount and cancellation (`native_living_heal`).
@@ -1047,7 +1095,7 @@ pub(super) use horizon_world::level::flags;
 /// The hook points' API version. The launcher reads this line from the
 /// source it builds; keep its form.
 #[allow(dead_code)]
-pub(crate) const NATIVE_HOOKS_API: u32 = 359;
+pub(crate) const NATIVE_HOOKS_API: u32 = 381;
 
 impl GameLevel<'_> {
     /// A hopper at `pos` is about to pick up `count` of `item`. Set `cancel` to leave the dropped stack in the world. Server-side. 232.
@@ -2439,7 +2487,7 @@ impl Game<'_> {
         mod_api::dispatch_commands(self, mod_api::mods(), commands);
     }
     /// Player FOV scale, after vanilla effects and before zoom and easing.
-    /// Invalid values or values outside 0.01..=10 revert to base. API @API:compute_fov_modifier@.
+    /// Invalid values or values outside 0.01..=10 revert to base. API 362.
     pub(super) fn native_compute_fov_modifier(
         &self,
         player: &horizon_client::camera::FovPlayer,
@@ -2501,7 +2549,7 @@ impl Game<'_> {
     pub(super) fn native_camera_shake(&self, partial: f32, shake: &mut NativeShake) {
         mod_api::dispatch_camera_shake(self, mod_api::mods(), partial, shake);
     }
-    /// Name tag visibility and optional replacement text. API @API:render_name_tag@.
+    /// Name tag visibility and optional replacement text. API 373.
     pub(super) fn native_render_name_tag(
         &self,
         entity_id: u32,
@@ -2547,7 +2595,7 @@ impl Game<'_> {
 
     /// Additional first-person hand and item pose, including empty arms and maps.
     /// Add offsets in blocks and pitch, yaw and roll in degrees; multiply scale.
-    /// API @API:render_hand_pose@.
+    /// API 371.
     pub(super) fn native_render_hand_pose(
         &self,
         hand: horizon_client::first_person::Hand,
@@ -2667,7 +2715,7 @@ impl Game<'_> {
     /// radius)` for only the sections inside circles. Not asking lets go, and every change
     /// shows on that frame. Asked once a frame while a world is shown, before the frame's
     /// section uploads, by each player's game (splitscreen: each its own). Client only.
-    /// API @API:world_hold@.
+    /// API 380.
     pub(super) fn native_world_hold(&self, hold: &mut WorldHold) {
         mod_api::dispatch_world_hold(self, mod_api::mods(), hold);
     }
@@ -2871,7 +2919,7 @@ impl Game<'_> {
     /// `native_item_container_insert`, `native_item_container_extract`, in
     /// `native_item_container.rs`). The contents are kept in the stack's
     /// `minecraft:container`, as a shulker box item keeps them.
-    /// API @API:item_container@.
+    /// API 367.
     pub(super) fn native_item_container(&self, item: &str, slots: &mut Option<u32>) {
         mod_api::dispatch_item_container(self, mod_api::mods(), item, slots);
     }
@@ -5128,7 +5176,7 @@ impl Game<'_> {
     /// A player is about to nock `bow` with `hand` (`BowItem.use`, NeoForge's
     /// `ArrowNockEvent`): `has_ammo` is whether `getProjectile` found ammunition
     /// or the player is in creative. Set `cancel` to fail the use.
-    /// @API:arrow_nock@.
+    /// 360.
     pub(super) fn native_arrow_nock(
         &mut self,
         player: u128,
@@ -5155,7 +5203,7 @@ impl Game<'_> {
     /// mob (`entity`, `kind`): a skeleton or illusioner's shot, or the crossbow
     /// load of a pillager or piglin. `projectile` is the vanilla
     /// ammunition; replace it to choose another. A replaced stack is not taken
-    /// from the inventory. @API:living_get_projectile@.
+    /// from the inventory. 368.
     pub(super) fn native_living_get_projectile(
         &mut self,
         player: Option<u128>,
@@ -6267,7 +6315,7 @@ impl Game<'_> {
     /// what is added to the entity's velocity; a player's client is sent the
     /// same. Wind bursts too, except dragons and end crystals. End crystals
     /// are also omitted from ordinary blasts: Horizon removes them without a
-    /// velocity to change. Server-side. @API:explosion_knockback@.
+    /// velocity to change. Server-side. 364.
     pub(super) fn native_explosion_knockback(
         &mut self,
         dimension: &str,

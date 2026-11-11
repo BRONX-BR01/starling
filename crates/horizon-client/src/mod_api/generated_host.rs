@@ -1215,50 +1215,50 @@ pub trait Host {
     /// The entity `id` (the id events carry) as a handle for the `entity_*`
     /// methods: None on a client, with no world open, or for no such entity
     /// in the level in place or among the server's players. API
-    /// @API:entity_handles@.
+    /// 363.
     fn entity(&self, id: u32) -> Option<EntityRef> {
         let _ = id;
         unimplemented!("Host::entity")
     }
     /// The level `dimension` (`minecraft:the_nether`) as a handle: None on a
     /// client, with no world open, or for a dimension the server hasn't
-    /// loaded. API @API:entity_handles@.
+    /// loaded. API 363.
     fn level(&self, dimension: &str) -> Option<LevelRef> {
         let _ = dimension;
         unimplemented!("Host::level")
     }
     /// The entity's position (`Entity.position`): its feet, the middle of
-    /// its box for a painting or an item frame. API @API:entity_handles@.
+    /// its box for a painting or an item frame. API 363.
     fn entity_position(&self, entity: EntityRef) -> Option<[f64; 3]> {
         let _ = entity;
         unimplemented!("Host::entity_position")
     }
     /// The block the entity's position is in (`Entity.blockPosition`). API
-    /// @API:entity_handles@.
+    /// 363.
     fn entity_block_position(&self, entity: EntityRef) -> Option<[i32; 3]> {
         let _ = entity;
         unimplemented!("Host::entity_block_position")
     }
     /// The entity's yaw and pitch in degrees (`Entity.getYRot`, `getXRot`); 0
-    /// for the kinds that don't turn. API @API:entity_handles@.
+    /// for the kinds that don't turn. API 363.
     fn entity_rotation(&self, entity: EntityRef) -> Option<[f32; 2]> {
         let _ = entity;
         unimplemented!("Host::entity_rotation")
     }
     /// The entity's type (`Entity.getType`): `minecraft:zombie`. API
-    /// @API:entity_handles@.
+    /// 363.
     fn entity_kind(&self, entity: EntityRef) -> Option<String> {
         let _ = entity;
         unimplemented!("Host::entity_kind")
     }
     /// The entity's UUID (`Entity.getUUID`), the one it is saved with; an
     /// entity that has none yet gets it now, as a new vanilla entity does.
-    /// API @API:entity_handles@.
+    /// API 363.
     fn entity_uuid(&mut self, entity: EntityRef) -> Option<u128> {
         let _ = entity;
         unimplemented!("Host::entity_uuid")
     }
-    /// The level the entity is in (`Entity.level`). API @API:entity_handles@.
+    /// The level the entity is in (`Entity.level`). API 363.
     fn entity_level(&self, entity: EntityRef) -> Option<LevelRef> {
         let _ = entity;
         unimplemented!("Host::entity_level")
@@ -1308,19 +1308,19 @@ pub trait Host {
     /// layer, as `WorldDrawn::block_sprites` cuts them), where it lies on the side, how its texture runs across it,
     /// its tint source and whether it is cut out, translucent or animated; its particle sprite; whether it is a plain
     /// cube. None for a block the game does not know. The model is the state's first random variant. API
-    /// @API:native_block_sprites@.
+    /// 379.
     fn block_sprites(&self, blocks: &[&str]) -> Vec<Option<BlockSprites>> {
         let _ = blocks;
         unimplemented!("Host::block_sprites")
     }
     /// For a client mod: each texture's sprite by name (`minecraft:block/stone`, `block/stone`), none for one no
-    /// model uses. API @API:native_block_sprites@.
+    /// model uses. API 379.
     fn texture_sprites(&self, textures: &[&str]) -> Vec<Option<SpriteRef>> {
         let _ = textures;
         unimplemented!("Host::texture_sprites")
     }
     /// For a client mod: changes each time the resources load (a resource pack turned on or off can move every
-    /// sprite): ask `native_block_sprites` again then. API @API:native_block_sprites@.
+    /// sprite): ask `native_block_sprites` again then. API 379.
     fn block_sprites_version(&self) -> u64 {
         unimplemented!("Host::block_sprites_version")
     }
@@ -1334,32 +1334,32 @@ pub trait Host {
 }
 impl EntityRef {
     /// The entity's position (`Entity.position`): its feet, the middle of
-    /// its box for a painting or an item frame. API @API:entity_handles@.
+    /// its box for a painting or an item frame. API 363.
     pub fn position(self, host: &dyn Host) -> Option<[f64; 3]> {
         host.entity_position(self)
     }
     /// The block the entity's position is in (`Entity.blockPosition`). API
-    /// @API:entity_handles@.
+    /// 363.
     pub fn block_position(self, host: &dyn Host) -> Option<[i32; 3]> {
         host.entity_block_position(self)
     }
     /// The entity's yaw and pitch in degrees (`Entity.getYRot`, `getXRot`); 0
-    /// for the kinds that don't turn. API @API:entity_handles@.
+    /// for the kinds that don't turn. API 363.
     pub fn rotation(self, host: &dyn Host) -> Option<[f32; 2]> {
         host.entity_rotation(self)
     }
     /// The entity's type (`Entity.getType`): `minecraft:zombie`. API
-    /// @API:entity_handles@.
+    /// 363.
     pub fn kind(self, host: &dyn Host) -> Option<String> {
         host.entity_kind(self)
     }
     /// The entity's UUID (`Entity.getUUID`), the one it is saved with; an
     /// entity that has none yet gets it now, as a new vanilla entity does.
-    /// API @API:entity_handles@.
+    /// API 363.
     pub fn uuid(self, host: &mut dyn Host) -> Option<u128> {
         host.entity_uuid(self)
     }
-    /// The level the entity is in (`Entity.level`). API @API:entity_handles@.
+    /// The level the entity is in (`Entity.level`). API 363.
     pub fn level(self, host: &dyn Host) -> Option<LevelRef> {
         host.entity_level(self)
     }

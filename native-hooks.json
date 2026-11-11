@@ -451,6 +451,86 @@
     {
       "name": "instance_dir",
       "target": "horizon_client::game::native_hooks::Game<'_>::native_instance_dir"
+    },
+    {
+      "name": "camera",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_camera",
+      "mod_api": {}
+    },
+    {
+      "name": "block_collision",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_block_collision",
+      "mod_api": {}
+    },
+    {
+      "name": "entity",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity"
+    },
+    {
+      "name": "level",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_level"
+    },
+    {
+      "name": "entity_position",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_position",
+      "receiver": "entity"
+    },
+    {
+      "name": "entity_block_position",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_block_position",
+      "receiver": "entity"
+    },
+    {
+      "name": "entity_rotation",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_rotation",
+      "receiver": "entity"
+    },
+    {
+      "name": "entity_kind",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_kind",
+      "receiver": "entity"
+    },
+    {
+      "name": "entity_uuid",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_uuid",
+      "receiver": "entity"
+    },
+    {
+      "name": "entity_level",
+      "target": "horizon_client::game::native_entity_refs::Game<'_>::native_entity_level",
+      "receiver": "entity"
+    },
+    {
+      "name": "item_container_slots",
+      "target": "horizon_client::game::native_item_container::Game<'_>::native_item_container_slots",
+      "mod_api": {}
+    },
+    {
+      "name": "item_container_insert",
+      "target": "horizon_client::game::native_item_container::Game<'_>::native_item_container_insert",
+      "mod_api": {}
+    },
+    {
+      "name": "item_container_extract",
+      "target": "horizon_client::game::native_item_container::Game<'_>::native_item_container_extract",
+      "mod_api": {}
+    },
+    {
+      "name": "block_sprites",
+      "target": "horizon_client::game::native_block_sprites::Game<'_>::native_block_sprites"
+    },
+    {
+      "name": "texture_sprites",
+      "target": "horizon_client::game::native_block_sprites::Game<'_>::native_texture_sprites"
+    },
+    {
+      "name": "block_sprites_version",
+      "target": "horizon_client::game::native_block_sprites::Game<'_>::native_block_sprites_version"
+    },
+    {
+      "name": "recipe_book_category",
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_recipe_book_category",
+      "mod_api": {}
     }
   ],
   "hooks": [
@@ -4294,6 +4374,175 @@
       "target": "horizon_client_lib::motion::native_living_jump",
       "neoforge": "LivingEvent.LivingJumpEvent",
       "side": "both",
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "arrow_nock",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_arrow_nock",
+      "neoforge": "net.neoforged.neoforge.event.entity.player.ArrowNockEvent (NeoForge.EVENT_BUS, ICancellableEvent)",
+      "side": "both",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "cancel",
+        "out": "cancel"
+      }
+    },
+    {
+      "name": "compute_fov_modifier",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_compute_fov_modifier",
+      "neoforge": "ComputeFovModifierEvent",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "explosion_knockback",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_explosion_knockback",
+      "neoforge": "ExplosionKnockbackEvent",
+      "side": "server",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "collect",
+        "out": "knockback_velocity"
+      }
+    },
+    {
+      "name": "hand_drawn",
+      "version": 1,
+      "target": "horizon_client_render::gfx::native_render::native_hand_drawn",
+      "side": "client",
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "ingredient_test",
+      "version": 1,
+      "target": "horizon_client_lib::crafting::native_ingredient_test",
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "item_container",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_item_container",
+      "neoforge": "Capabilities.Item.ITEM",
+      "mod_api": {
+        "contract": "replace",
+        "out": "slots"
+      }
+    },
+    {
+      "name": "living_get_projectile",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_living_get_projectile",
+      "neoforge": "net.neoforged.neoforge.event.entity.living.LivingGetProjectileEvent (NeoForge.EVENT_BUS, not cancellable)",
+      "side": "both",
+      "mod_api": {
+        "contract": "collect",
+        "out": "projectile"
+      }
+    },
+    {
+      "name": "movement_input",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_movement_input",
+      "neoforge": "MovementInputUpdateEvent",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "recipe_book_categories",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_recipe_book_categories",
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "render_hand_pose",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_render_hand_pose",
+      "neoforge": "RenderHandEvent (PoseStack) / RenderArmEvent",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "render_item_in_frame",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_render_item_in_frame",
+      "neoforge": "RenderItemInFrameEvent",
+      "side": "client",
+      "cancellable": true,
+      "mod_api": {
+        "contract": "cancel",
+        "out": "canceled"
+      }
+    },
+    {
+      "name": "render_name_tag",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_render_name_tag",
+      "neoforge": "RenderNameTagEvent",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "screen_closing",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_screen_closing",
+      "neoforge": "ScreenEvent.Closing",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "screen_init_post",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_screen_init_post",
+      "neoforge": "ScreenEvent.Init.Post",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "screen_opening",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_screen_opening",
+      "neoforge": "ScreenEvent.Opening",
+      "side": "client",
+      "cancellable": false,
+      "mod_api": {
+        "contract": "listen"
+      }
+    },
+    {
+      "name": "tooltip_color",
+      "version": 1,
+      "target": "horizon_client::game::native_hooks::Game<'_>::native_tooltip_color",
+      "neoforge": "RenderTooltipEvent.Color",
+      "side": "client",
       "mod_api": {
         "contract": "listen"
       }
