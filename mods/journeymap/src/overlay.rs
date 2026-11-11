@@ -2,6 +2,8 @@
 use crate::horizon::mods::{game, hud, render};
 
 const PERIOD: u64 = 10;
+/// Blank lines that keep the text below the minimap (same corner).
+const PAD_LINES: usize = 11;
 const WHITE: u32 = 0xFF_FFFF;
 /// Brasilia time; change it if the device is somewhere else.
 const UTC_OFFSET_HOURS: i64 = -3;
@@ -62,7 +64,9 @@ pub fn update(tick: u64) {
     if tick % PERIOD != 0 {
         return;
     }
-    let mut lines = Vec::new();
+    let mut lines: Vec<hud::Line> = (0..PAD_LINES)
+        .map(|_| hud::Line { text: " ".to_string(), color: WHITE })
+        .collect();
     lines.push(hud::Line {
         text: real_time_text(game::wall_clock(), UTC_OFFSET_HOURS),
         color: WHITE,
