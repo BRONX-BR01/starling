@@ -187,7 +187,16 @@ impl Game<'_> {
     pub(super) fn mod_minimap(&self) -> Option<ModMinimap> {
         use horizon_client::extras::Corner;
         use horizon_mods::RenderCorner;
-        let m = self.mods.mods.minimap()?;
+        let Some(m) = self.mods.mods.minimap() else {
+            let (c, size, bpp, rotate, round) = self.stink_minimap()?;
+            let corner = match c {
+                0 => Corner::TopLeft,
+                1 => Corner::TopRight,
+                2 => Corner::BottomLeft,
+                _ => Corner::BottomRight,
+            };
+            return Some(ModMinimap { corner, size, blocks_per_pixel: bpp, rotate, round });
+        };
         Some(ModMinimap {
             corner: match m.corner {
                 RenderCorner::TopLeft => Corner::TopLeft,

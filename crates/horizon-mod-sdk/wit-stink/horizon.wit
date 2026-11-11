@@ -288,6 +288,7 @@ interface atlas {
 /// the world (under the hand and the HUD), before a shader pack's own
 /// post-processing, if any.
 interface render {
+    use hud.{corner};
     /// The pass: a WGSL fragment shader with an `fs_main` entry, after the
     /// mod pass prelude (docs/mods.md, "A mod's post pass": the world's
     /// colour and depth, a `Frame` uniform and helpers). Compiled once per
@@ -343,6 +344,16 @@ interface render {
     /// number: 1). So a pass that darkens or lights the world can take the hand with it. Kept until changed, and back to
     /// 1, 1, 1 when the mod stops and when the player leaves the world.
     set-hand-tint: func(r: f32, g: f32, b: f32);
+
+    /// A minimap the engine draws in a corner of the screen from the world around the player; none removes it. size is its side in GUI pixels (16 to 256), blocks-per-pixel 0.5 to 4.
+    record minimap {
+        corner: corner,
+        size: f32,
+        blocks-per-pixel: f32,
+        rotate: bool,
+        round: bool,
+    }
+    set-minimap: func(minimap: option<minimap>);
     /// Shakes the camera: a jolt of `strength` (0 to 1, 1 the hardest) that
     /// fades out over `seconds` (at most 30). Jolts add up. The game turns
     /// the view (not the player) with smooth noise, scaled by the player's

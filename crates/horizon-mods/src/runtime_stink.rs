@@ -301,6 +301,7 @@ struct State {
     world_hold_within: Vec<(f64, f64, f64)>,
     /// `render.set-hand-tint` (1, 1, 1: none).
     hand_tint: [f32; 3],
+    minimap: Option<(u8, f32, f32, bool, bool)>,
     /// Capability `world`: answers to its `surface-height` queries, for its next `poll-surface-heights`.
     surface: Vec<SurfaceHeights>,
     /// Capability `world`: answers to its `read-columns` queries, for its next `poll-columns`.
@@ -486,6 +487,7 @@ impl StinkMods {
             world_hold: false,
             world_hold_within: Vec::new(),
             hand_tint: [1.0; 3],
+            minimap: None,
             surface: Vec::new(),
             columns: Vec::new(),
             flying_speed: None,
@@ -783,6 +785,10 @@ impl StinkMods {
             }
             queue.push(answer);
         }
+    }
+    /// The minimap the first running mod shows (render.set-minimap): corner (0 top-left to 3 bottom-right), side in GUI pixels, blocks per pixel, rotate, round.
+    pub fn minimap(&self) -> Option<(u8, f32, f32, bool, bool)> {
+        self.entries.iter().find_map(|e| e.run.as_ref()?.store.data().minimap)
     }
     /// The first running mod's world warp, while it has it on (with parameters: the post pass's).
     pub fn warp(&self) -> Option<Warp> {
@@ -1203,6 +1209,18 @@ impl render::Host for State {
     }
     fn hold_world_within(&mut self, areas: Vec<(f64, f64, f64)>) {
         self.world_hold_within = areas;
+    }
+    fn set_minimap(&mut self, minimap: Option<render::Minimap>) {
+        let fin = |v: f32, lo: f32, hi: f32| if v.is_finite() { v.clamp(lo, hi) } else { lo };
+        self.minimap = minimap.map(|m| {
+            let corner = match m.corner {
+                Corner::TopLeft => 0,
+                Corner::TopRight => 1,
+                Corner::BottomLeft => 2,
+                Corner::BottomRight => 3,
+            };
+            (corner, fin(m.size, 16.0, 256.0), fin(m.blocks_per_pixel, 0.5, 4.0), m.rotate, m.round)
+        });
     }
     fn set_hand_tint(&mut self, r: f32, g: f32, b: f32) {
         self.hand_tint = [r, g, b].map(|c| if c.is_finite() { c.clamp(0.0, MAX_HAND_TINT) } else { 1.0 });

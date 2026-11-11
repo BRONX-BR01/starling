@@ -287,6 +287,10 @@ impl Game<'_> {
     pub(super) fn mod_world_hold(&self) -> bool {
         self.stink_mods.mods.world_hold()
     }
+    /// A running mod's minimap (`render.set-minimap`): corner (0 top-left to 3 bottom-right), side, blocks per pixel, rotate, round.
+    pub(super) fn stink_minimap(&self) -> Option<(u8, f32, f32, bool, bool)> {
+        self.stink_mods.mods.minimap()
+    }
     /// The circles it keeps that hold to: none, all of the world.
     pub(super) fn mod_world_hold_within(&self) -> &[(f64, f64, f64)] {
         self.stink_mods.mods.world_hold_within()
