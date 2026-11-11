@@ -16,6 +16,10 @@ pub trait RenderHooks: Send + Sync {
     fn hand_drawn(&self, event: &mut HandDrawnEvent<'_, '_>) {
         let _ = event;
     }
+    /// Asked every frame for the world's warp (see [`WorldWarp`]).
+    fn world_warp(&self, event: &mut WorldWarpEvent<'_>) {
+        let _ = event;
+    }
 }
 /// What [`RenderHooks::world_drawn`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
 #[non_exhaustive]
@@ -48,5 +52,16 @@ pub fn dispatch_hand_drawn(mods: &[&dyn RenderHooks], hand: &mut HandDrawn<'_>) 
     let mut event = HandDrawnEvent { hand };
     for mod_hook in mods {
         mod_hook.hand_drawn(&mut event);
+    }
+}
+/// What [`RenderHooks::world_warp`] is told. Fields may be added: the struct is `#[non_exhaustive]`.
+#[non_exhaustive]
+pub struct WorldWarpEvent<'a> {
+    pub warp: &'a mut WorldWarp,
+}
+pub fn dispatch_world_warp(mods: &[&dyn RenderHooks], warp: &mut WorldWarp) {
+    let mut event = WorldWarpEvent { warp };
+    for mod_hook in mods {
+        mod_hook.world_warp(&mut event);
     }
 }

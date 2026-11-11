@@ -243,6 +243,7 @@ pub(crate) mod upload;
 mod view;
 mod wgsl_prefix;
 mod world_post;
+mod world_warp;
 
 /// A section's instance: its camera-relative origin and, in `w`, the step of
 /// its fixed-point UVs (`terrain.wgsl`'s `terrain_uv`).
@@ -939,6 +940,8 @@ pub struct Renderer {
     solid_paths: Option<solid_paths::SolidPaths>,
     translucent: wgpu::RenderPipeline,
     translucent_mark: wgpu::RenderPipeline,
+    /// A native mod's world warp (`world_warp`): nothing made until a mod gives one.
+    world_warps: world_warp::WorldWarps,
     /// Flat section draws (`flat`), where multi-draw is emulated.
     flat: Option<flat::Flat>,
     /// `flat` draws this frame's sections (off: the per-section draws).
@@ -4025,6 +4028,16 @@ impl Renderer {
             .get_downlevel_capabilities()
             .flags
             .contains(wgpu::DownlevelFlags::BASE_VERTEX);
+        // A native mod's world warp builds its pipelines with these layouts once it is given one.
+        let world_warps = world_warp::WorldWarps::new(world_warp::Kit {
+            terrain: bindings.clone(),
+            pages: None,
+            entity: entity_bindings.clone(),
+            static_entity: static_entity_bindings.clone(),
+            gl,
+            format: config.format.remove_srgb_suffix(),
+            sprite_constants,
+        });
         let multi_draw = device
             .features()
             .contains(wgpu::Features::INDIRECT_FIRST_INSTANCE)
@@ -4190,6 +4203,7 @@ impl Renderer {
             solid_paths,
             translucent,
             translucent_mark,
+            world_warps,
             flat_on: flat.is_some(),
             cull_on,
             sides_on: true,
@@ -6883,10 +6897,37 @@ impl Renderer {
             0,
             bytemuck::bytes_of(&crosshair_globals),
         );
+        let pack_terrain = !frame.title
+            && self
+                .pack_post
+                .as_ref()
+                .and_then(|p| p.1.as_ref())
+                .is_some_and(|p| p.has_terrain());
+        // A native mod's world warp (`world_warp`), asked once a frame. While it draws, nothing is
+        // left out by where it was (the frustum, the caves, occlusion, faces turned away): the warp
+        // may bring it into view. Its frames keep to the per-section draws its pipelines are built
+        // for. A shader pack that draws the terrain itself (`pack_terrain`) isn't warped.
+        let warp_on = !frame.title && {
+            let warp = native_render::world_warp();
+            self.world_warps.frame(
+                &self.device,
+                &mut self.uploads,
+                &mut encoder,
+                &warp,
+                frame.camera,
+                // (the frame's partial tick: `weather::Time::new`'s third value)
+                frame.weather_time.values[2],
+                !pack_terrain,
+            )
+        };
         // Frustum culling and camera-relative origins.
         let cull_proj = views.cull().view_proj(pose);
         let view = Frustum {
-            planes: frustum(cull_proj),
+            planes: if warp_on {
+                [Vec4::W; 6]
+            } else {
+                frustum(cull_proj)
+            },
         };
         let camera = frame.camera;
         let camera_section = camera_section(camera, self.layout.min_y());
@@ -6894,7 +6935,7 @@ impl Renderer {
         // (above the screen's top, the far shore, the trees against the sky).
         let mirror_plane = frame
             .water_plane
-            .filter(|_| !frame.title && self.wants_water_plane());
+            .filter(|_| !frame.title && !warp_on && self.wants_water_plane());
         let mirror = mirror_plane.map(|plane| Frustum {
             planes: frustum(mirror_view_projection(
                 cull_proj,
@@ -6904,11 +6945,11 @@ impl Renderer {
         // Solid quads facing away from the eye are left out: the bob moves
         // the eye off `camera`, so it is found from the projection. With the mirror, those
         // facing its eye are kept too: it sits straight below, at this camera-relative y.
-        let eye = projection_center(cull_proj).filter(|_| self.sides_on);
+        let eye = projection_center(cull_proj).filter(|_| self.sides_on && !warp_on);
         let mirror_low = mirror_plane
             .zip(eye)
             .map(|(plane, eye)| 2.0 * (plane - frame.camera.y as f32) - eye.y);
-        let culling = !frame.title && frame.cave_culling;
+        let culling = !frame.title && frame.cave_culling && !warp_on;
         if culling {
             crate::spans::time("occlusion", || {
                 self.start_occlusion(camera, frame.detail_distance)
@@ -7131,6 +7172,7 @@ impl Renderer {
                     && self.multi_draw
                     // Occlusion is found from the camera, not the mirror's eye.
                     && mirror.is_none()
+                    && !warp_on
                     && visible.len() >= c.min_sections
             })
             .and_then(|cull| cull.begin(&self.device).then_some(cull));
@@ -7141,7 +7183,7 @@ impl Renderer {
         // On Metal and phones, phase 1 goes the opaque quads of every list, then the
         // cutout ones (`Part`), each solid pass drawing its own: `[..opaque_draws]`,
         // then the rest. A fading list's quads all draw in the cutout pass.
-        let split_solid = splits_solid(&self.info);
+        let split_solid = splits_solid(&self.info) && !warp_on;
         let parts = |fading: bool| -> &'static [(u8, Quads)] {
             match (split_solid, fading) {
                 (false, _) => &[(0, Quads::All)],
@@ -7540,6 +7582,7 @@ impl Renderer {
         }
         let oit_on = self.improved_transparency
             && !frame.title
+            && !warp_on
             && self.pack_post.as_ref().is_none_or(|p| p.1.is_none())
             && self.native.is_none()
             && oit::supported(&self.device);
@@ -7908,6 +7951,7 @@ impl Renderer {
         let flat_frame = match &mut self.flat {
             Some(flat)
                 if self.flat_on
+                    && !warp_on
                     && !self.draws.is_empty()
                     && (((flat_by_count || flat.min_sections == 0)
                         && self.drawn_sections >= flat.min_sections)
@@ -8411,10 +8455,16 @@ impl Renderer {
         let material = self
             .native
             .as_ref()
-            .filter(|_| !frame.title)
+            .filter(|_| !frame.title && !warp_on)
             .and_then(|n| Some((n.material.as_ref()?, &n.frame.group)));
-        let solid_pipeline = material.map_or(&self.solid, |(m, _)| &m.solid);
-        let split_solid = splits_solid(&self.info);
+        // A world warp's pipelines in place of the terrain's and the entities' (`warp_on`).
+        let warped = self.world_warps.pipelines().filter(|_| warp_on);
+        let warp_group = self.world_warps.group().filter(|_| warp_on);
+        let solid_pipeline = match warped {
+            Some(w) => &w.solid,
+            None => material.map_or(&self.solid, |(m, _)| &m.solid),
+        };
+        let split_solid = splits_solid(&self.info) && !warp_on;
         // What this frame's instances allow its two solid passes (`solid_paths`).
         let solid_passes = self
             .solid_paths
@@ -8424,7 +8474,10 @@ impl Renderer {
             .map_or_else(Default::default, |paths| {
                 paths.for_frame(&self.origins, self.texture_filtering)
             });
-        let translucent_pipeline = material.map_or(&self.translucent, |(m, _)| &m.translucent);
+        let translucent_pipeline = match warped {
+            Some(w) => &w.translucent,
+            None => material.map_or(&self.translucent, |(m, _)| &m.translucent),
+        };
         let pack_flat = material.and_then(|(m, _)| m.flat.as_ref());
         // A material stage's translucent pass reads a copy of the depth the solid terrain
         // left: it is stored across the pass that ends before the copy.
@@ -8442,6 +8495,7 @@ impl Renderer {
             .filter(|n| {
                 !frame.title
                     && !pack_draws_terrain
+                    && !warp_on
                     && n.material.as_ref().is_some_and(|m| m.writes_surface)
             })
             .map(|n| n.frame.surface_view.clone());
@@ -8662,6 +8716,9 @@ impl Renderer {
                     };
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.set_vertex_buffer(1, self.instances.slice(..));
+                    if let Some(group) = warp_group {
+                        pass.set_bind_group(2, group, &[]);
+                    }
                     match cull {
                         Some(cull) => {
                             // Phase 1 and the boxes against its depth (in
@@ -8760,8 +8817,14 @@ impl Renderer {
                     pass.draw(0..3, 0..1);
                 }
             }
+            // A world warp's entity pipelines read its group 2.
+            if let Some(group) = warp_group {
+                pass.set_bind_group(2, group, &[]);
+            }
             if static_entity_quads > 0 {
-                pass.set_pipeline(&self.static_entity_pipeline);
+                pass.set_pipeline(
+                    warped.map_or(&self.static_entity_pipeline, |w| &w.static_entities),
+                );
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_bind_group(1, &self.static_entity_group, &[]);
                 pass.set_index_buffer(
@@ -8784,18 +8847,18 @@ impl Renderer {
             }
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
             if entity_quads > 0 {
-                pass.set_pipeline(&self.entity_pipeline);
+                pass.set_pipeline(warped.map_or(&self.entity_pipeline, |w| &w.entities));
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
                 pass.draw_indexed(0..entity_quads * 6, 0, 0..1);
                 if self.hdr.is_some() {
-                    pass.set_pipeline(&self.hdr_mark_pipeline);
+                    pass.set_pipeline(warped.map_or(&self.hdr_mark_pipeline, |w| &w.hdr_mark));
                     pass.draw_indexed(0..entity_quads * 6, 0, 0..1);
                 }
                 pass.set_bind_group(0, &self.group, &[]);
             }
             if text_quads > 0 && !oit_on {
-                pass.set_pipeline(&self.text_polygon_offset_pipeline);
+                pass.set_pipeline(warped.map_or(&self.text_polygon_offset_pipeline, |w| &w.text));
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
                 pass.draw_indexed(0..text_quads * 6, (entity_quads * 4) as i32, 0..1);
@@ -8804,7 +8867,7 @@ impl Renderer {
             // FeatureRenderDispatcher.PreparedFrame.executeTranslucent: the shadows
             // come before the translucent items, which then cover them (#7026).
             if shadow_quads > 0 && !oit_on {
-                pass.set_pipeline(&self.shadow_blob_pipeline);
+                pass.set_pipeline(warped.map_or(&self.shadow_blob_pipeline, |w| &w.entity_shadows));
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
                 pass.draw_indexed(
@@ -8819,7 +8882,9 @@ impl Renderer {
                 pass.set_bind_group(0, &self.group, &[]);
             }
             if translucent_item_quads > 0 && !oit_on {
-                pass.set_pipeline(&self.translucent_item_pipeline);
+                pass.set_pipeline(
+                    warped.map_or(&self.translucent_item_pipeline, |w| &w.translucent_items),
+                );
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
                 pass.draw_indexed(
@@ -8829,7 +8894,7 @@ impl Renderer {
                 );
                 if self.hdr.is_some() {
                     // A glowing item in the world (Item sheet quads), as entities are.
-                    pass.set_pipeline(&self.hdr_mark_pipeline);
+                    pass.set_pipeline(warped.map_or(&self.hdr_mark_pipeline, |w| &w.hdr_mark));
                     pass.draw_indexed(
                         0..translucent_item_quads * 6,
                         ((base_quads - translucent_item_quads) * 4) as i32,
@@ -9178,6 +9243,9 @@ impl Renderer {
                 }
                 None => {
                     pass.set_pipeline(translucent_pipeline);
+                    if let Some(group) = warp_group {
+                        pass.set_bind_group(2, group, &[]);
+                    }
                     pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.set_vertex_buffer(1, self.instances.slice(..));
                     self.draw_sections(
@@ -9187,7 +9255,15 @@ impl Renderer {
                         solid_draws,
                         translucent_draws,
                     );
-                    self.mark_translucent_terrain(&mut pass, None, solid_draws, translucent_draws);
+                    // (its HDR mark would fall where the water was before the warp moved it)
+                    if !warp_on {
+                        self.mark_translucent_terrain(
+                            &mut pass,
+                            None,
+                            solid_draws,
+                            translucent_draws,
+                        );
+                    }
                 }
             }
             // LevelRenderer.executeTranslucentAfterTerrain: vanilla's
@@ -9195,7 +9271,10 @@ impl Renderer {
             // the quads write depth, so before it they would hide the glass
             // or water behind them.
             if translucent_particle_quads > 0 && !oit_on {
-                pass.set_pipeline(&self.entity_pipeline);
+                pass.set_pipeline(warped.map_or(&self.entity_pipeline, |w| &w.entities));
+                if let Some(group) = warp_group {
+                    pass.set_bind_group(2, group, &[]);
+                }
                 pass.set_bind_group(0, &self.entity_group, &[]);
                 pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_vertex_buffer(0, self.entity_buffer.slice(..));
@@ -9206,7 +9285,7 @@ impl Renderer {
                 );
                 if self.hdr.is_some() {
                     // Fireworks: their sparks are translucent-layer particles.
-                    pass.set_pipeline(&self.hdr_mark_pipeline);
+                    pass.set_pipeline(warped.map_or(&self.hdr_mark_pipeline, |w| &w.hdr_mark));
                     pass.draw_indexed(
                         0..translucent_particle_quads * 6,
                         ((base_quads - translucent_item_quads - translucent_particle_quads) * 4)
@@ -10895,6 +10974,14 @@ mod tests {
             } else if name == "oit_clouds.wgsl" {
                 let base = super::entity_shader() + include_str!("oit.wgsl");
                 sources.push((path, base + &text));
+            } else if name == "world_warp_fragment.wgsl" {
+                // A world warp's copy of terrain.wgsl (gfx/world_warp.rs), with the plainest warp.
+                let warp = super::world_warp::IDENTITY;
+                sources.push((path, super::world_warp::terrain_shader(warp, false).unwrap()));
+            } else if name == "world_warp.wgsl" {
+                // And of entity.wgsl with static_entity.wgsl.
+                let warp = super::world_warp::IDENTITY;
+                sources.push((path, super::world_warp::entity_shader(warp).unwrap()));
             } else {
                 sources.push((path, text));
             }
