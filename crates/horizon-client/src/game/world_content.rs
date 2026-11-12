@@ -195,7 +195,7 @@ pub(super) fn entry(folder: &str) -> Entry {
     let kept = recorded(folder);
     decide(
         folder,
-        kept.clone().unwrap_or_else(enabled),
+        with_enabled(kept.clone()),
         &running(),
         installed().as_ref(),
         next_start(),
@@ -205,6 +205,21 @@ pub(super) fn entry(folder: &str) -> Entry {
             }
         },
     )
+}
+
+/// The set a world opens with: what it kept plus the mods Options > Mods turns on that are in
+/// the mods folder, so a mod turned on works in every world, not only in the ones made with it.
+fn with_enabled(kept: Option<BTreeSet<String>>) -> BTreeSet<String> {
+    let Some(mut set) = kept else {
+        return enabled();
+    };
+    let installed = installed();
+    set.extend(
+        enabled()
+            .into_iter()
+            .filter(|id| installed.as_ref().is_none_or(|i| i.contains(id))),
+    );
+    set
 }
 
 fn decide(
