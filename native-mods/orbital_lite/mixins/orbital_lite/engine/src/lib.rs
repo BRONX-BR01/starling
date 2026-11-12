@@ -38,7 +38,7 @@ use sdk::{chat, game, log, render, storage, world};
 use lasers::{LASERS, is_ship};
 use strike::{APPROACHES, ARRIVALS, Act, COLOUR_RGB, COLOURS, FIRE, Target};
 
-const DESIGNATOR: &str = "orbital-lite:laser_designator";
+const DESIGNATOR: &str = "orbital_lite:laser_designator";
 /// Ticks of holding the designator on a target before it fires.
 const LOCK_TICKS: u32 = 14;
 // Every post pass, built ahead of time from the shader files by build.rs (src/passbuild.rs): PASS_OWN (the other

@@ -1450,7 +1450,7 @@ fn hu_work(q: &mut Plan, w: Rc<RefCell<Work>>, now: f64) {
                         k = k % 4 + 1;
                     }
                     wk.crack_take = k;
-                    q.ev.push((t as f32, Act::Sound { event: format!("orbital-lite:hurricane.crack{k}"), at: Some(at), volume: 0.8, pitch: 0.9 + 0.2 * mh((t * 10.0) as u32, wk.seed, 0x5b) as f32 }));
+                    q.ev.push((t as f32, Act::Sound { event: format!("orbital_lite:hurricane.crack{k}"), at: Some(at), volume: 0.8, pitch: 0.9 + 0.2 * mh((t * 10.0) as u32, wk.seed, 0x5b) as f32 }));
                     wk.crack_last = t;
                 }
             }
@@ -1851,7 +1851,7 @@ pub(super) fn hurricane_plan(laser: &'static Laser, target: &Target, terrain: bo
             k = k % 4 + 1;
         }
         last = k;
-        p.ev.push((t as f32, Act::Sound { event: format!("orbital-lite:hurricane.debris{k}"), at: None, volume: (0.25 + 0.45 * spin(t)) as f32 * near, pitch: 0.92 + 0.16 * mh(n, s, 0x72) as f32 }));
+        p.ev.push((t as f32, Act::Sound { event: format!("orbital_lite:hurricane.debris{k}"), at: None, volume: (0.25 + 0.45 * spin(t)) as f32 * near, pitch: 0.92 + 0.16 * mh(n, s, 0x72) as f32 }));
         t += 2.6 + 2.2 * mh(n, s, 0x73);
         n += 1;
     }

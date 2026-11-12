@@ -22,7 +22,7 @@ fn sound(p: &mut Plan, t: f64, name: &str, volume: f64) {
     if volume <= 0.001 {
         return;
     }
-    p.ev.push((t.max(0.0) as f32, Act::Sound { event: format!("orbital-lite:tsunami.{name}"), at: None, volume: volume.min(1.0) as f32, pitch: 1.0 }));
+    p.ev.push((t.max(0.0) as f32, Act::Sound { event: format!("orbital_lite:tsunami.{name}"), at: None, volume: volume.min(1.0) as f32, pitch: 1.0 }));
 }
 
 pub(super) fn ts_sounds(p: &mut Plan, geo: &TsGeo, me: [f64; 3], s: u32, t_t: f64, tp: f64, immersed: bool) {
@@ -42,7 +42,7 @@ pub(super) fn ts_sounds(p: &mut Plan, geo: &TsGeo, me: [f64; 3], s: u32, t_t: f6
     sound(p, (tp - MID_LEN).max(1.0), "roar_mid", reach);
     // (the far roar is over well before the immersion of a near player, whose mix has no room for it; a far one gets it again)
     if tp - MID_LEN > FAR_IF {
-        p.ev.push((FAR_AGAIN as f32, Act::Sound { event: "orbital-lite:tsunami.roar_far".into(), at: None, volume: (0.6 * far_v) as f32, pitch: 0.94 }));
+        p.ev.push((FAR_AGAIN as f32, Act::Sound { event: "orbital_lite:tsunami.roar_far".into(), at: None, volume: (0.6 * far_v) as f32, pitch: 0.94 }));
     }
     sound(p, t_t + late - 0.06, "crash", share * (1.0 - far));
     sound(p, t_t + late - 0.06, "crash_far", share * far * (1.25 / (1.0 + dp / 2000.0)).min(1.0));
@@ -83,7 +83,7 @@ pub(super) fn ts_sounds(p: &mut Plan, geo: &TsGeo, me: [f64; 3], s: u32, t_t: f6
             k = k % nk + 1;
         }
         last[slot] = k;
-        p.ev.push((ta.max(0.0) as f32, Act::Sound { event: format!("orbital-lite:tsunami.{}{k}", if wood { "crack" } else { "slap" }), at: Some(at), volume: (0.8 + 0.2 * mh(n, s, 0x85)) as f32, pitch: 0.9 + 0.2 * mh(n, s, 0x86) as f32 }));
+        p.ev.push((ta.max(0.0) as f32, Act::Sound { event: format!("orbital_lite:tsunami.{}{k}", if wood { "crack" } else { "slap" }), at: Some(at), volume: (0.8 + 0.2 * mh(n, s, 0x85)) as f32, pitch: 0.9 + 0.2 * mh(n, s, 0x86) as f32 }));
         t += 0.4 + 0.5 * mh(n, s, 0x87);
         n += 1;
     }
@@ -91,6 +91,6 @@ pub(super) fn ts_sounds(p: &mut Plan, geo: &TsGeo, me: [f64; 3], s: u32, t_t: f6
     for i in 0..4u32 {
         let at = [me[0] + (mh(i, s, 0x91) - 0.5) * 80.0, me[1], me[2] + (mh(i, s, 0x92) - 0.5) * 80.0];
         let k = 1 + (mh(i, s, 0x93) * 3.0) as u32 % 3;
-        p.ev.push(((tp + 8.8 + 1.6 * f64::from(i)) as f32, Act::Sound { event: format!("orbital-lite:tsunami.slap{k}"), at: Some(at), volume: 0.55, pitch: 0.95 + 0.1 * mh(i, s, 0x94) as f32 }));
+        p.ev.push(((tp + 8.8 + 1.6 * f64::from(i)) as f32, Act::Sound { event: format!("orbital_lite:tsunami.slap{k}"), at: Some(at), volume: 0.55, pitch: 0.95 + 0.1 * mh(i, s, 0x94) as f32 }));
     }
 }

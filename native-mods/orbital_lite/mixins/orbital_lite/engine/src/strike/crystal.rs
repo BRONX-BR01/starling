@@ -647,7 +647,7 @@ pub(super) fn crystalbloom_plan(laser: &'static Laser, target: &Target, terrain:
         let w = falloff(d).max(0.3);
         let take = 1 + i % 3;
         let pitch = if i == 5 { 0.82 } else { p.rng.uniform(0.94, 1.08) };
-        p.at(t - CB_BULGE + lag, format!("playsound orbital-lite:crystalbloom.punch{take} block @a {x:.1} {ty} {z:.1} 4 {pitch:.2} 0.95"));
+        p.at(t - CB_BULGE + lag, format!("playsound orbital_lite:crystalbloom.punch{take} block @a {x:.1} {ty} {z:.1} 4 {pitch:.2} 0.95"));
         p.shake(t - CB_BULGE + lag, 0.06 * w, CB_BULGE + 0.2);
         p.shake(t + lag, 0.35 * w, 0.5);
         p.shake(t + 0.34 + lag, 0.18 * w, 0.35);

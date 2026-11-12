@@ -403,7 +403,7 @@ mod tests {
     fn without_terrain_the_fold_is_light_and_sound() {
         let ev = plan(the_laser(), &target(), false, "minecraft:overworld", 37.0, [0.5, 66.0, 300.5], 0);
         assert!(ev.iter().all(|e| matches!(e.1, Act::Sound { .. } | Act::Shake { .. } | Act::Shove { .. })), "only sounds, jolts and the eruption's push");
-        assert!(ev.iter().any(|e| matches!(&e.1, Act::Sound { event, .. } if event == "orbital-lite:fold.slam")));
+        assert!(ev.iter().any(|e| matches!(&e.1, Act::Sound { event, .. } if event == "orbital_lite:fold.slam")));
     }
 
     /// Every sound the plan plays is an event with a file (tools/sounds_fold.py), each ring's starting its fall before its bang.
@@ -411,10 +411,10 @@ mod tests {
     fn the_sounds_are_there_and_on_their_beats() {
         let events = include_str!("../../../orbital-sounds/assets/orbital/sounds.json");
         let ev = plan(the_laser(), &target(), false, "minecraft:overworld", 37.0, [0.5, 66.0, 300.5], 0);
-        let when = |name: &str| ev.iter().find(|e| matches!(&e.1, Act::Sound { event, .. } if event == &format!("orbital-lite:fold.{name}"))).map(|e| e.0);
+        let when = |name: &str| ev.iter().find(|e| matches!(&e.1, Act::Sound { event, .. } if event == &format!("orbital_lite:fold.{name}"))).map(|e| e.0);
         for e in &ev {
             if let Act::Sound { event, .. } = &e.1 {
-                let name = event.strip_prefix("orbital-lite:").expect("the mod's");
+                let name = event.strip_prefix("orbital_lite:").expect("the mod's");
                 assert!(events.contains(&format!("\"{name}\"")), "{name} isn't in sounds.json");
             }
         }
@@ -431,7 +431,7 @@ mod tests {
         assert_eq!(when("comedown"), Some(FD_SLAM[4] + 4.6));
         assert!(when("underfoot").is_none(), "a player on the rim has no panel under them");
         let ev = plan(the_laser(), &target(), false, "minecraft:overworld", 37.0, [0.5, 66.0, 170.5], 0);
-        let t = ev.iter().find(|e| matches!(&e.1, Act::Sound { event, .. } if event == "orbital-lite:fold.underfoot")).map(|e| e.0).expect("a player inside the crater");
+        let t = ev.iter().find(|e| matches!(&e.1, Act::Sound { event, .. } if event == "orbital_lite:fold.underfoot")).map(|e| e.0).expect("a player inside the crater");
         assert!(t > FD_SLAM[4] + 1.5 && t < FD_SLAM[4] + 2.0, "underfoot at {t}");
     }
 

@@ -728,7 +728,7 @@ fn cp_load_boxes(blasts: &[Blast]) -> Vec<[i32; 4]> {
 /// A sound of another laser's (`payload.blast_alt`), following the player, `volume` 0 to 1.
 fn cue(p: &mut Plan, t: f32, event: &str, volume: f64, pitch: f64) {
     if volume > 0.001 {
-        p.ev.push((t.max(0.0), Act::Sound { event: format!("orbital-lite:{event}"), at: None, volume: volume.clamp(0.0, 1.0) as f32, pitch: pitch as f32 }));
+        p.ev.push((t.max(0.0), Act::Sound { event: format!("orbital_lite:{event}"), at: None, volume: volume.clamp(0.0, 1.0) as f32, pitch: pitch as f32 }));
     }
 }
 
@@ -1244,7 +1244,7 @@ mod tests {
             let g = CpGeo::new(37.0, rel);
             let c = cues(me);
             for (t, e, v, pitch) in &c {
-                let k = e.strip_prefix("orbital-lite:").unwrap();
+                let k = e.strip_prefix("orbital_lite:").unwrap();
                 assert!(approved.contains(&k), "{k} isn't an approved sound");
                 assert!(events.contains(&format!("\"{k}\"")), "{k} not in sounds.json");
                 assert!(*t >= 0.0 && *v > 0.0 && *v <= 1.0 && (0.78..=1.1).contains(pitch), "{k} at {t}: {v} {pitch}");
@@ -1280,7 +1280,7 @@ mod tests {
 
     /// A sound file's length in seconds, from its last Ogg page's granule position (44.1 kHz).
     fn len_of(event: &str) -> f32 {
-        let file = event.strip_prefix("orbital-lite:").unwrap_or(event).replacen('.', "/", 1);
+        let file = event.strip_prefix("orbital_lite:").unwrap_or(event).replacen('.', "/", 1);
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../orbital-sounds/assets/orbital/sounds/{file}.ogg"));
         let b = std::fs::read(&path).unwrap_or_else(|_| panic!("{event} has no file"));
         let i = (0..b.len() - 14).rev().find(|&i| &b[i..i + 4] == b"OggS").expect("an Ogg page");

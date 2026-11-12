@@ -2,7 +2,7 @@
 // draw_mod_panels) for one native mod, driving its SDK (`orbital_lite_laser::horizon_sdk::__host`) through Horizon's
 // hooks and helpers, as upstream's mods are made: a client half on the window, which runs the mod, and a server half,
 // which does the mod's world work (commands, block edits, height and column reads, the flying speed) in the level
-// being ticked, the two talking over mod messages (`orbital-lite:work`, `orbital-lite:answer`).
+// being ticked, the two talking over mod messages (`orbital_lite:work`, `orbital_lite:answer`).
 use super::Game;
 use super::native_hooks::{NativeScreenView, NativeShake};
 use super::native_claimed_items::{NativeHeldItem, NativeHit, NativeModEvent};
@@ -23,8 +23,8 @@ const NAME: &str = "Orbital Laser";
 const VERSION: &str = "0.5.14";
 /// The operator level of the console, which the server half runs a client's world work at (`native_run_command`).
 const CONSOLE_LEVEL: u8 = 4;
-const WORK: &str = "orbital-lite:work";
-const ANSWER: &str = "orbital-lite:answer";
+const WORK: &str = "orbital_lite:work";
+const ANSWER: &str = "orbital_lite:answer";
 /// A message's bytes at most (the channel's 30 000, less room for its header).
 const MESSAGE: usize = 28_000;
 /// Columns a read or a height query asks in one message (8 bytes each); the answers are split by their own size.

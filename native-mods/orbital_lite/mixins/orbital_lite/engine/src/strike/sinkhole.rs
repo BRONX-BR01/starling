@@ -417,7 +417,7 @@ pub(super) fn sinkhole_plan(laser: &'static Laser, target: &Target, terrain: boo
     }
     for (t, name, a, r, pitch) in sounds {
         let (x, z) = (cx + a.cos() * r, cz + a.sin() * r);
-        p.at(t + late(x, gy, z), format!("playsound orbital-lite:sinkhole.{name} block @a {x:.1} {gy} {z:.1} 4 {pitch:.2} 0.9"));
+        p.at(t + late(x, gy, z), format!("playsound orbital_lite:sinkhole.{name} block @a {x:.1} {gy} {z:.1} 4 {pitch:.2} 0.9"));
     }
     // (each spurt of the cracks puffing dust up out of them where it ran, and loose bits crumbling in)
     for (i, &(t, r)) in spurts.iter().enumerate() {
@@ -427,9 +427,9 @@ pub(super) fn sinkhole_plan(laser: &'static Laser, target: &Target, terrain: boo
     }
 
     // ---- the first give: a crack, the middle drops, dust puffs up; then it sags further ----------------------------
-    p.at(SH_GIVE + lt - 0.02, format!("playsound orbital-lite:sinkhole.give block @a {cx:.1} {gy} {cz:.1} 6 1.0 1.0"));
+    p.at(SH_GIVE + lt - 0.02, format!("playsound orbital_lite:sinkhole.give block @a {cx:.1} {gy} {cz:.1} 6 1.0 1.0"));
     p.shake(SH_GIVE + lt, 0.42 * fo, 1.2);
-    p.at(SH_SAG + lt, format!("playsound orbital-lite:sinkhole.crack2 block @a {cx:.1} {gy} {cz:.1} 6 0.8 1.0"));
+    p.at(SH_SAG + lt, format!("playsound orbital_lite:sinkhole.crack2 block @a {cx:.1} {gy} {cz:.1} 6 0.8 1.0"));
     p.shake(SH_SAG + lt, 0.3 * fo, 1.0);
     for (t, n) in [(SH_GIVE, 260), (SH_SAG, 180)] {
         p.at(t + 0.05, format!(r#"particle minecraft:block{{block_state:"minecraft:dirt"}} {cx:.1} {:.1} {cz:.1} 9 1 9 0.3 {n} force"#, gy - 3.0));
@@ -600,7 +600,7 @@ fn sh_slab_fx(p: &mut Plan, g: &ShGeo, land: &Shared, k: usize, me: [f64; 3]) {
         let name = ["crack1", "crack2", "crack3"][k % 3];
         let pitch = 0.7 + 0.35 * mh(k as u32, g.seed, 0x7a1);
         let (late, _) = sound_from([x, gy, z], me);
-        p.at(s.t + late, format!("playsound orbital-lite:sinkhole.{name} block @a {x:.1} {gy} {z:.1} 5 {pitch:.2} 0.6"));
+        p.at(s.t + late, format!("playsound orbital_lite:sinkhole.{name} block @a {x:.1} {gy} {z:.1} 5 {pitch:.2} 0.6"));
     }
     if k % 2 == 0 {
         p.at(s.t + 0.25, format!(r#"particle minecraft:block{{block_state:"minecraft:dirt"}} {x:.1} {:.1} {z:.1} 5 1 5 0.25 40 force"#, gy - 1.0));

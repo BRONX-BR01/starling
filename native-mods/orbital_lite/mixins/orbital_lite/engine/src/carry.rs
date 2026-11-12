@@ -178,8 +178,8 @@ impl Carry {
             self.freed_at = Some(t);
             self.grounded = 0;
             self.last = Some(feet);
-            out.sounds.push(("orbital-lite:hurricane.whoosh2".into(), 0.9, 0.75));
-            out.sounds.push(("orbital-lite:hurricane.whoosh4".into(), 0.7, 1.1));
+            out.sounds.push(("orbital_lite:hurricane.whoosh2".into(), 0.9, 0.75));
+            out.sounds.push(("orbital_lite:hurricane.whoosh4".into(), 0.7, 1.1));
             return out;
         }
         self.last = Some(feet);
@@ -191,8 +191,8 @@ impl Carry {
             self.thrown = Some((t, v));
             out.throw = Some([v[0] as f32, v[1] as f32, v[2] as f32]);
             out.cmds.push("effect give @s[gamemode=!creative,gamemode=!spectator] minecraft:resistance 12 4 true".into());
-            out.sounds.push(("orbital-lite:hurricane.whoosh1".into(), 1.0, 0.7));
-            out.sounds.push(("orbital-lite:hurricane.whoosh3".into(), 0.8, 0.95));
+            out.sounds.push(("orbital_lite:hurricane.whoosh1".into(), 1.0, 0.7));
+            out.sounds.push(("orbital_lite:hurricane.whoosh3".into(), 0.8, 0.95));
             return out;
         }
         // (turned on round the middle with the wind where they are, a little behind it, eased in as they are picked up)
@@ -229,7 +229,7 @@ impl Carry {
         if t >= self.next_whoosh && t < HU_FLING + THROW {
             self.n += 1;
             let h = |k: u32| crate::strike::hash01(self.n.wrapping_mul(7) ^ k);
-            out.sounds.push((format!("orbital-lite:hurricane.whoosh{}", 1 + (h(1) * 4.0) as u32 % 4), 0.35 + 0.2 * h(2) as f32, 0.88 + 0.24 * h(3) as f32));
+            out.sounds.push((format!("orbital_lite:hurricane.whoosh{}", 1 + (h(1) * 4.0) as u32 % 4), 0.35 + 0.2 * h(2) as f32, 0.88 + 0.24 * h(3) as f32));
             self.next_whoosh = t + 1.1 + 1.2 * h(4);
         }
         out

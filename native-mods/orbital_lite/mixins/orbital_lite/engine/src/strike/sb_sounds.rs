@@ -50,8 +50,8 @@ const GROUND_V: f64 = 1715.0;
 /// `name` a file of the Sky Breaks', or `@laser.name` another laser's (the slam's, the Payload's).
 fn event(name: &str) -> String {
     match name.strip_prefix('@') {
-        Some(other) => format!("orbital-lite:{other}"),
-        None => format!("orbital-lite:skybreak.{name}"),
+        Some(other) => format!("orbital_lite:{other}"),
+        None => format!("orbital_lite:skybreak.{name}"),
     }
 }
 
@@ -131,9 +131,9 @@ mod tests {
             .map(|(t, a)| match a {
                 Act::Sound { event, volume, pitch, at } => {
                     assert!(at.is_none() && pitch == 1.0, "{event}");
-                    let name = match event.strip_prefix("orbital-lite:skybreak.") {
+                    let name = match event.strip_prefix("orbital_lite:skybreak.") {
                         Some(n) => n.to_string(),
-                        None => format!("@{}", event.strip_prefix("orbital-lite:").unwrap()),
+                        None => format!("@{}", event.strip_prefix("orbital_lite:").unwrap()),
                     };
                     (t, name, volume)
                 }
@@ -224,7 +224,7 @@ mod tests {
     fn sb_write_cues() {
         let z: f64 = std::env::var("SB_ME").map_or(300.0, |v| v.parse().unwrap());
         let hits: Vec<f32> = std::env::var("SB_HITS").map_or(Vec::new(), |v| v.split(',').filter(|s| !s.is_empty()).map(|s| s.parse().unwrap()).collect());
-        let out: String = cues(z, &hits).iter().map(|(t, name, v)| format!("{t:.3} orbital-lite:skybreak.{name} {v:.3} 1.000\n")).collect();
+        let out: String = cues(z, &hits).iter().map(|(t, name, v)| format!("{t:.3} orbital_lite:skybreak.{name} {v:.3} 1.000\n")).collect();
         std::fs::write(std::env::var("SB_OUT").unwrap(), out).unwrap();
     }
 }

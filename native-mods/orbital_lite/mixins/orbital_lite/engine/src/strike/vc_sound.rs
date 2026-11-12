@@ -70,7 +70,7 @@ const NEAR_STONES: f64 = 120.0;
 const NEAR_FRONT: f64 = 140.0;
 
 fn ev(name: &str) -> String {
-    format!("orbital-lite:supervolcano.{name}")
+    format!("orbital_lite:supervolcano.{name}")
 }
 /// A sound at the player's ears.
 fn play(p: &mut Plan, t: f32, name: &str, volume: f64, pitch: f32) {
@@ -598,7 +598,7 @@ mod tests {
             let other = |e: &&(f32, String, f32, f32, bool)| !e.1.contains(".seism") && !e.1.contains(".hush") && !e.1.contains(".front") && !e.1.starts_with("stop");
             assert!(!h.iter().filter(other).any(|e| e.0 > VC_HUSH && e.0 < t - 0.05), "{z}: something else plays in the wait");
             for name in ["hush", "seism"] {
-                let stop = format!("stop orbital-lite:supervolcano.{name}");
+                let stop = format!("stop orbital_lite:supervolcano.{name}");
                 let cut = h.iter().find(|e| e.1 == stop).unwrap_or_else(|| panic!("{z}: {name} isn't cut")).0;
                 assert!((cut - (t + VC_LEAD + VC_CUT)).abs() < 0.01, "{z}: {name} cut at {cut}");
             }
@@ -645,7 +645,7 @@ mod tests {
     fn vc_sound_the_mount_stops_dead_at_the_hush() {
         for z in [300.0, 600.0, 1000.0, 1400.0, 2000.0, 3000.0, 3500.0] {
             for (t, event, _, pitch, _) in heard(z) {
-                if let Some(name) = event.strip_prefix("orbital-lite:supervolcano.") {
+                if let Some(name) = event.strip_prefix("orbital_lite:supervolcano.") {
                     if t < VC_HUSH {
                         let end = t + len_of(name) / pitch;
                         assert!(end <= VC_HUSH + 0.01, "{z}: {name} at {t} rings on to {end}");
@@ -694,7 +694,7 @@ mod tests {
                 match a {
                     Act::Later(job) => ev.extend(job()),
                     Act::Sound { event, at, .. } => {
-                        let name = event.strip_prefix("orbital-lite:supervolcano.").unwrap_or(&event);
+                        let name = event.strip_prefix("orbital_lite:supervolcano.").unwrap_or(&event);
                         if ["whistle", "thud1", "thud2", "thud3", "thud4", "spatter", "splinter", "grind"].iter().any(|n| name.starts_with(n)) {
                             let q = at.unwrap_or_else(|| panic!("{name} at {t} isn't at a place"));
                             let d = (q[0] - me[0]).hypot(q[2] - me[2]);
@@ -727,7 +727,7 @@ mod tests {
         let events = std::fs::read_to_string(root.join("sounds.json")).unwrap();
         for z in [500.0, 800.0, 1000.0, 1200.0, 1400.0, 1500.0, 1700.0, 2000.0, 2500.0] {
             for (t, event, v, pitch, _) in heard(z) {
-                if let Some((laser, name)) = event.strip_prefix("orbital-lite:").and_then(|e| e.split_once('.')) {
+                if let Some((laser, name)) = event.strip_prefix("orbital_lite:").and_then(|e| e.split_once('.')) {
                     assert!(events.contains(&format!("\"{laser}.{name}\"")), "{event} not in sounds.json");
                     assert!(root.join(format!("sounds/{laser}/{name}.ogg")).exists(), "{event} has no file");
                     assert!((0.0..=1.0).contains(&v) && (0.5..=2.0).contains(&pitch), "{event}: {v} {pitch}");
@@ -744,23 +744,23 @@ mod tests {
     fn vc_sound_the_satellite_is_heard() {
         let h = heard(1000.0);
         let sky = h.iter().find(|e| e.1.ends_with("_sky")).expect("the sky");
-        assert!(sky.0 == 0.0 && sky.1 == "orbital-lite:supervolcano.sat_sky", "{sky:?}");
+        assert!(sky.0 == 0.0 && sky.1 == "orbital_lite:supervolcano.sat_sky", "{sky:?}");
         let land = h.iter().find(|e| e.1.ends_with("_land")).expect("the land");
-        assert_eq!(land.1, "orbital-lite:supervolcano.sat_land");
+        assert_eq!(land.1, "orbital_lite:supervolcano.sat_land");
         let (late, _) = sound_from([0.5, 65.0, 0.5], [0.5, 66.0, 1000.5]);
         assert!((land.0 - VC_HIT - late).abs() < 0.01, "the land at {}", land.0);
-        assert!(!h.iter().any(|e| ["orbital-lite:lockon", "orbital-lite:shutdown", "orbital-lite:rumble", "orbital-lite:fire"].contains(&e.1.as_str())));
+        assert!(!h.iter().any(|e| ["orbital_lite:lockon", "orbital_lite:shutdown", "orbital_lite:rumble", "orbital_lite:fire"].contains(&e.1.as_str())));
     }
 
     /// The lightning is heard with its own thunder (the Hurricane's made louder), by kind for the distance, late by it.
     #[test]
     fn vc_sound_lightning_carries() {
         let h = heard(1000.0);
-        let claps: Vec<_> = h.iter().filter(|e| e.1.starts_with("orbital-lite:supervolcano.lt_")).collect();
+        let claps: Vec<_> = h.iter().filter(|e| e.1.starts_with("orbital_lite:supervolcano.lt_")).collect();
         assert!(claps.len() >= 20, "{} claps", claps.len());
         assert!(claps.iter().all(|e| e.1.contains(".lt_clap") || e.1.contains(".lt_rumble")), "a kilometre off: claps and rumbles");
         assert!(claps.iter().any(|e| e.1.contains(".lt_rumble")) && claps.iter().any(|e| e.1.contains(".lt_clap")));
-        assert!(!h.iter().any(|e| e.1.starts_with("orbital-lite:hurricane.")));
+        assert!(!h.iter().any(|e| e.1.starts_with("orbital_lite:hurricane.")));
         let (late, _) = sound_from([0.5, 65.0, 0.5], [0.5, 66.0, 1000.5]);
         assert!(claps[0].0 >= VC_LIGHT - 2.0 + late, "{}", claps[0].0);
         assert!(!h.iter().any(|e| e.1.contains(".bolt")));

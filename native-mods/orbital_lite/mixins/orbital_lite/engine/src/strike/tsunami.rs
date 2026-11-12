@@ -1133,7 +1133,7 @@ mod tests {
     fn the_plan_sounds_in_the_order_the_wave_reaches_them() {
         let target = Target { block: [0, 64, 0], point: [0.5, 65.0, 0.5] };
         let plan = tsunami_plan(the_laser(), &target, false, "minecraft:overworld", 37.0, [0.5, 65.0, 400.0]);
-        let at = |name: &str| plan.iter().find_map(|(t, a)| matches!(a, Act::Sound { event, .. } if event == &format!("orbital-lite:tsunami.{name}")).then_some(*t));
+        let at = |name: &str| plan.iter().find_map(|(t, a)| matches!(a, Act::Sound { event, .. } if event == &format!("orbital_lite:tsunami.{name}")).then_some(*t));
         let (rupture, rumble, crash, engulf, under, drain) = (at("rupture").unwrap(), at("rumble").unwrap(), at("crash").unwrap(), at("engulf").unwrap(), at("under").unwrap(), at("drain").unwrap());
         assert!(rupture == 0.0 && rumble == 1.5 && crash > 9.0 && crash < 11.0 && engulf > 14.0 && under > engulf && drain > under + 8.0);
         // (nothing with the terrain off but the pass's table (a stage), sounds and shakes: no read, no edit, no forceload)

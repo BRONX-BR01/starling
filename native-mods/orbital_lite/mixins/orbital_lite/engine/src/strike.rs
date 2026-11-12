@@ -1374,9 +1374,9 @@ fn meteor_plan(laser: &'static Laser, target: &Target, terrain: bool, dimension:
         // the hit recorded at its size (tiny, medium, big), near or far; a whoosh at random
         let hit = format!("{}{}", if dist > 90.0 { "hit_far" } else { "hit" }, cls + 1);
         let whoosh = format!("whoosh{}", p.rng.int(1, 2));
-        p.at(tl - 1.3, surf(x, z, &format!("playsound orbital-lite:meteor.{whoosh} block @a ~ ~ ~ 4 {pitch:.2} {:.2}", min * 0.8)));
+        p.at(tl - 1.3, surf(x, z, &format!("playsound orbital_lite:meteor.{whoosh} block @a ~ ~ ~ 4 {pitch:.2} {:.2}", min * 0.8)));
         let tl_heard = tl + late(f64::from(x), ty, f64::from(z));
-        p.at(tl_heard, surf(x, z, &format!("playsound orbital-lite:meteor.{hit} block @a ~ ~ ~ 4 {pitch:.2} {min:.2}")));
+        p.at(tl_heard, surf(x, z, &format!("playsound orbital_lite:meteor.{hit} block @a ~ ~ ~ 4 {pitch:.2} {min:.2}")));
         p.shake(tl_heard, [0.3, 0.5, 0.75][cls] * falloff(dist), [0.8, 1.4, 2.2][cls]);
         match cls {
             0 => p.at(tl, surf(x, z, "particle minecraft:explosion ~ ~1 ~ 1 1 1 0 4 force")),
@@ -1790,7 +1790,7 @@ fn mothership_plan(laser: &'static Laser, target: &Target, terrain: bool, dimens
         let dist = ((gx - me[0]).powi(2) + (gz - me[2]).powi(2)).sqrt();
         let min = (1.2 - dist / 350.0).clamp(0.5, 0.95);
         let take = 1 + k % 2;
-        p.at(tk + late(gx, ty, gz), surf(gx.floor() as i32, gz.floor() as i32, &format!("playsound orbital-lite:mothership.sweep{take} block @a ~ ~ ~ 6 1 {min:.2}")));
+        p.at(tk + late(gx, ty, gz), surf(gx.floor() as i32, gz.floor() as i32, &format!("playsound orbital_lite:mothership.sweep{take} block @a ~ ~ ~ 6 1 {min:.2}")));
     }
     let (ex, ez) = spot(MS_CUT);
     p.csound(MS_CUT + late(ex, ty, ez), "cutoff", 9.0, 1.0);
@@ -2426,10 +2426,10 @@ fn downfall_plan(laser: &'static Laser, target: &Target, terrain: bool, dimensio
     // the mothership's own sounds for its arrival; and this laser's, heard from where they happen (in full within 16
     // blocks a unit of volume, from further off at the volume floor `min`)
     let ms = |p: &mut Plan, t: f32, name: &str, vol: f32| {
-        p.ev.push((t, Act::Sound { event: format!("orbital-lite:mothership.{name}"), at: None, volume: vol / 10.0, pitch: 1.0 }));
+        p.ev.push((t, Act::Sound { event: format!("orbital_lite:mothership.{name}"), at: None, volume: vol / 10.0, pitch: 1.0 }));
     };
     let here = |p: &mut Plan, t: f32, name: &str, q: [f64; 3], vol: f32, min: f64| {
-        p.at(t, format!("playsound orbital-lite:downfall.{name} block @a {:.1} {:.1} {:.1} {vol} 1 {min:.2}", q[0], q[1], q[2]));
+        p.at(t, format!("playsound orbital_lite:downfall.{name} block @a {:.1} {:.1} {:.1} {vol} 1 {min:.2}", q[0], q[1], q[2]));
     };
 
     // 1. it drops in exactly as the mothership does, and charges
@@ -2536,7 +2536,7 @@ fn downfall_plan(laser: &'static Laser, target: &Target, terrain: bool, dimensio
             let d = ((f64::from(x) - me[0]).powi(2) + (f64::from(z) - me[2]).powi(2)).sqrt();
             let min = ((1.25 - d / 320.0).clamp(0.3, 1.0) * 0.8).max(0.2);
             let hit = if d > 90.0 { "hit_far2" } else { "hit2" };
-            p.at(tl + (d / 343.0) as f32, surf(x, z, &format!("playsound orbital-lite:meteor.{hit} block @a ~ ~ ~ 4 1 {min:.2}")));
+            p.at(tl + (d / 343.0) as f32, surf(x, z, &format!("playsound orbital_lite:meteor.{hit} block @a ~ ~ ~ 4 1 {min:.2}")));
         }
     }
     let rest = g.pose(DF_FALL1 + DF_SLIDE);
@@ -3599,7 +3599,7 @@ fn planetkiller_plan(laser: &'static Laser, target: &Target, terrain: bool, dime
         }
         let take = takes[i % 3];
         let pitch = p.rng.uniform(0.92, 1.07);
-        p.at(r0 - PK_BULGE + lag, format!("playsound orbital-lite:planetkiller.rise{take} block @a {x:.1} {ty} {z:.1} 4 {pitch:.2} 0.95"));
+        p.at(r0 - PK_BULGE + lag, format!("playsound orbital_lite:planetkiller.rise{take} block @a {x:.1} {ty} {z:.1} 4 {pitch:.2} 0.95"));
         p.shake(r0 - PK_BULGE + lag, 0.07 * w + 0.02, PK_BULGE + 0.3);
         p.shake(r0 + lag, 0.3 * w + 0.06, 0.45);
         for c in PK_CATCH {
@@ -3614,7 +3614,7 @@ fn planetkiller_plan(laser: &'static Laser, target: &Target, terrain: bool, dime
         // (taken in turn, so bolts that strike a moment apart are never the same take)
         let btake = 1 + i % 3;
         let pitch = p.rng.uniform(0.9, 1.1);
-        p.at(t + blag, format!("playsound orbital-lite:planetkiller.bolt{btake} block @a {bx_:.1} {by_:.1} {bz_:.1} 4 {pitch:.2} 1"));
+        p.at(t + blag, format!("playsound orbital_lite:planetkiller.bolt{btake} block @a {bx_:.1} {by_:.1} {bz_:.1} 4 {pitch:.2} 1"));
         p.shake(t + PK_SHOOT + blag, 0.2, 0.4);
     }
     // the bolts' crackle, held while they stay connected, swelling as each strikes the ring
@@ -5070,10 +5070,10 @@ mod tests {
                 let (x, z, t) = pk_emitter(i, 37.0, point, wing);
                 let r = (x - point[0]).hypot(z - point[2]);
                 assert!((850.0..=1350.0).contains(&r) && (PK_RAISE..=PK_IGN1 + 0.07).contains(&t), "{i}: {r} {t}");
-                let heard = cmds.iter().any(|(_, c)| c.starts_with("playsound orbital-lite:planetkiller.rise") && c.contains(&format!("{x:.1} 65 {z:.1}")));
+                let heard = cmds.iter().any(|(_, c)| c.starts_with("playsound orbital_lite:planetkiller.rise") && c.contains(&format!("{x:.1} 65 {z:.1}")));
                 assert!(heard, "{i}: its rise not heard");
             }
-            let bolts = cmds.iter().filter(|(_, c)| c.starts_with("playsound orbital-lite:planetkiller.bolt")).count();
+            let bolts = cmds.iter().filter(|(_, c)| c.starts_with("playsound orbital_lite:planetkiller.bolt")).count();
             assert_eq!(bolts, PK_N, "every bolt heard");
             let (x, z, _) = pk_emitter(0, 37.0, point, wing);
             let (to_me, to_it) = ((me[0] - point[0], me[2] - point[2]), (x - point[0], z - point[2]));

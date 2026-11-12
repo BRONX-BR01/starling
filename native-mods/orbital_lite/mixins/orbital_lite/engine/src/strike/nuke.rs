@@ -2110,7 +2110,7 @@ mod tests {
                 .collect()
         };
         let near = sounds(200.0);
-        let has = |v: &[(f32, String, f32)], s: &str| v.iter().find(|e| e.1 == format!("orbital-lite:nuke.{s}")).map(|e| e.0);
+        let has = |v: &[(f32, String, f32)], s: &str| v.iter().find(|e| e.1 == format!("orbital_lite:nuke.{s}")).map(|e| e.0);
         for s in ["fall", "blast", "ground", "shockwave", "debris", "rumble"] {
             assert!(has(&near, s).is_some(), "{s}");
         }

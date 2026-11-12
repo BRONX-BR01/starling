@@ -490,9 +490,9 @@ const FIN_SUCK: f32 = 0.16;
 const FIN_CUT: f32 = FIN_SUCK + 0.1;
 /// What the finale cuts (`stopsound`): the storm's beds and every bolt's and flicker's thunder still rolling.
 fn sc_beds() -> Vec<String> {
-    let mut v: Vec<String> = ["buildup", "gusts", "rain", "roar"].iter().map(|k| format!("orbital-lite:supercell.{k}")).collect();
+    let mut v: Vec<String> = ["buildup", "gusts", "rain", "roar"].iter().map(|k| format!("orbital_lite:supercell.{k}")).collect();
     for (kind, n) in [("crack", 6), ("crack_mid", 5), ("crack_far", 5), ("rumble", 5)] {
-        v.extend((1..=n).map(|k| format!("orbital-lite:supercell.{kind}{k}")));
+        v.extend((1..=n).map(|k| format!("orbital_lite:supercell.{kind}{k}")));
     }
     v
 }
@@ -731,7 +731,7 @@ pub(super) fn supercell_plan(laser: &'static Laser, target: &Target, terrain: bo
         p.later(f.t0 as f32 - 0.5, move |q| {
             let (bx, by, bz) = (q.bx, q.by, q.bz);
             let track = vortex::ground_track(&fr.path, |x, z| ground_dy(bx, by, bz, x, z));
-            vortex::roar(q, &fr, "orbital-lite:supercell.roar", [cx, gy, cz], &track);
+            vortex::roar(q, &fr, "orbital_lite:supercell.roar", [cx, gy, cz], &track);
         });
         if terrain {
             let seen: Rc<std::cell::RefCell<crate::ground::FxSet<(i32, i32)>>> = Default::default();
@@ -938,7 +938,7 @@ mod tests {
         let stops: Vec<&(f32, String)> = cmds.iter().filter(|(_, c)| c.starts_with("stopsound")).collect();
         assert_eq!(stops.len(), sc_beds().len());
         for (t, c) in &stops {
-            assert!((*t - (SC_FINALE + 0.05 + late - FIN_CUT)).abs() < 1e-3 && c.starts_with("stopsound @s * orbital-lite:supercell.") && !c.contains("finale"), "{t} {c}");
+            assert!((*t - (SC_FINALE + 0.05 + late - FIN_CUT)).abs() < 1e-3 && c.starts_with("stopsound @s * orbital_lite:supercell.") && !c.contains("finale"), "{t} {c}");
         }
         let bolts: Vec<&(f32, String)> = cmds.iter().filter(|(_, c)| c.contains("run damage @s 5 minecraft:lightning_bolt")).collect();
         let planned = sc_bolts(37, [0.0, 300.0]);
