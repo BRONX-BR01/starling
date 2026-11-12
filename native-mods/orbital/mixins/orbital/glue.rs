@@ -146,7 +146,7 @@ fn sync_atlas(game: &Game<'_>) {
 // ---- starting -----------------------------------------------------------------------------------------------------
 
 fn running(game: &mut Game<'_>) -> bool {
-    if !game.native_window() || !game.native_on(ID) {
+    if !game.native_window() || !game.native_on(ID) || no_content(game) {
         return false;
     }
     if let Some(on) = STARTED.with(Cell::get) {
@@ -973,6 +973,10 @@ pub(super) fn camera_shake(game: &Game<'_>, partial: f32, shake: &mut NativeShak
 
 /// The `mods` hook: the mod's row on Options > Mods, with its keys (the wheel's), which the player rebinds there.
 pub(super) fn mods(game: &mut Game<'_>, mods: &mut Vec<super::native_hooks::NativeMod>) {
+    // (without its content in the mods folder the mod is not offered, and does nothing)
+    if no_content(game) {
+        return;
+    }
     // (started here, so its keys are known when the page is first drawn)
     running(game);
     mods.push(super::native_hooks::NativeMod {
