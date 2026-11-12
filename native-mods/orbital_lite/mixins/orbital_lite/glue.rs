@@ -16,7 +16,9 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
 
-pub(super) const ID: &str = "orbital-lite";
+pub(super) const ID: &str = "orbital_lite";
+/// The command's name, which is not the mod's id.
+const CMD: &str = "orbitallite";
 const NAME: &str = "Orbital Laser";
 const VERSION: &str = "0.5.14";
 /// The operator level of the console, which the server half runs a client's world work at (`native_run_command`).
@@ -1040,7 +1042,7 @@ fn carry_look(game: &mut Game<'_>, seconds: f32) {
 /// `/orbitallite …`: true when it is the mod's.
 pub(super) fn command(game: &mut Game<'_>, command: &str) -> bool {
     let line = command.trim_start_matches('/');
-    if line != ID && !line.starts_with("orbitallite ") {
+    if line != CMD && !line.starts_with("orbitallite ") {
         return false;
     }
     if !game.native_window() {
@@ -1050,7 +1052,7 @@ pub(super) fn command(game: &mut Game<'_>, command: &str) -> bool {
         return false;
     }
     // (without the content there is no Designator to give: say why, rather than a give that fails)
-    if line.strip_prefix(ID).unwrap_or("").trim_start().starts_with("give") && no_content(game) {
+    if line.strip_prefix(CMD).unwrap_or("").trim_start().starts_with("give") && no_content(game) {
         chat(game, Text::literal(NO_CONTENT).with_color(text::RED));
         return true;
     }
@@ -1061,7 +1063,7 @@ pub(super) fn command(game: &mut Game<'_>, command: &str) -> bool {
 fn run_command(game: &mut Game<'_>, line: &str) {
     // The command may follow a teleport in the same tick.
     snapshot(game);
-    let args = line.strip_prefix(ID).unwrap_or("").trim_start();
+    let args = line.strip_prefix(CMD).unwrap_or("").trim_start();
     match (orbital_lite_laser::__EXPORTS.command)(ID, args) {
         Ok(Some(t)) => chat(game, Text::literal(t)),
         Ok(None) => {}
@@ -1312,7 +1314,7 @@ pub(super) fn client_level_unload(game: &mut Game<'_>, dimension: &str) {
 /// `horizon-ctl command`), handed to the window as the `command` hook hands it.
 pub(super) fn perform_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
     let line = command.trim_start_matches('/');
-    if *ran || game.native_window() || (line != ID && !line.starts_with("orbitallite ")) {
+    if *ran || game.native_window() || (line != CMD && !line.starts_with("orbitallite ")) {
         return;
     }
     *ran = from_owner(game, line);

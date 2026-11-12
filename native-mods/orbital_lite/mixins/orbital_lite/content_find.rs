@@ -13,7 +13,7 @@ fn orbital_lite_content_find(dir: &Path, found: Vec<PathBuf>) -> Vec<PathBuf> {
     }
     // A content mod `orbital` the player put in horizon-mods/ themselves is used instead.
     let id_of = |p: &PathBuf| crate::Package::read(p).ok().map(|p| p.manifest.id);
-    if found.iter().any(|p| id_of(p).as_deref() == Some("orbital-lite")) {
+    if found.iter().any(|p| id_of(p).as_deref() == Some("orbital_lite")) {
         return found;
     }
     found.push(ours);
