@@ -661,7 +661,7 @@ impl Orbital {
     }
     fn parse(text: &str) -> Settings {
         let mut laser = 0;
-        let mut terrain = true;
+        let mut terrain = false;
         let mut hud = true;
         let mut approach = 0;
         let mut arrival = 0;
