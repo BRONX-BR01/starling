@@ -1,0 +1,9 @@
+[package]
+name = "orbital-lite-laser"
+version = "0.5.14"
+edition = "2024"
+description = "Orbital Laser's engine for the native build: the mod's code, unchanged, on a native Horizon mod SDK."
+license = "MIT"
+
+[dependencies]
+log = "0.4"
