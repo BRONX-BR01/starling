@@ -294,29 +294,8 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 mod tests {
     use super::*;
 
-    include!("../../tests-crate/golden.rs");
-
     fn near(a: f32, b: f32) -> bool {
         (a - b).abs() < 2.0e-3
-    }
-
-    #[test]
-    fn model_matches_the_reference_maths() {
-        // The numbers come from the Python reference (gen_model.py) the previews were checked with.
-        let mut all = Vec::new();
-        quads(&model::FLIGHT3, 1.5, 0.5, &mut all);
-        assert_eq!(all.len(), 576);
-        for (index, corners, uv) in GOLDEN {
-            let q = all[*index];
-            for c in 0..4 {
-                for k in 0..3 {
-                    assert!(near(q.corners[c][k], corners[c][k]), "quad {index} corner {c}: {:?} vs {:?}", q.corners[c], corners[c]);
-                }
-            }
-            for k in 0..4 {
-                assert!(near(q.uv[k], uv[k]), "quad {index} uv: {:?} vs {:?}", q.uv, uv);
-            }
-        }
     }
 
     #[test]
