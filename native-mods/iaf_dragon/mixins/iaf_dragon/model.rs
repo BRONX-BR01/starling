@@ -2,7 +2,7 @@
 // Every pose has the same 104 parts; a part's index here is its place in the ground pose's depth-first order.
 
 pub const TEXTURE_WIDTH: f32 = 256.0;
-pub const TEXTURE_HEIGHT: f32 = 128.0;
+pub const TEXTURE_HEIGHT: f32 = 256.0;
 /// Highest model y (pixels) of the ground pose: the feet stand on the floor.
 pub const FLOOR: f32 = 24.598727952289288;
 

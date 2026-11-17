@@ -49,6 +49,17 @@ pub fn sprite(color: &str) -> String {
     format!("iceandfire:item/dragon/{color}_5")
 }
 
+/// A plain block texture of the dragon's colour, drawn when the adult texture is not in the atlas (the content
+/// mod is not installed), so the dragon still shows as a shape.
+pub fn fallback_sprite(color: &str) -> &'static str {
+    match color {
+        "green" => "block/green_concrete",
+        "bronze" => "block/brown_concrete",
+        "gray" => "block/gray_concrete",
+        _ => "block/red_concrete",
+    }
+}
+
 /// The command that summons a dragon at the player: `/firedragon`, `/firedragon green`.
 pub fn summon_line(color: &str) -> String {
     format!(

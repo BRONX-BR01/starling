@@ -11,7 +11,8 @@ fn iaf_dragon_draw(
         return;
     }
     let name = mob.custom_name.unwrap_or_default();
-    let sprite = m::sprite(m::color_of(name, mob.id));
+    let color = m::color_of(name, mob.id);
+    let sprite = m::sprite(color);
     let anim = m::Anim {
         age: mob.age,
         walk_position: mob.walk_position,
@@ -28,6 +29,12 @@ fn iaf_dragon_draw(
     for q in &quads {
         any |= game.native_draw_quad(draw, &sprite, q.corners, q.uv, tint);
     }
-    // Only when the texture was there: without it the ghast stays what it is.
+    // Without the content mod's texture the dragon is drawn in a plain block colour, still a dragon.
+    if !any {
+        let plain = m::fallback_sprite(color);
+        for q in &quads {
+            any |= game.native_draw_quad(draw, plain, q.corners, [0.0, 0.0, 16.0, 16.0], tint);
+        }
+    }
     *drawn = any;
 }
