@@ -1,0 +1,54 @@
+[mod]
+id = "iaf_dragon"
+version = "0.1.0"
+priority = 100
+
+# The commit the hook points were read on (hooks 361 in compatibility.json; the mob draw needs 110).
+[compatibility]
+horizon_revision = "9ee13cd038559db05de6a4ced4496028ce409564"
+
+# The dragon model's boxes and poses, generated from Ice and Fire's Tabula files.
+[[module]]
+id = "model"
+file = "crates/horizon-client/src/game.rs"
+name = "official_iaf_dragon_model"
+source = "model.rs"
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "official_iaf_dragon"
+source = "runtime.rs"
+
+# Once a frame for every mob in view: a dragon's ghast is drawn with the dragon model.
+[[injection]]
+id = "draw"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mob_submit"
+helper = "draw.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "mob", ty = "&crate::game::native_mob_draw::NativeMobRender<'_>", value = "mob" },
+  { name = "draw", ty = "&mut crate::game::native_block_entity_draw::BlockEntityDraw", value = "&mut *draw" },
+  { name = "drawn", ty = "&mut bool", value = "&mut *drawn" },
+]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+helper = "command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
