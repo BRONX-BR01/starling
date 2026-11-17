@@ -14,8 +14,10 @@
 // ((x), (FLOOR - y), (-z)) / 16 blocks in the frame the game gives a mob's model (feet at the origin, +z the
 // way it faces, +x its left, +y up).
 
+use super::official_iaf_dragon_ai as ai;
 use super::official_iaf_dragon_model as model;
 use model::{PARTS, Pose};
+use std::{cell::RefCell, collections::HashMap, time::Instant};
 
 pub const ID: &str = "iaf_dragon";
 pub const NAME: &str = "Ice and Fire dragons";
@@ -152,6 +154,65 @@ fn cycle(frames: &[&Pose], phase: f32) -> Pose {
     blend(frames[i], frames[(i + 1) % frames.len()], p - p.floor())
 }
 
+/// The frames played once, evenly over `t` from 0 to 1.
+fn through(frames: &[&Pose], t: f32) -> Pose {
+    let p = t.clamp(0.0, 1.0) * (frames.len() - 1) as f32;
+    let i = (p.floor() as usize).min(frames.len() - 2);
+    blend(frames[i], frames[i + 1], p - i as f32)
+}
+
+// ---------------------------------------------------------------- what the server says a dragon is doing
+
+/// The bytes the server sends on `iaf_dragon:state`: the dragon's mob id (little endian) and its state.
+pub fn encode_state(id: u32, state: u8) -> [u8; 5] {
+    let b = id.to_le_bytes();
+    [b[0], b[1], b[2], b[3], state]
+}
+
+pub fn decode_state(data: &[u8]) -> Option<(u32, u8)> {
+    let [a, b, c, d, state] = *data else { return None };
+    Some((u32::from_le_bytes([a, b, c, d]), state))
+}
+
+thread_local! {
+    /// Each dragon's state, when it began and when it was last told.
+    static STATES: RefCell<HashMap<u32, (u8, Instant, Instant)>> = RefCell::new(HashMap::new());
+}
+
+/// The server says dragon `id` is in `state` (the same state is repeated while it lasts).
+pub fn note_state(id: u32, state: u8) {
+    let now = Instant::now();
+    STATES.with(|s| {
+        let mut s = s.borrow_mut();
+        match s.get_mut(&id) {
+            Some(e) if e.0 == state => e.2 = now,
+            _ => {
+                s.insert(id, (state, now, now));
+            }
+        }
+        if s.len() > 256 {
+            s.retain(|_, e| now.duration_since(e.2).as_secs() < 5);
+        }
+    });
+}
+
+/// What dragon `id` is doing and for how many ticks: idle when nothing was heard for a while (the server
+/// repeats a state every half second, so a state that is not renewed has ended).
+pub fn state_of(id: u32) -> (u8, f32) {
+    let now = Instant::now();
+    STATES.with(|s| match s.borrow().get(&id) {
+        Some(&(state, began, last)) if now.duration_since(last).as_millis() < 1000 => {
+            (state, now.duration_since(began).as_secs_f32() * 20.0)
+        }
+        _ => (ai::STATE_IDLE, 0.0),
+    })
+}
+
+/// A dragon's mob of the world, told apart from a ghast: a ghast has 10 health, a dragon 200 or more.
+pub fn is_dragon_mob(kind: &str, max_health: f32) -> bool {
+    kind == "minecraft:ghast" && max_health >= 100.0
+}
+
 /// What a frame of a dragon shows of the game's mob state.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Anim {
@@ -162,6 +223,9 @@ pub struct Anim {
     pub on_ground: bool,
     /// Ticks since death, 0 while alive.
     pub death_time: i32,
+    /// What the server says it is doing (`ai::STATE_*`) and for how many ticks.
+    pub action: u8,
+    pub action_ticks: f32,
 }
 
 /// The pose a dragon is in and how far it floats above its feet, in blocks (before `SIZE`).
@@ -169,6 +233,22 @@ pub fn pose_of(a: &Anim) -> (Pose, f32) {
     if a.death_time > 0 {
         let t = (a.death_time as f32 / 12.0).min(1.0);
         return (blend(&model::HOVERING, &model::DEAD, t), 0.0);
+    }
+    let lift = if a.on_ground { 0.0 } else { 0.9 };
+    match a.action {
+        ai::STATE_BITE => {
+            let frames = [&model::BITE1, &model::BITE2, &model::BITE3];
+            return (through(&frames, a.action_ticks / ai::BITE_TICKS as f32), lift);
+        }
+        ai::STATE_CHARGE => {
+            let frames = [&model::ATTACK_STREAM_CHARGE1, &model::ATTACK_STREAM_CHARGE2, &model::ATTACK_STREAM_CHARGE3];
+            return (through(&frames, a.action_ticks / ai::CHARGE_TICKS as f32), lift);
+        }
+        ai::STATE_BREATH => {
+            let t = (a.action_ticks / 3.0).clamp(0.0, 1.0);
+            return (blend(&model::ATTACK_STREAM_CHARGE3, &model::ATTACK_STREAM_BREATH, t), lift);
+        }
+        _ => {}
     }
     if a.on_ground {
         // The walk is four frames; the legs and arms swing with the distance walked.
@@ -423,5 +503,26 @@ mod tests {
         assert!(same(&pose_of(&dead).0, &model::DEAD));
         let still = Anim { on_ground: true, ..Anim::default() };
         assert!(same(&pose_of(&still).0, &model::GROUND));
+    }
+
+    #[test]
+    fn attack_poses_play_through_and_states_expire() {
+        let same = |a: &Pose, b: &Pose| {
+            (0..PARTS.len()).all(|i| (0..3).all(|k| near(a[i].0[k], b[i].0[k]) && near(a[i].1[k], b[i].1[k])))
+        };
+        let bite = |t: f32| Anim { action: ai::STATE_BITE, action_ticks: t, ..Anim::default() };
+        assert!(same(&pose_of(&bite(0.0)).0, &model::BITE1));
+        assert!(same(&pose_of(&bite(ai::BITE_TICKS as f32)).0, &model::BITE3));
+        assert!(!same(&pose_of(&bite(2.0)).0, &model::BITE1));
+        let breath = Anim { action: ai::STATE_BREATH, action_ticks: 30.0, ..Anim::default() };
+        assert!(same(&pose_of(&breath).0, &model::ATTACK_STREAM_BREATH));
+        // The state a server sends survives the wire and is shown, then forgotten when it is not renewed.
+        let bytes = encode_state(0x01020304, ai::STATE_BREATH);
+        assert_eq!(decode_state(&bytes), Some((0x01020304, ai::STATE_BREATH)));
+        assert_eq!(decode_state(&bytes[..4]), None);
+        note_state(77, ai::STATE_BITE);
+        assert_eq!(state_of(77).0, ai::STATE_BITE);
+        assert_eq!(state_of(78).0, ai::STATE_IDLE);
+        assert!(is_dragon_mob("minecraft:ghast", 200.0) && !is_dragon_mob("minecraft:ghast", 10.0));
     }
 }

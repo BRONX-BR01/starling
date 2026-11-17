@@ -13,7 +13,10 @@ fn iaf_dragon_draw(
     let name = mob.custom_name.unwrap_or_default();
     let color = m::color_of(name, mob.id);
     let sprite = m::sprite(color);
+    let (action, action_ticks) = m::state_of(mob.id);
     let anim = m::Anim {
+        action,
+        action_ticks,
         age: mob.age,
         walk_position: mob.walk_position,
         walk_speed: mob.walk_speed,

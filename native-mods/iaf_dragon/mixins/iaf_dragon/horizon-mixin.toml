@@ -1,6 +1,6 @@
 [mod]
 id = "iaf_dragon"
-version = "0.1.0"
+version = "0.2.0"
 priority = 100
 
 # The commit the hook points were read on (hooks 361 in compatibility.json; the mob draw needs 110).
@@ -15,10 +15,23 @@ name = "official_iaf_dragon_model"
 source = "model.rs"
 
 [[module]]
+id = "ai"
+file = "crates/horizon-client/src/game.rs"
+name = "official_iaf_dragon_ai"
+source = "ai.rs"
+
+[[module]]
 id = "runtime"
 file = "crates/horizon-client/src/game.rs"
 name = "official_iaf_dragon"
 source = "runtime.rs"
+
+# The server half: the dragons' hunting, biting and breathing, and what clients are told of it.
+[[module]]
+id = "server"
+file = "crates/horizon-client/src/game.rs"
+name = "official_iaf_dragon_server"
+source = "server.rs"
 
 # Once a frame for every mob in view: a dragon's ghast is drawn with the dragon model.
 [[injection]]
@@ -51,4 +64,27 @@ target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
 helper = "list.rs"
 bindings = [
   { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "level_tick"
+hook = "level_tick_post"
+hook_version = 1
+kind = "HEAD"
+helper = "level_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "net_from_server"
+hook = "net_from_server"
+hook_version = 1
+kind = "HEAD"
+helper = "net_from_server.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "channel", ty = "&str", value = "channel" },
+  { name = "data", ty = "&[u8]", value = "data" },
 ]
